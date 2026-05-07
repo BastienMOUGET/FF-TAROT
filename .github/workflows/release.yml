@@ -201,14 +201,37 @@ jobs:
           Get-Command iscc.exe -ErrorAction SilentlyContinue
           Get-Item $iscc -ErrorAction SilentlyContinue
 
+      - name: Show context before compile
+        shell: pwsh
+        working-directory: installer
+        run: |
+          Write-Host "=== Working dir : $(Get-Location) ==="
+          Write-Host "=== installer/ contents ==="
+          Get-ChildItem -Recurse -Force | Where-Object { -not $_.PSIsContainer } |
+            Select-Object FullName, Length | Format-Table -AutoSize
+          Write-Host "=== Frontend dist ==="
+          Get-ChildItem -Path '..\frontend\dist' -ErrorAction SilentlyContinue
+          Write-Host "=== ISCC version ==="
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (Test-Path $iscc) { Get-Item $iscc | Select Name, VersionInfo }
+          else { Write-Host "ISCC NOT FOUND at $iscc" }
+
       - name: Compile setup.iss
         shell: pwsh
         working-directory: installer
         run: |
           $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
           $version = '${{ needs.package.outputs.version }}'
-          & $iscc "/DAppVersion=$version" setup.iss
-          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+          Write-Host "Compiling with /DAppVersion=$version"
+          # Capture stdout + stderr ensemble pour avoir l'erreur ISCC complète
+          $output = & $iscc "/DAppVersion=$version" setup.iss 2>&1 | Out-String
+          Write-Host '--- ISCC OUTPUT ---'
+          Write-Host $output
+          Write-Host '--- END ISCC OUTPUT ---'
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ISCC failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
           Get-ChildItem output
 
       - name: Upload .exe artifact

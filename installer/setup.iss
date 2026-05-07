@@ -32,7 +32,6 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"
 #endif
-#pragma message "FF-TAROT setup.iss compilé avec AppVersion = " + AppVersion
 
 [Setup]
 AppId={{B5F7F1B4-4F77-4F2C-A9F0-FFTAROTV1}}
@@ -52,7 +51,7 @@ WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName=FF-TAROT {#AppVersion}
 ChangesEnvironment=no
-MinVersion=10.0.17763
+MinVersion=10.0
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
@@ -144,53 +143,41 @@ begin
     Result := Result + CHARS[Random(Length(CHARS)) + 1];
 end;
 
-function FindFile(const Paths: array of String): String;
+function FindNodeExe(): String;
 var
-  i: Integer;
+  Path: String;
 begin
-  for i := 0 to High(Paths) do
-    if FileExists(Paths[i]) then
-    begin
-      Result := Paths[i];
-      Exit;
-    end;
+  Path := ExpandConstant('{commonpf64}\nodejs\node.exe');
+  if FileExists(Path) then begin Result := Path; Exit; end;
+  Path := ExpandConstant('{commonpf32}\nodejs\node.exe');
+  if FileExists(Path) then begin Result := Path; Exit; end;
+  Path := 'C:\Program Files\nodejs\node.exe';
+  if FileExists(Path) then begin Result := Path; Exit; end;
+  Path := 'C:\Program Files (x86)\nodejs\node.exe';
+  if FileExists(Path) then begin Result := Path; Exit; end;
   Result := '';
 end;
 
-function FindNodeExe(): String;
+function CheckMariaDBVersion(const Version: String): String;
+var
+  Path: String;
 begin
-  Result := FindFile([
-    ExpandConstant('{pf}\nodejs\node.exe'),
-    ExpandConstant('{pf32}\nodejs\node.exe')
-  ]);
+  Path := 'C:\Program Files\MariaDB ' + Version + '\bin\mysql.exe';
+  if FileExists(Path) then Result := Path else Result := '';
 end;
 
 function FindMysqlExe(): String;
-var
-  Versions: array of String;
-  Path: String;
-  i: Integer;
 begin
-  // MariaDB s'installe dans C:\Program Files\MariaDB X.Y\bin\mysql.exe
-  // On scanne les versions probables (du plus récent au plus ancien)
-  SetArrayLength(Versions, 8);
-  Versions[0] := '12.0';
-  Versions[1] := '11.7';
-  Versions[2] := '11.6';
-  Versions[3] := '11.5';
-  Versions[4] := '11.4';
-  Versions[5] := '11.3';
-  Versions[6] := '11.2';
-  Versions[7] := '10.11';
-  for i := 0 to High(Versions) do
-  begin
-    Path := ExpandConstant('{pf}\MariaDB ') + Versions[i] + '\bin\mysql.exe';
-    if FileExists(Path) then
-    begin
-      Result := Path;
-      Exit;
-    end;
-  end;
+  // Scan des versions MariaDB Windows installées (du plus récent au plus ancien)
+  Result := CheckMariaDBVersion('12.0'); if Result <> '' then Exit;
+  Result := CheckMariaDBVersion('11.8'); if Result <> '' then Exit;
+  Result := CheckMariaDBVersion('11.7'); if Result <> '' then Exit;
+  Result := CheckMariaDBVersion('11.6'); if Result <> '' then Exit;
+  Result := CheckMariaDBVersion('11.5'); if Result <> '' then Exit;
+  Result := CheckMariaDBVersion('11.4'); if Result <> '' then Exit;
+  Result := CheckMariaDBVersion('11.3'); if Result <> '' then Exit;
+  Result := CheckMariaDBVersion('11.2'); if Result <> '' then Exit;
+  Result := CheckMariaDBVersion('10.11'); if Result <> '' then Exit;
   Result := '';
 end;
 
@@ -202,17 +189,17 @@ begin
   if FileExists(WingetPath) then
     Result := WingetPath
   else
-    Result := 'winget.exe'; { fallback : on espère que c'est dans le PATH }
+    Result := 'winget.exe';
 end;
 
 function ExecAndWait(const Cmd, Params, WorkDir: String;
-                    out ExitCode: Integer): Boolean;
+                    var ExitCode: Integer): Boolean;
 begin
   Result := Exec(Cmd, Params, WorkDir, SW_HIDE, ewWaitUntilTerminated, ExitCode);
 end;
 
 function ExecCmdShell(const CmdLine, WorkDir: String;
-                     out ExitCode: Integer): Boolean;
+                     var ExitCode: Integer): Boolean;
 begin
   Result := Exec(ExpandConstant('{cmd}'), '/c ' + CmdLine, WorkDir,
                  SW_HIDE, ewWaitUntilTerminated, ExitCode);
