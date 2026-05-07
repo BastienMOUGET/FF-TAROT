@@ -1,10 +1,13 @@
 {
-  "name": "ff-tarot",
+  "name": "ff-tarot-api",
   "version": "1.0.0",
-  "description": "FF-TAROT",
-  "main": "index.js",
+  "description": "FF-TAROT — Backend Node/Express/MariaDB pour gestion de tournois FFT (mode Libre par 4)",
+  "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:reset": "mysql -h $DB_HOST -u $DB_USER -p$DB_PASSWORD < db.sql && mysql -h $DB_HOST -u $DB_USER -p$DB_PASSWORD < seed.sql",
+    "test": "echo \"Tests à venir — voir ROADMAP.md\" && exit 1"
   },
   "keywords": [],
   "author": "",

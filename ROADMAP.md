@@ -1,0 +1,143 @@
+# FF-TAROT — Roadmap & versions
+
+> Refonte from-scratch d'un logiciel ASP de gestion de tournois FFT
+> (Fédération Française de Tarot). Stack : Node.js + Express + MariaDB +
+> Socket.IO côté back ; Angular côté front (à venir).
+
+---
+
+## ✅ V1.0 — Back complet Libre par 4 *(livré)*
+
+Backend fonctionnellement complet pour gérer un tournoi FFT en mode
+**Libre par 4** (équipe NS+EO) du début à la fin. Auth incluse.
+
+### Ce qui est livré
+| Phase | Sujet | Commit |
+|---|---|---|
+| 1 | Schéma DB (21 tables) | `134277f` |
+| 2 | Référentiel ligues / comités / clubs / joueurs | `53a21fa` |
+| 3 | Tournaments + sub_tournaments + teams (équipes 4 NS/EO) | `b427b88` |
+| 4 | Mouvements + mise en place automatique (par défaut N=0/S=+1/E=+2/O=-1) | `87202bc` |
+| 5 | Saisie scores : `table_results` + `hand_results` par donne | `d3d8ca2` |
+| 6 | Classement + diffusion live Socket.IO | `dd0379e` |
+| 7 | Pénalités (`penalty_types` + `penalties`) avec intégration classement | `664841e` |
+| 8 | PCN + grilles PP + export CSV format FFT | `5fc4e98` |
+| 9a | Feuille de route consolidée (agrégation imprimable) | `769666e` |
+| 9b | Génération de donnes pré-tirées (78 cartes, distribution, swap, regen) | `94cf261` |
+| 10 | Authentification JWT + 3 rôles (admin / arbitre / viewer) | `322be20` |
+
+### Workflow supporté de bout en bout
+1. Login admin (`POST /auth/login`)
+2. Création référentiel : ligues, comités, clubs, joueurs
+3. Création tournoi + sub-tournoi (avec PCN/championnat/donne_set optionnels)
+4. Inscription des équipes (4 joueurs NS+EO)
+5. Optionnel : génération d'un jeu de donnes pré-tirées
+6. Paramétrage de la grille PP
+7. Pour chaque round : création + génération automatique de la mise en place
+8. Saisie scores donne par donne, validation par table
+9. Classement live diffusé sur chaque mutation (`ranking:update`)
+10. Pénalités → recompute auto du classement
+11. Feuille de route imprimable (JSON agrégé)
+12. Export PCN au format CSV FFT
+
+### Stack
+- Node.js 20 + Express 5 + MariaDB
+- Socket.IO 4 (live ranking)
+- bcryptjs + jsonwebtoken (auth)
+- express-validator (validation)
+- 13 modules métier, ~5000 lignes
+
+---
+
+## 🔜 V1.x — Petits chantiers de consolidation
+
+À planifier au fil de l'eau, à choisir selon urgence terrain.
+
+| # | Sujet | Effort estimé | Notes |
+|---|---|---|---|
+| V1.1 | Multi-séance avec carryover `score_precedent` entre séances | 1-2 j | Schéma déjà compatible (juste FK `previous_sub_tournament_id`) |
+| V1.2 | Import CSV de joueurs | 1 j | Module `players` + endpoint `POST /players/import` |
+| V1.3 | Sauvegarde / restauration de tournois (JSON export/import) | 2 j | Lit/écrit toutes les tables liées à un tournament |
+| V1.4 | Tests automatisés (Jest + supertest) | 3-5 j | Indispensable avant prod |
+| V1.5 | PDF imprimables (feuille de route, feuille de score, étiquettes) | 1-2 sem | Lib pdfkit ou puppeteer |
+
+---
+
+## 🚧 V2.0 — Front Angular + production-ready
+
+**Objectif : MVP utilisable par un vrai club pour un vrai tournoi.**
+
+### Tâches V2.0
+| Sujet | Effort | État |
+|---|---|---|
+| Workspace Angular + routing | 1 j | À faire |
+| Service API + intercepteur JWT | 1 j | À faire |
+| Page login | 0.5 j | À faire |
+| Page liste / création tournois | 1 j | À faire |
+| Page détail tournoi (sub-tournois, équipes, rounds) | 2-3 j | À faire |
+| Page inscriptions équipes (4 joueurs NS+EO) | 1 j | À faire |
+| Page mise en place / feuille de route | 1 j | À faire |
+| Page saisie de scores (donne par donne) | 2-3 j | À faire |
+| Écran classement live (Socket.IO) | 1-2 j | À faire |
+| Page admin (référentiel + utilisateurs) | 1-2 j | À faire |
+| Build de prod + déploiement | 1 j | À faire |
+
+**Total estimé : 2-4 semaines à temps plein** pour le front V2.0.
+
+### Décisions prises pour V2.0
+- Stack : Angular 21+ (CLI déjà installé)
+- Standalone components (pas de NgModules)
+- Signals + RxJS pour le state
+- Angular Material pour l'UI (à confirmer avec le user)
+- `frontend/` ou `web/` à la racine (à confirmer)
+
+---
+
+## 🔮 V3.0 — Modes de jeu autres + qualifs fédérales
+
+Reproduire les autres disciplines de l'ASP legacy.
+
+| Sujet | Effort | Notes |
+|---|---|---|
+| Mode Individuel (avec topage 0..100) | 1-2 sem | 56 fichiers ASP legacy |
+| Mode Triplette | 2 sem | 50 fichiers ASP legacy, équipe de 3 |
+| Mode Quadrette (avec quadrette_duo) | 2 sem | 50 fichiers ASP legacy |
+| Mode AD (donne-par-donne avec topage par donne) | ~1 mois | Algorithme spécifique (`AD/functionClassement.asp`) |
+| Mode Coupe (élimination directe + tableaux) | ~3 sem | 44 fichiers ASP legacy |
+| Mode Triathlon | 1 sem | 19 fichiers ASP legacy |
+| Mode Formation | 1 sem | 16 fichiers ASP legacy |
+| Système qualifications fédérales (bordereau_qualifier, qualifier_cf) | ~1 mois | Critères FFT, exports Excel par comité |
+| Détail bouts / contrat / calcul auto du score | 2-3 sem | Saisie déclarative au lieu de score_n/s/e/o |
+| UI interactive de génération de donnes (diagrammes drag-drop) | ~3 sem | Front complète le back déjà fait |
+| Rôles affinés ligue / comité / club | 1 sem | Données restreintes par périmètre |
+| Import base joueurs FFT (si dump disponible) | 2 j | Module dédié |
+
+---
+
+## 📊 Couverture vs ASP legacy
+
+L'ASP legacy = ~600 fichiers répartis sur 8 disciplines :
+- ✅ **Libre** (141 fichiers ASP) → V1.0
+- ⏳ **Individuel** (56) → V3.0
+- ⏳ **Triplette** (50) → V3.0
+- ⏳ **Quadrette** (50) → V3.0
+- ⏳ **AD** (45) → V3.0
+- ⏳ **Coupe** (44) → V3.0
+- ⏳ **Triathlon** (19) → V3.0
+- ⏳ **Formation** (16) → V3.0
+
+**V1.0 couvre la discipline Libre** (la plus utilisée en pratique). V3.0
+visera la parité complète, mais sa pertinence dépend du retour d'usage
+réel de V2.0.
+
+---
+
+## Versioning
+
+- **V1.0.x** : back Libre par 4 + auth (livré)
+- **V1.1.x** : petits chantiers de consolidation back
+- **V2.0.x** : front Angular + déploiement prod
+- **V3.0.x** : autres disciplines + qualifs fédérales
+
+Format : [SemVer](https://semver.org). Major = changement de périmètre
+fonctionnel. Minor = ajout de fonctionnalité. Patch = bugfix / sécurité.
