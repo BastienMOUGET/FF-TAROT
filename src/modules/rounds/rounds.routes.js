@@ -9,4 +9,8 @@ router.get('/:tournamentId',
   controller.list
 );
 
+router.post('/:id/generate',
+  controller.generate
+);
+
 module.exports = router;

@@ -33,7 +33,31 @@ async function list(req, res) {
   }
 }
 
+async function generate(req, res) {
+
+  try {
+
+    const data =
+      await service.generateTables(
+        req.params.id
+      );
+
+    res.json(data);
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
+
+}
+
 module.exports = {
   create,
-  list
+  list,
+  generate
 };

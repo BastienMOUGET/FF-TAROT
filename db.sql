@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS table_players (
   INDEX (player_id)
 
 );
+ALTER TABLE table_players
+ADD COLUMN role VARCHAR(1) NULL;
 
 -- =====================================================
 -- SCORES
@@ -153,6 +155,54 @@ CREATE TABLE IF NOT EXISTS penalties (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
   INDEX (tournament_id),
+
+  INDEX (player_id)
+
+);
+
+-- =====================================================
+-- BES
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS byes (
+
+  id INT AUTO_INCREMENT PRIMARY KEY,
+
+  tournament_id INT NOT NULL,
+
+  round_id INT NOT NULL,
+
+  player_id INT NOT NULL,
+
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  INDEX (tournament_id),
+
+  INDEX (round_id),
+
+  INDEX (player_id)
+
+);
+
+-- =====================================================
+-- BYES / EXEMPTS
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS byes (
+
+  id INT AUTO_INCREMENT PRIMARY KEY,
+
+  tournament_id INT NOT NULL,
+
+  round_id INT NOT NULL,
+
+  player_id INT NOT NULL,
+
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  INDEX (tournament_id),
+
+  INDEX (round_id),
 
   INDEX (player_id)
 
