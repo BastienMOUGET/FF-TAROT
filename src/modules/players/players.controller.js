@@ -1,29 +1,30 @@
-const pool = require('../../config/db');
+const service = require('./players.service');
 
-async function getPlayers(req, res) {
-  const conn = await pool.getConnection();
-  try {
-    const rows = await conn.query('SELECT * FROM players');
-    res.json(rows);
-  } finally {
-    conn.release();
-  }
+async function list(req, res) {
+  res.json(
+    await service.list({
+      search: req.query.search,
+      club_id: req.query.club_id,
+      licence: req.query.licence,
+    })
+  );
 }
 
-async function createPlayer(req, res) {
-  const { name, firstname } = req.body;
-
-  const conn = await pool.getConnection();
-  try {
-    const result = await conn.query(
-      'INSERT INTO players (name, firstname) VALUES (?, ?)',
-      [name, firstname]
-    );
-
-    res.json({ id: result.insertId, name, firstname });
-  } finally {
-    conn.release();
-  }
+async function getById(req, res) {
+  res.json(await service.getById(req.params.id));
 }
 
-module.exports = { getPlayers, createPlayer };
+async function create(req, res) {
+  res.status(201).json(await service.create(req.body));
+}
+
+async function update(req, res) {
+  res.json(await service.update(req.params.id, req.body));
+}
+
+async function remove(req, res) {
+  await service.remove(req.params.id);
+  res.status(204).end();
+}
+
+module.exports = { list, getById, create, update, remove };
