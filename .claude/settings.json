@@ -49,7 +49,9 @@
       "Bash(curl -s -X PUT http://localhost:3001/sub-tournaments/1/pp-grid -H \"Content-Type: application/json\" -d '{\"entries\":[{\"place\":1,\"pp\":3},{\"place\":2,\"pp\":2},{\"place\":3,\"pp\":1}]}')",
       "Bash(curl -s -X POST http://localhost:3001/rounds/1/tables/2/hands -H \"Content-Type: application/json\" -d '{\"hand_number\":1,\"taker_seat\":\"S\",\"score_n\":-50,\"score_s\":150,\"score_e\":-50,\"score_o\":-50}')",
       "Bash(python3 -c ' *)",
-      "Bash(curl -s -i http://localhost:3001/sub-tournaments/1/ranking/export-pcn.csv)"
+      "Bash(curl -s -i http://localhost:3001/sub-tournaments/1/ranking/export-pcn.csv)",
+      "Bash(curl -s -X POST http://localhost:3001/rounds/2/generate)",
+      "Bash(curl -s http://localhost:3001/sub-tournaments/1/route-sheet)"
     ]
   }
 }
