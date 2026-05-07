@@ -92,7 +92,12 @@
       "Bash(bash -n install.sh)",
       "Bash(bash -n docker-entrypoint.sh)",
       "Bash(chmod +x install.sh docker-entrypoint.sh)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Bash(tar -tzf /tmp/ff-tarot-2.0.2-test-linux.tar.gz)",
+      "Bash(rm -rf /tmp/ff-tarot-2.0.2-test /tmp/ff-tarot-2.0.2-test-linux.tar.gz)"
+    ],
+    "additionalDirectories": [
+      "/tmp/ff-tarot-2.0.2-test"
     ]
   }
 }

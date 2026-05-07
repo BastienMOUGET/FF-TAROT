@@ -7,13 +7,20 @@ côté front, avec **classement live** via Socket.IO.
 
 ## Installation
 
+[![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![Release](../../actions/workflows/release.yml/badge.svg)](../../actions/workflows/release.yml)
+
 Voir **[INSTALL.md](INSTALL.md)** — 3 méthodes au choix :
 
-- **Windows** : `.\install.ps1` (PowerShell admin) → installe Node + MariaDB
-  via winget, configure tout, crée un raccourci sur le Bureau.
-- **Linux** : `sudo ./install.sh` (Debian/Ubuntu/Fedora/RHEL) → apt/dnf,
-  systemd unit pour démarrage auto.
-- **Docker** : `docker compose up -d` → tout dans des conteneurs.
+- **Windows** : télécharge `ff-tarot-X.Y.Z-windows.zip` depuis la
+  [page Releases](../../releases), dézippe, et lance `.\install.ps1`
+  en PowerShell admin → installe Node + MariaDB via winget, build,
+  crée un raccourci sur le Bureau.
+- **Linux** : télécharge `ff-tarot-X.Y.Z-linux.tar.gz` depuis la
+  [page Releases](../../releases), décompresse, lance `sudo ./install.sh`
+  → apt/dnf, systemd unit pour démarrage auto.
+- **Docker** : `docker compose up -d` (clone du repo) ou
+  `docker pull ghcr.io/<owner>/<repo>:latest`.
 
 URL : http://localhost:3000 — identifiants par défaut `admin` / `admin123`
 (à changer immédiatement).

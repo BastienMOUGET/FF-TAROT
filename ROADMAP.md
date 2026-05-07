@@ -137,7 +137,19 @@ et /socket.io vers :3000).
 
 Documentation centralisée dans `INSTALL.md`. README.md refait.
 
-### V2.0.3 (à venir)
+### V2.0.3 livré (CI/CD GitHub Actions + packages Releases)
+- `.github/workflows/ci.yml` : sur chaque push/PR, build front + lint
+  back, valide docker-compose et Dockerfile, vérifie scripts shell
+- `.github/workflows/release.yml` : sur tag `v*`, génère
+  `ff-tarot-VERSION-windows.zip` et `ff-tarot-VERSION-linux.tar.gz`
+  (front pré-buildé inclus), build et push image Docker sur ghcr.io,
+  crée la GitHub Release avec assets attachés et release notes
+- Installeurs adaptés : `install.sh` et `install.ps1` détectent
+  `frontend/dist/frontend/browser/index.html` et skippent
+  l'install/build front (valable pour les packages release)
+- README.md avec badges CI/Release et liens vers la page Releases
+
+### V2.0.4 (à venir)
 Tests E2E Playwright. Polish UX (loading states, gestion erreurs sur
 tous les écrans, responsive mobile pour la saisie au bord de table).
 
@@ -189,7 +201,8 @@ réel de V2.0.
 - **V2.0.0** : front Angular MVP — squelette bout-en-bout (livré)
 - **V2.0.1** : CRUD admin complet + grille PP + feuille de route (livré)
 - **V2.0.2** : packaging déployable (Windows/Linux/Docker, livré)
-- **V2.0.3** : tests E2E + polish
+- **V2.0.3** : CI/CD GitHub Actions + packages Releases (livré)
+- **V2.0.4** : tests E2E + polish
 - **V3.0.x** : autres disciplines + qualifs fédérales
 
 Numéros internes :

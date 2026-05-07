@@ -168,12 +168,17 @@ ok ".env généré (permissions 640)"
 # ---------------------------- npm install + build ----------------------------
 
 log "Installation des dépendances back (npm install)..."
-sudo -u "$APP_USER" -H bash -c "cd '$INSTALL_DIR' && npm install --no-fund --no-audit"
+sudo -u "$APP_USER" -H bash -c "cd '$INSTALL_DIR' && npm install --omit=dev --no-fund --no-audit"
 
-log "Installation des dépendances front + build (peut prendre 1-2 min)..."
-sudo -u "$APP_USER" -H bash -c "cd '$INSTALL_DIR/frontend' && npm install --no-fund --no-audit"
-sudo -u "$APP_USER" -H bash -c "cd '$INSTALL_DIR/frontend' && npm run build"
-ok "Front buildé dans frontend/dist/frontend/browser"
+FRONT_INDEX="$INSTALL_DIR/frontend/dist/frontend/browser/index.html"
+if [[ -f "$FRONT_INDEX" ]]; then
+  ok "Front déjà pré-buildé (release package), skip de l'install/build front"
+else
+  log "Installation des dépendances front + build (peut prendre 1-2 min)..."
+  sudo -u "$APP_USER" -H bash -c "cd '$INSTALL_DIR/frontend' && npm install --no-fund --no-audit"
+  sudo -u "$APP_USER" -H bash -c "cd '$INSTALL_DIR/frontend' && npm run build"
+  ok "Front buildé dans frontend/dist/frontend/browser"
+fi
 
 # ---------------------------- Scripts start/stop ----------------------------
 

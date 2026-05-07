@@ -183,15 +183,20 @@ Write-Ok ".env généré"
 
 Write-Step "Installation dépendances back (npm install)..."
 Push-Location $InstallDir
-& npm install --no-fund --no-audit
+& npm install --omit=dev --no-fund --no-audit
 Pop-Location
 
-Write-Step "Installation dépendances front + build (peut prendre 1-2 min)..."
-Push-Location (Join-Path $InstallDir 'frontend')
-& npm install --no-fund --no-audit
-& npm run build
-Pop-Location
-Write-Ok "Front buildé dans frontend\dist\frontend\browser"
+$FrontIndex = Join-Path $InstallDir 'frontend\dist\frontend\browser\index.html'
+if (Test-Path $FrontIndex) {
+    Write-Ok "Front déjà pré-buildé (release package), skip de l'install/build front"
+} else {
+    Write-Step "Installation dépendances front + build (peut prendre 1-2 min)..."
+    Push-Location (Join-Path $InstallDir 'frontend')
+    & npm install --no-fund --no-audit
+    & npm run build
+    Pop-Location
+    Write-Ok "Front buildé dans frontend\dist\frontend\browser"
+}
 
 # ---------------------------- Scripts start/stop ----------------------------
 

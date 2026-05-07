@@ -1,0 +1,177 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # déclenche sur tag v1.0.0, v2.0.2, etc.
+
+permissions:
+  contents: write    # créer la GitHub Release + uploader les assets
+  packages: write    # publier l'image Docker sur GHCR
+
+jobs:
+  package:
+    name: Package archives Linux + Windows
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # ---- Build front ----
+      - name: Install front deps
+        working-directory: frontend
+        run: npm ci --no-fund --no-audit
+
+      - name: Build front (production)
+        working-directory: frontend
+        run: npm run build
+
+      # ---- Préparer le contenu du package ----
+      - name: Prepare release tree
+        run: |
+          set -euo pipefail
+          STAGE=ff-tarot-${{ steps.version.outputs.version }}
+          mkdir -p "$STAGE"
+
+          # Source back
+          cp -r src "$STAGE/"
+          cp package.json package-lock.json "$STAGE/"
+
+          # Schéma DB + seed
+          cp db.sql seed.sql "$STAGE/"
+
+          # Front : on inclut le dist pré-buildé pour éviter ng build
+          # côté utilisateur, mais aussi le source au cas où il faut rebuild.
+          mkdir -p "$STAGE/frontend"
+          cp -r frontend/src "$STAGE/frontend/"
+          cp -r frontend/public "$STAGE/frontend/"
+          cp -r frontend/dist "$STAGE/frontend/"
+          cp frontend/package.json frontend/package-lock.json "$STAGE/frontend/"
+          cp frontend/angular.json frontend/proxy.conf.json "$STAGE/frontend/"
+          cp frontend/tsconfig*.json "$STAGE/frontend/"
+
+          # Installeurs
+          cp install.sh install.ps1 "$STAGE/"
+          chmod +x "$STAGE/install.sh"
+
+          # Docker
+          cp Dockerfile docker-compose.yml docker-entrypoint.sh .dockerignore "$STAGE/"
+          chmod +x "$STAGE/docker-entrypoint.sh"
+
+          # Doc
+          cp README.md INSTALL.md ROADMAP.md LICENSE "$STAGE/"
+
+          ls -la "$STAGE/"
+
+      - name: Create Linux tarball
+        run: |
+          tar -czf ff-tarot-${{ steps.version.outputs.version }}-linux.tar.gz \
+              ff-tarot-${{ steps.version.outputs.version }}/
+
+      - name: Create Windows zip
+        run: |
+          # zip avec sauts de ligne CRLF pour les fichiers texte (.ps1, .bat,
+          # README, etc.) — utile pour le double-clic sous Windows.
+          # Mais pour rester simple, on zip tel quel : PowerShell s'en fout.
+          zip -rq ff-tarot-${{ steps.version.outputs.version }}-windows.zip \
+              ff-tarot-${{ steps.version.outputs.version }}/
+
+      - name: Show archive sizes
+        run: ls -lh ff-tarot-*.tar.gz ff-tarot-*.zip
+
+      - name: Upload artifacts (for the release job)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-archives
+          path: |
+            ff-tarot-*.tar.gz
+            ff-tarot-*.zip
+          retention-days: 1
+
+  docker:
+    name: Build & push Docker image to GHCR
+    runs-on: ubuntu-latest
+    needs: package
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ needs.package.outputs.version }}
+            ${{ steps.image.outputs.name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [package, docker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          name: release-archives
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: FF-TAROT v${{ needs.package.outputs.version }}
+          body: |
+            ## FF-TAROT v${{ needs.package.outputs.version }}
+
+            ### 📦 Téléchargement
+
+            - **Windows** : `ff-tarot-${{ needs.package.outputs.version }}-windows.zip`
+              → dézipper, ouvrir PowerShell admin dans le dossier, lancer `.\install.ps1`
+            - **Linux** : `ff-tarot-${{ needs.package.outputs.version }}-linux.tar.gz`
+              → décompresser, `cd ff-tarot-${{ needs.package.outputs.version }}`, lancer `sudo ./install.sh`
+            - **Docker** : `docker pull ghcr.io/${{ github.repository }}:${{ needs.package.outputs.version }}`
+
+            Voir [INSTALL.md](https://github.com/${{ github.repository }}/blob/v${{ needs.package.outputs.version }}/INSTALL.md)
+            pour les détails d'installation.
+
+            URL après install : http://localhost:3000 (admin / admin123 par défaut, **à changer immédiatement**).
+
+            ### 🗒 Changelog
+
+            Voir l'historique git ou [ROADMAP.md](https://github.com/${{ github.repository }}/blob/v${{ needs.package.outputs.version }}/ROADMAP.md).
+          files: |
+            ff-tarot-*.tar.gz
+            ff-tarot-*.zip
+          draft: false
+          prerelease: false

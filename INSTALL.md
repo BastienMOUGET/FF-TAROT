@@ -2,6 +2,15 @@
 
 3 façons d'installer, choisis celle qui te convient.
 
+> 💡 **Le plus rapide** : télécharge le package **prêt à l'emploi** depuis
+> la [page Releases GitHub](../../releases) (dossier `Releases` à droite
+> du repo). Tu auras `ff-tarot-X.Y.Z-windows.zip` et
+> `ff-tarot-X.Y.Z-linux.tar.gz` avec le front pré-buildé : pas besoin
+> d'installer Angular CLI, l'install est ~2 min.
+>
+> Sinon, clone le repo source et utilise les scripts ci-dessous (le
+> front sera buildé pendant l'install, +1-2 min).
+
 ---
 
 ## 🪟 Windows — installeur clé en main
