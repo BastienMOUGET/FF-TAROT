@@ -24,6 +24,10 @@ const scoringRoutes = require('./modules/scoring/scoring.routes');
 // Classement (live)
 const rankingRoutes = require('./modules/ranking/ranking.routes');
 
+// Pénalités
+const penaltyTypesRoutes = require('./modules/penalty-types/penalty-types.routes');
+const penaltiesRoutes = require('./modules/penalties/penalties.routes');
+
 const app = express();
 
 app.use(cors());
@@ -74,6 +78,14 @@ app.use('/hands', scoringRoutes.handRouter);
 
 // Classement
 app.use('/sub-tournaments/:subTournamentId/ranking', rankingRoutes);
+
+// Pénalités
+app.use('/penalty-types', penaltyTypesRoutes);
+app.use(
+  '/tournaments/:tournamentId/penalties',
+  penaltiesRoutes.tournamentRouter
+);
+app.use('/penalties', penaltiesRoutes.standaloneRouter);
 
 app.get('/', (req, res) => {
   res.json({

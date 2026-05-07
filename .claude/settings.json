@@ -33,7 +33,16 @@
       "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);print\\('hand_number',d['hand_number'],'taker_seat',d['taker_seat']\\)\")",
       "Bash(curl -s http://localhost:3001/sub-tournaments/1/ranking)",
       "Bash(curl -s -X POST http://localhost:3001/rounds/1/tables/2/hands -H \"Content-Type: application/json\" -d '{\"hand_number\":1,\"taker_seat\":\"O\",\"score_n\":-50,\"score_s\":-50,\"score_e\":-50,\"score_o\":150}')",
-      "Bash(curl -s -X POST http://localhost:3001/rounds/1/tables/2/validate)"
+      "Bash(curl -s -X POST http://localhost:3001/rounds/1/tables/2/validate)",
+      "Bash(curl -s http://localhost:3001/penalty-types)",
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);[print\\(r['place'],r['name'],r['firstname'],'total=',r['total'],'gen=',r['total_general']\\) for r in d[:4]]\")",
+      "Bash(curl -s -X POST http://localhost:3001/tournaments/1/penalties -H \"Content-Type: application/json\" -d '{\"player_id\":1,\"type_id\":1,\"reason\":\"Retard 5 min\"}')",
+      "Bash(curl -s -X POST http://localhost:3001/tournaments/1/penalties -H \"Content-Type: application/json\" -d '{\"player_id\":4,\"points\":-100,\"reason\":\"Manuel\"}')",
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);print\\('id=',d['id'],'points=',d['points']\\)\")",
+      "Bash(curl -s http://localhost:3001/tournaments/1/penalties)",
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);[print\\(p['player_name'],p['firstname'] if 'firstname' in p else '',p['points'],'-',p.get\\('type_label','-'\\),'-',p.get\\('reason',''\\)\\) for p in d]\")",
+      "Bash(curl -s -X DELETE http://localhost:3001/penalties/1 -w \"[HTTP %{http_code}]\")",
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);[print\\(r['place'],r['name'],r['firstname'],'gen=',r['total_general']\\) for r in d[:4]]\")"
     ]
   }
 }
