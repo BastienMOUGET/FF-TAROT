@@ -4,6 +4,7 @@
 USE fft;
 
 -- ----- nettoyage (ordre inverse des FK) -----
+-- NOTE: users n'est pas truncate ici (l'admin par défaut est créé dans db.sql)
 SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE donne_cards;
 TRUNCATE donne_sets;

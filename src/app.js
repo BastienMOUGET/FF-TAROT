@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 
 const errorHandler = require('./middleware/errorHandler');
+const { authenticate, requireAuth, requireRole } = require('./middleware/auth');
 
 // Référentiel
 const liguesRoutes = require('./modules/ligues/ligues.routes');
@@ -38,6 +39,9 @@ const routeSheetRoutes = require('./modules/route-sheet/route-sheet.routes');
 const cardsRoutes = require('./modules/cards/cards.routes');
 const donneSetsRoutes = require('./modules/donne-sets/donne-sets.routes');
 
+// Auth
+const authRoutes = require('./modules/auth/auth.routes');
+
 const app = express();
 
 app.use(cors());
@@ -51,17 +55,56 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
+// Parse Bearer token (no-op if absent). req.user set if valid token.
+app.use(authenticate);
+
 /*
 |--------------------------------------------------------------------------
-| ROUTES
+| ROUTES PUBLIQUES (sans auth)
 |--------------------------------------------------------------------------
 */
 
-// Référentiel
-app.use('/ligues', liguesRoutes);
-app.use('/comites', comitesRoutes);
-app.use('/clubs', clubsRoutes);
-app.use('/players', playersRoutes);
+app.get('/', (req, res) => {
+  res.json({
+    app: 'FFT TAROT API',
+    version: '1.0.0',
+  });
+});
+
+app.use('/auth', authRoutes.router);
+
+/*
+|--------------------------------------------------------------------------
+| GUARD : mutations (POST/PUT/PATCH/DELETE) requièrent auth.
+| GET / HEAD / OPTIONS restent accessibles à tous (lecture publique).
+|--------------------------------------------------------------------------
+*/
+app.use((req, res, next) => {
+  const m = req.method;
+  if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return next();
+  return requireAuth(req, res, next);
+});
+
+/*
+|--------------------------------------------------------------------------
+| ROUTES MÉTIER
+|--------------------------------------------------------------------------
+*/
+
+// Référentiel : POST/PUT/DELETE = admin uniquement (déjà auth via guard ci-dessus)
+const adminOnly = (req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    return next();
+  }
+  return requireRole('admin')(req, res, next);
+};
+
+app.use('/ligues', adminOnly, liguesRoutes);
+app.use('/comites', adminOnly, comitesRoutes);
+app.use('/clubs', adminOnly, clubsRoutes);
+app.use('/players', adminOnly, playersRoutes);
+app.use('/penalty-types', adminOnly, penaltyTypesRoutes);
+app.use('/users', authRoutes.usersRouter);
 
 // Tournois & sub-tournois (nested + standalone)
 app.use(
@@ -79,8 +122,8 @@ app.use('/teams', teamsRoutes);
 app.use('/sub-tournaments/:subTournamentId/rounds', roundsRoutes);
 app.use('/rounds', roundsRoutes);
 
-// Patrons de mouvement
-app.use('/movement-patterns', movementPatternsRoutes);
+// Patrons de mouvement (modifiable par admin uniquement)
+app.use('/movement-patterns', adminOnly, movementPatternsRoutes);
 
 // Saisie scores : table-results et hands sur les rounds
 app.use('/rounds/:roundId', scoringRoutes.tableRouter);
@@ -90,7 +133,6 @@ app.use('/hands', scoringRoutes.handRouter);
 app.use('/sub-tournaments/:subTournamentId/ranking', rankingRoutes);
 
 // Pénalités
-app.use('/penalty-types', penaltyTypesRoutes);
 app.use(
   '/tournaments/:tournamentId/penalties',
   penaltiesRoutes.tournamentRouter
@@ -109,13 +151,6 @@ app.use(
 // Cartes & jeux de donnes pré-tirées
 app.use('/cards', cardsRoutes);
 app.use('/donne-sets', donneSetsRoutes);
-
-app.get('/', (req, res) => {
-  res.json({
-    app: 'FFT TAROT API',
-    version: '1.0.0',
-  });
-});
 
 // 404
 app.use((req, res) => {

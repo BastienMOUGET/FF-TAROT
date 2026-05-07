@@ -16,6 +16,7 @@ USE fft;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Suppression (ordre inverse des dépendances, dev only)
+DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS donne_cards;
 DROP TABLE IF EXISTS donne_sets;
 DROP TABLE IF EXISTS cards;
@@ -409,6 +410,20 @@ CREATE TABLE donne_cards (
 ) ENGINE=InnoDB;
 
 -- =====================================================
+-- UTILISATEURS / AUTH
+-- =====================================================
+
+CREATE TABLE users (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  username      VARCHAR(50)  NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role          ENUM('admin','arbitre','viewer') NOT NULL DEFAULT 'viewer',
+  full_name     VARCHAR(150) NULL,
+  email         VARCHAR(150) NULL UNIQUE,
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- =====================================================
 -- DONNÉES DE RÉFÉRENCE (toujours présentes)
 -- =====================================================
 
@@ -451,5 +466,13 @@ INSERT INTO cards (code, suit, rank_label, display_order) VALUES
   ('A_21','atout','21',77),
   -- Excuse
   ('EXC','excuse','0',78);
+
+-- Utilisateur admin par défaut (mot de passe : admin123)
+-- Hash bcrypt 10 rounds. Changez immédiatement en prod.
+INSERT INTO users (username, password_hash, role, full_name) VALUES
+  ('admin',
+   '$2b$10$kFeNV3I.tP1lK20Bbuvvw.cvimvLQlMvT7KZJELVVc2zqypT6QCte',
+   'admin',
+   'Administrateur');
 
 SET FOREIGN_KEY_CHECKS = 1;
