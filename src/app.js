@@ -18,6 +18,9 @@ const teamsRoutes = require('./modules/teams/teams.routes');
 const roundsRoutes = require('./modules/rounds/rounds.routes');
 const movementPatternsRoutes = require('./modules/movement-patterns/movement-patterns.routes');
 
+// Saisie des scores (table_results + hands)
+const scoringRoutes = require('./modules/scoring/scoring.routes');
+
 const app = express();
 
 app.use(cors());
@@ -61,6 +64,10 @@ app.use('/rounds', roundsRoutes);
 
 // Patrons de mouvement
 app.use('/movement-patterns', movementPatternsRoutes);
+
+// Saisie scores : table-results et hands sur les rounds
+app.use('/rounds/:roundId', scoringRoutes.tableRouter);
+app.use('/hands', scoringRoutes.handRouter);
 
 app.get('/', (req, res) => {
   res.json({
