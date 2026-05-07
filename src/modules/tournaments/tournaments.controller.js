@@ -1,51 +1,31 @@
 const service = require('./tournaments.service');
 
-async function getAll(req, res) {
-  try {
-    const data = await service.getAll();
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      error: 'Erreur serveur'
-    });
-  }
-}
-
-async function create(req, res) {
-  try {
-    const data = await service.create(req.body);
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      error: 'Erreur serveur'
-    });
-  }
+async function list(req, res) {
+  res.json(
+    await service.list({
+      status: req.query.status,
+      type: req.query.type,
+      club_id: req.query.club_id,
+      comite_id: req.query.comite_id,
+    })
+  );
 }
 
 async function getById(req, res) {
-  try {
-    const data = await service.getById(req.params.id);
-
-    if (!data) {
-      return res.status(404).json({
-        error: 'Tournoi introuvable'
-      });
-    }
-
-    res.json(data);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      error: 'Erreur serveur'
-    });
-  }
+  res.json(await service.getById(req.params.id));
 }
 
-module.exports = {
-  getAll,
-  create,
-  getById
-};
+async function create(req, res) {
+  res.status(201).json(await service.create(req.body));
+}
+
+async function update(req, res) {
+  res.json(await service.update(req.params.id, req.body));
+}
+
+async function remove(req, res) {
+  await service.remove(req.params.id);
+  res.status(204).end();
+}
+
+module.exports = { list, getById, create, update, remove };
