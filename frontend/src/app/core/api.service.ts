@@ -5,8 +5,8 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   Club, Comite, DonneSet, Hand, Ligue, MovementPattern, Pair, Penalty,
-  PenaltyType, Player, PpEntry, RankingEntry, Round, Seat, SubTournament,
-  TableResult, Team, Tournament, User,
+  PenaltyType, Player, PpEntry, RankingEntry, Round, RouteSheet, Seat,
+  SubTournament, TableResult, Team, Tournament, User,
 } from './api.types';
 
 @Injectable({ providedIn: 'root' })
@@ -14,13 +14,37 @@ export class ApiService {
   private http = inject(HttpClient);
   private base = environment.apiUrl;
 
-  /* ----- Référentiel ----- */
+  /* ----- Ligues (admin) ----- */
   ligues = (): Observable<Ligue[]> =>
     this.http.get<Ligue[]>(`${this.base}/ligues`);
+  createLigue = (data: Partial<Ligue>): Observable<Ligue> =>
+    this.http.post<Ligue>(`${this.base}/ligues`, data);
+  updateLigue = (id: number, data: Partial<Ligue>): Observable<Ligue> =>
+    this.http.put<Ligue>(`${this.base}/ligues/${id}`, data);
+  deleteLigue = (id: number): Observable<void> =>
+    this.http.delete<void>(`${this.base}/ligues/${id}`);
+
+  /* ----- Comités (admin) ----- */
   comites = (): Observable<Comite[]> =>
     this.http.get<Comite[]>(`${this.base}/comites`);
+  createComite = (data: Partial<Comite>): Observable<Comite> =>
+    this.http.post<Comite>(`${this.base}/comites`, data);
+  updateComite = (id: number, data: Partial<Comite>): Observable<Comite> =>
+    this.http.put<Comite>(`${this.base}/comites/${id}`, data);
+  deleteComite = (id: number): Observable<void> =>
+    this.http.delete<void>(`${this.base}/comites/${id}`);
+
+  /* ----- Clubs (admin) ----- */
   clubs = (): Observable<Club[]> =>
     this.http.get<Club[]>(`${this.base}/clubs`);
+  createClub = (data: Partial<Club>): Observable<Club> =>
+    this.http.post<Club>(`${this.base}/clubs`, data);
+  updateClub = (id: number, data: Partial<Club>): Observable<Club> =>
+    this.http.put<Club>(`${this.base}/clubs/${id}`, data);
+  deleteClub = (id: number): Observable<void> =>
+    this.http.delete<void>(`${this.base}/clubs/${id}`);
+
+  /* ----- Joueurs ----- */
   players = (q?: { search?: string; club_id?: number }): Observable<Player[]> => {
     const params: Record<string, string> = {};
     if (q?.search) params['search'] = q.search;
@@ -29,6 +53,10 @@ export class ApiService {
   };
   createPlayer = (data: Partial<Player>): Observable<Player> =>
     this.http.post<Player>(`${this.base}/players`, data);
+  updatePlayer = (id: number, data: Partial<Player>): Observable<Player> =>
+    this.http.put<Player>(`${this.base}/players/${id}`, data);
+  deletePlayer = (id: number): Observable<void> =>
+    this.http.delete<void>(`${this.base}/players/${id}`);
 
   /* ----- Tournois ----- */
   tournaments = (): Observable<Tournament[]> =>
@@ -143,9 +171,17 @@ export class ApiService {
       {}
     );
 
-  /* ----- Pénalités ----- */
+  /* ----- Pénalités (types : admin) ----- */
   penaltyTypes = (): Observable<PenaltyType[]> =>
     this.http.get<PenaltyType[]>(`${this.base}/penalty-types`);
+  createPenaltyType = (data: Partial<PenaltyType>): Observable<PenaltyType> =>
+    this.http.post<PenaltyType>(`${this.base}/penalty-types`, data);
+  updatePenaltyType = (id: number, data: Partial<PenaltyType>): Observable<PenaltyType> =>
+    this.http.put<PenaltyType>(`${this.base}/penalty-types/${id}`, data);
+  deletePenaltyType = (id: number): Observable<void> =>
+    this.http.delete<void>(`${this.base}/penalty-types/${id}`);
+
+  /* ----- Pénalités (instances) ----- */
   penalties = (tournamentId: number): Observable<Penalty[]> =>
     this.http.get<Penalty[]>(
       `${this.base}/tournaments/${tournamentId}/penalties`
@@ -192,10 +228,14 @@ export class ApiService {
     full_name?: string;
     email?: string;
   }): Observable<User> => this.http.post<User>(`${this.base}/users`, data);
+  changeUserPassword = (id: number, new_password: string): Observable<void> =>
+    this.http.put<void>(`${this.base}/users/${id}/password`, { new_password });
+  deleteUser = (id: number): Observable<void> =>
+    this.http.delete<void>(`${this.base}/users/${id}`);
 
   /* ----- Feuille de route ----- */
-  routeSheet = (subTournamentId: number): Observable<unknown> =>
-    this.http.get(
+  routeSheet = (subTournamentId: number): Observable<RouteSheet> =>
+    this.http.get<RouteSheet>(
       `${this.base}/sub-tournaments/${subTournamentId}/route-sheet`
     );
 

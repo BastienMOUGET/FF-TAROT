@@ -56,6 +56,18 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'sub-tournaments/:id/pp-grid',
+        loadComponent: () =>
+          import('./pages/pp-grid/pp-grid.page').then((m) => m.PpGridPage),
+      },
+      {
+        path: 'sub-tournaments/:id/route-sheet',
+        loadComponent: () =>
+          import('./pages/route-sheet/route-sheet.page').then(
+            (m) => m.RouteSheetPage
+          ),
+      },
+      {
         path: 'admin',
         canActivate: [adminGuard],
         loadComponent: () =>

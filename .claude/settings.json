@@ -72,7 +72,13 @@
       "Bash(curl -s -o /dev/null -w \"Login OK ? %{http_code}\\\\n\" -X POST http://localhost:3000/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
       "Bash(pkill -f \"ng serve\")",
       "Bash(pkill -f \"@angular/cli\")",
-      "Bash(kill 122679 122691 122692)"
+      "Bash(kill 122679 122691 122692)",
+      "Bash(mysql -h localhost -u fft_user -pfft_password fft -e \"SELECT id, username, LEFT\\(password_hash, 7\\) AS hash_start, role FROM users;\")",
+      "Bash(curl -s -o /dev/null -w \"GET / : HTTP %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin123\"}' -w '\\\\n[HTTP %{http_code}]\\\\n')",
+      "Bash(mysql -h localhost -u fft_user -pfft_password fft -se \"SELECT password_hash FROM users WHERE username='admin'\")",
+      "Bash(node -e 'console.log\\('\\\\''match:'\\\\'', require\\('\\\\''bcryptjs'\\\\''\\).compareSync\\('\\\\''admin123'\\\\'','\\\\''__TRACKED_VAR__'\\\\''\\)\\)')",
+      "Bash(git reset *)"
     ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "ff-tarot-front",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "FF-TAROT — Front Angular pour gestion de tournois FFT (mode Libre par 4)",
   "scripts": {
     "ng": "ng",

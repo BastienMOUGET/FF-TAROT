@@ -232,3 +232,40 @@ export interface CardRef {
   rank: string;
   display_order: number;
 }
+
+export interface RouteSheetSeat {
+  seat: Seat;
+  player_id: number;
+  team_id: number | null;
+  team_number: number | null;
+  licence: string | null;
+  name: string;
+  firstname: string;
+}
+
+export interface RouteSheetTable {
+  table_number: number;
+  seats: RouteSheetSeat[];
+}
+
+export interface RouteSheetRound {
+  round_number: number;
+  coef: string | number;
+  tables: RouteSheetTable[];
+}
+
+export interface RouteSheet {
+  tournament: {
+    id: number;
+    code: string;
+    name: string;
+    date: string | null;
+  };
+  sub_tournament: {
+    id: number;
+    label: string;
+    color: string | null;
+    color_name: string | null;
+  };
+  rounds: RouteSheetRound[];
+}

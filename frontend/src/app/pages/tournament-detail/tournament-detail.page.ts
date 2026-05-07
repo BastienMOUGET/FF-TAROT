@@ -164,6 +164,18 @@ export class SubTournamentDialog {
                 >
                   <mat-icon>leaderboard</mat-icon> Classement
                 </a>
+                <a
+                  mat-stroked-button
+                  [routerLink]="['/sub-tournaments', sub.id, 'route-sheet']"
+                >
+                  <mat-icon>description</mat-icon> Feuille de route
+                </a>
+                <a
+                  mat-stroked-button
+                  [routerLink]="['/sub-tournaments', sub.id, 'pp-grid']"
+                >
+                  <mat-icon>military_tech</mat-icon> Grille PP
+                </a>
                 <button
                   mat-flat-button
                   color="primary"

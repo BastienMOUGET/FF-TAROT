@@ -103,12 +103,22 @@ classement live (Socket.IO) avec couleurs podium.
 
 11 routes lazy-loadées, 7 pages métier, Material Design.
 
-### V2.0.1 (consolidation, à venir)
-CRUD complet de l'admin (créer un joueur, gérer la grille PP, etc.),
-polish UX, déploiement prod.
+### V2.0.1 livré (CRUD admin complet + grille PP + feuille de route)
+- Admin CRUD complet : 6 dialogs (player, club, comite, ligue, penalty
+  type, user) avec créer/modifier/supprimer + recherche joueurs +
+  confirm dialog réutilisable
+- Page éditeur de grille PP (place ↔ pp éditables, préréglage top 3)
+- Page feuille de route imprimable (CSS @media print, page-break-inside
+  avoid, sièges colorés N/S/E/O, bouton Imprimer)
+- API service : 17 endpoints CRUD ajoutés (update/delete pour toutes les
+  entités)
+- Liens routés depuis le détail tournoi vers feuille de route et grille PP
 
-### V2.0.2 (qualité)
-Tests E2E end-to-end via Playwright.
+13 routes lazy-loadées, 13 composants page, ~3500 lignes front total.
+Front version 0.2.0.
+
+### V2.0.2 (qualité, à venir)
+Tests E2E end-to-end via Playwright + déploiement prod.
 
 ---
 
