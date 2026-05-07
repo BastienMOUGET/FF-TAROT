@@ -16,6 +16,7 @@ USE fft;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Suppression (ordre inverse des dépendances, dev only)
+DROP TABLE IF EXISTS pp_grids;
 DROP TABLE IF EXISTS rankings;
 DROP TABLE IF EXISTS hand_results;
 DROP TABLE IF EXISTS table_results;
@@ -124,6 +125,9 @@ CREATE TABLE sub_tournaments (
   label           VARCHAR(50)  NOT NULL,    -- ex : 'A', 'Open'
   color           VARCHAR(20)  NULL,        -- hex ou nom CSS
   color_name      VARCHAR(50)  NULL,
+  -- PCN (codification fédérale) : 0 = pas de PCN
+  indice_pcn      DECIMAL(5,2) NOT NULL DEFAULT 0,
+  championnat     BOOLEAN      NOT NULL DEFAULT FALSE,
   CONSTRAINT fk_subt_tournament
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id)
     ON DELETE CASCADE ON UPDATE CASCADE,
@@ -270,6 +274,8 @@ CREATE TABLE rankings (
   total               DECIMAL(8,2) NOT NULL DEFAULT 0,
   total_general       DECIMAL(8,2) NOT NULL DEFAULT 0,
   place               INT     NOT NULL DEFAULT 0,
+  pcn                 DECIMAL(8,2) NOT NULL DEFAULT 0,
+  pp                  DECIMAL(6,2) NOT NULL DEFAULT 0,
   eliminated          BOOLEAN NOT NULL DEFAULT FALSE,
   updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                       ON UPDATE CURRENT_TIMESTAMP,
@@ -280,6 +286,22 @@ CREATE TABLE rankings (
     FOREIGN KEY (player_id) REFERENCES players(id)
     ON DELETE CASCADE ON UPDATE CASCADE,
   UNIQUE KEY uniq_ranking (sub_tournament_id, player_id)
+) ENGINE=InnoDB;
+
+-- =====================================================
+-- GRILLE PP (Palmarès des Points) par sous-tournoi
+-- Place -> nombre de points PP. Reproduit pp_tournois du legacy.
+-- =====================================================
+
+CREATE TABLE pp_grids (
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  sub_tournament_id   INT NOT NULL,
+  place               INT NOT NULL,
+  pp                  DECIMAL(6,2) NOT NULL,
+  CONSTRAINT fk_pp_subt
+    FOREIGN KEY (sub_tournament_id) REFERENCES sub_tournaments(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  UNIQUE KEY uniq_pp_grid (sub_tournament_id, place)
 ) ENGINE=InnoDB;
 
 -- =====================================================

@@ -3,6 +3,7 @@ const { notFound } = require('../../utils/httpError');
 
 const SELECT_BASE = `
   SELECT st.id, st.tournament_id, st.label, st.color, st.color_name,
+         st.indice_pcn, st.championnat,
          t.code AS tournament_code, t.name AS tournament_name
   FROM sub_tournaments st
   JOIN tournaments t ON t.id = st.tournament_id
@@ -31,14 +32,21 @@ async function getById(id) {
   }
 }
 
-async function create(tournamentId, { label, color, color_name }) {
+async function create(tournamentId, data) {
   const conn = await pool.getConnection();
   try {
     const result = await conn.query(
       `INSERT INTO sub_tournaments
-         (tournament_id, label, color, color_name)
-       VALUES (?, ?, ?, ?)`,
-      [tournamentId, label, color || null, color_name || null]
+         (tournament_id, label, color, color_name, indice_pcn, championnat)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        tournamentId,
+        data.label,
+        data.color || null,
+        data.color_name || null,
+        data.indice_pcn ?? 0,
+        data.championnat ? 1 : 0,
+      ]
     );
     return getById(Number(result.insertId));
   } finally {
@@ -46,14 +54,22 @@ async function create(tournamentId, { label, color, color_name }) {
   }
 }
 
-async function update(id, { label, color, color_name }) {
+async function update(id, data) {
   const conn = await pool.getConnection();
   try {
     const result = await conn.query(
       `UPDATE sub_tournaments
-         SET label = ?, color = ?, color_name = ?
+         SET label = ?, color = ?, color_name = ?,
+             indice_pcn = ?, championnat = ?
        WHERE id = ?`,
-      [label, color || null, color_name || null, id]
+      [
+        data.label,
+        data.color || null,
+        data.color_name || null,
+        data.indice_pcn ?? 0,
+        data.championnat ? 1 : 0,
+        id,
+      ]
     );
     if (result.affectedRows === 0) throw notFound('Sous-tournoi introuvable');
     return getById(id);

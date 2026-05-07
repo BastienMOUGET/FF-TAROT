@@ -42,7 +42,14 @@
       "Bash(curl -s http://localhost:3001/tournaments/1/penalties)",
       "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);[print\\(p['player_name'],p['firstname'] if 'firstname' in p else '',p['points'],'-',p.get\\('type_label','-'\\),'-',p.get\\('reason',''\\)\\) for p in d]\")",
       "Bash(curl -s -X DELETE http://localhost:3001/penalties/1 -w \"[HTTP %{http_code}]\")",
-      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);[print\\(r['place'],r['name'],r['firstname'],'gen=',r['total_general']\\) for r in d[:4]]\")"
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);[print\\(r['place'],r['name'],r['firstname'],'gen=',r['total_general']\\) for r in d[:4]]\")",
+      "Bash(mysql -h localhost -u fft_user -pfft_password fft -e \"DESC sub_tournaments; DESC rankings; DESC pp_grids;\")",
+      "Bash(curl -s -X PUT http://localhost:3001/sub-tournaments/1 -H \"Content-Type: application/json\" -d '{\"label\":\"Open\",\"color\":\"#1976D2\",\"color_name\":\"Bleu\",\"indice_pcn\":1.0,\"championnat\":true}')",
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);print\\('indice_pcn=',d['indice_pcn'],'championnat=',d['championnat']\\)\")",
+      "Bash(curl -s -X PUT http://localhost:3001/sub-tournaments/1/pp-grid -H \"Content-Type: application/json\" -d '{\"entries\":[{\"place\":1,\"pp\":3},{\"place\":2,\"pp\":2},{\"place\":3,\"pp\":1}]}')",
+      "Bash(curl -s -X POST http://localhost:3001/rounds/1/tables/2/hands -H \"Content-Type: application/json\" -d '{\"hand_number\":1,\"taker_seat\":\"S\",\"score_n\":-50,\"score_s\":150,\"score_e\":-50,\"score_o\":-50}')",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -i http://localhost:3001/sub-tournaments/1/ranking/export-pcn.csv)"
     ]
   }
 }

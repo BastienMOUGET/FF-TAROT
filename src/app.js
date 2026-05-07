@@ -28,6 +28,9 @@ const rankingRoutes = require('./modules/ranking/ranking.routes');
 const penaltyTypesRoutes = require('./modules/penalty-types/penalty-types.routes');
 const penaltiesRoutes = require('./modules/penalties/penalties.routes');
 
+// PCN / PP : grilles + export
+const ppGridsRoutes = require('./modules/pp-grids/pp-grids.routes');
+
 const app = express();
 
 app.use(cors());
@@ -86,6 +89,9 @@ app.use(
   penaltiesRoutes.tournamentRouter
 );
 app.use('/penalties', penaltiesRoutes.standaloneRouter);
+
+// Grille PP par sous-tournoi
+app.use('/sub-tournaments/:subTournamentId/pp-grid', ppGridsRoutes);
 
 app.get('/', (req, res) => {
   res.json({

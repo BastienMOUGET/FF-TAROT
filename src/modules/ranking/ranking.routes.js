@@ -20,4 +20,11 @@ router.post(
   asyncHandler(controller.recompute)
 );
 
+router.get(
+  '/export-pcn.csv',
+  idParam,
+  validate,
+  asyncHandler(controller.exportPcn)
+);
+
 module.exports = router;
