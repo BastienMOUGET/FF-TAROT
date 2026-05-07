@@ -138,18 +138,56 @@ jobs:
           npm ci --no-fund --no-audit
           npm run build
 
-      - name: Download NSSM 2.24
+      - name: Get NSSM (via Chocolatey, fallback nssm.cc)
         shell: pwsh
         run: |
-          $url = 'https://nssm.cc/release/nssm-2.24.zip'
-          $zip = "$env:TEMP\nssm.zip"
-          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
-          $extract = "$env:TEMP\nssm-extract"
-          Expand-Archive -Path $zip -DestinationPath $extract -Force
           New-Item -ItemType Directory -Path "installer\bin" -Force | Out-Null
-          Copy-Item -Path "$extract\nssm-2.24\win64\nssm.exe" `
-                    -Destination "installer\bin\nssm.exe"
-          Get-Item installer\bin\nssm.exe | Select Name, Length
+          $target = "installer\bin\nssm.exe"
+
+          # Source 1 : Chocolatey (préinstallé sur windows-latest, fiable)
+          try {
+            choco install nssm -y --no-progress --no-color | Out-Null
+            $candidates = @(
+              'C:\ProgramData\chocolatey\lib\nssm\tools\nssm.exe',
+              'C:\ProgramData\chocolatey\bin\nssm.exe'
+            )
+            foreach ($c in $candidates) {
+              if (Test-Path $c) {
+                Copy-Item $c $target -Force
+                Write-Host "NSSM installé via Chocolatey depuis : $c"
+                break
+              }
+            }
+          } catch {
+            Write-Host "Chocolatey KO : $_"
+          }
+
+          # Source 2 : nssm.cc avec retry (fallback si choco a échoué)
+          if (-not (Test-Path $target)) {
+            $url = 'https://nssm.cc/release/nssm-2.24.zip'
+            $zip = "$env:TEMP\nssm.zip"
+            $extract = "$env:TEMP\nssm-extract"
+            $ok = $false
+            1..3 | ForEach-Object {
+              if ($ok) { return }
+              try {
+                Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30
+                $ok = $true
+              } catch {
+                Write-Host "Tentative $_ nssm.cc KO : $($_.Exception.Message)"
+                Start-Sleep -Seconds 5
+              }
+            }
+            if ($ok) {
+              Expand-Archive -Path $zip -DestinationPath $extract -Force
+              Copy-Item -Path "$extract\nssm-2.24\win64\nssm.exe" -Destination $target -Force
+            }
+          }
+
+          if (-not (Test-Path $target)) {
+            throw "Impossible d'obtenir nssm.exe (Chocolatey + nssm.cc échoués)"
+          }
+          Get-Item $target | Select-Object Name, Length, FullName
 
       - name: Install Inno Setup
         shell: pwsh

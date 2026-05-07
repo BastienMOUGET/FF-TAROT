@@ -232,26 +232,65 @@ foreach ($c in $NssmCandidates) {
 }
 
 if (-not $NssmExe) {
-    Write-Step "Téléchargement de NSSM (Non-Sucking Service Manager)..."
     $NssmDir = Join-Path $InstallDir 'bin'
     New-Item -Path $NssmDir -ItemType Directory -Force | Out-Null
-    $NssmZip = Join-Path $env:TEMP 'nssm.zip'
-    try {
-        Invoke-WebRequest -UseBasicParsing `
-            -Uri 'https://nssm.cc/release/nssm-2.24.zip' `
-            -OutFile $NssmZip
-        $extractDir = Join-Path $env:TEMP 'nssm-extract'
-        if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
-        Expand-Archive -Path $NssmZip -DestinationPath $extractDir -Force
+    $TargetNssm = Join-Path $NssmDir 'nssm.exe'
+
+    # Source 1 : Chocolatey s'il est installé sur la machine
+    $Choco = Get-Command choco.exe -ErrorAction SilentlyContinue
+    if ($Choco) {
+        Write-Step "Installation de NSSM via Chocolatey..."
+        try {
+            & choco install nssm -y --no-progress --no-color | Out-Null
+            $candidates = @(
+                'C:\ProgramData\chocolatey\lib\nssm\tools\nssm.exe',
+                'C:\ProgramData\chocolatey\bin\nssm.exe'
+            )
+            foreach ($c in $candidates) {
+                if (Test-Path $c) {
+                    Copy-Item $c $TargetNssm -Force
+                    $NssmExe = $TargetNssm
+                    Write-Ok "NSSM récupéré via Chocolatey ($c)"
+                    break
+                }
+            }
+        } catch {
+            Write-Warn2 "Chocolatey KO : $_"
+        }
+    }
+
+    # Source 2 : nssm.cc avec retry (3 essais espacés de 5s)
+    if (-not $NssmExe) {
+        Write-Step "Téléchargement de NSSM depuis nssm.cc (retry up to 3x)..."
+        $NssmZip = Join-Path $env:TEMP 'nssm.zip'
         $arch = if ([Environment]::Is64BitOperatingSystem) { 'win64' } else { 'win32' }
-        Copy-Item -Path (Join-Path $extractDir "nssm-2.24\$arch\nssm.exe") `
-                  -Destination (Join-Path $NssmDir 'nssm.exe') -Force
-        $NssmExe = Join-Path $NssmDir 'nssm.exe'
-        Write-Ok "NSSM installé : $NssmExe"
-    } catch {
-        Write-Warn2 "Échec du téléchargement NSSM : $_"
-        Write-Warn2 "Le service ne sera pas créé. Lance le serveur manuellement avec : node src\server.js"
-        $NssmExe = $null
+        $ok = $false
+        for ($i = 1; $i -le 3 -and -not $ok; $i++) {
+            try {
+                Invoke-WebRequest -UseBasicParsing `
+                    -Uri 'https://nssm.cc/release/nssm-2.24.zip' `
+                    -OutFile $NssmZip -TimeoutSec 30
+                $ok = $true
+            } catch {
+                Write-Warn2 "Tentative $i KO : $($_.Exception.Message)"
+                Start-Sleep -Seconds 5
+            }
+        }
+        if ($ok) {
+            $extractDir = Join-Path $env:TEMP 'nssm-extract'
+            if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+            Expand-Archive -Path $NssmZip -DestinationPath $extractDir -Force
+            Copy-Item -Path (Join-Path $extractDir "nssm-2.24\$arch\nssm.exe") `
+                      -Destination $TargetNssm -Force
+            $NssmExe = $TargetNssm
+            Write-Ok "NSSM téléchargé depuis nssm.cc"
+        }
+    }
+
+    if (-not $NssmExe) {
+        Write-Warn2 "Impossible d'obtenir NSSM (Chocolatey + nssm.cc échoués)"
+        Write-Warn2 "Le service Windows ne sera pas créé."
+        Write-Warn2 "Le serveur démarrera quand même via start.bat (mode standalone)."
     }
 }
 
