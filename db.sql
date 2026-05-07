@@ -16,6 +16,9 @@ USE fft;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Suppression (ordre inverse des dépendances, dev only)
+DROP TABLE IF EXISTS donne_cards;
+DROP TABLE IF EXISTS donne_sets;
+DROP TABLE IF EXISTS cards;
 DROP TABLE IF EXISTS pp_grids;
 DROP TABLE IF EXISTS rankings;
 DROP TABLE IF EXISTS hand_results;
@@ -43,7 +46,8 @@ DROP TABLE IF EXISTS table_players;
 DROP TABLE IF EXISTS game_tables;
 DROP TABLE IF EXISTS byes;
 
-SET FOREIGN_KEY_CHECKS = 1;
+-- NB : FOREIGN_KEY_CHECKS reste désactivé pendant les CREATE pour
+-- s'affranchir des cycles d'ordre. Réactivé à la toute fin du fichier.
 
 -- =====================================================
 -- RÉFÉRENTIEL FFT (ligues > comités > clubs > joueurs)
@@ -128,9 +132,14 @@ CREATE TABLE sub_tournaments (
   -- PCN (codification fédérale) : 0 = pas de PCN
   indice_pcn      DECIMAL(5,2) NOT NULL DEFAULT 0,
   championnat     BOOLEAN      NOT NULL DEFAULT FALSE,
+  -- Jeu de donnes pré-tirées attaché (optionnel)
+  donne_set_id    INT          NULL,
   CONSTRAINT fk_subt_tournament
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id)
     ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_subt_donneset
+    FOREIGN KEY (donne_set_id) REFERENCES donne_sets(id)
+    ON DELETE SET NULL ON UPDATE CASCADE,
   UNIQUE KEY uniq_subt_label (tournament_id, label)
 ) ENGINE=InnoDB;
 
@@ -355,6 +364,51 @@ CREATE TABLE parameters (
 ) ENGINE=InnoDB;
 
 -- =====================================================
+-- CARTES DU TAROT (référentiel des 78 cartes)
+-- =====================================================
+
+CREATE TABLE cards (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  code          VARCHAR(10)  NOT NULL UNIQUE,
+  -- 'pique', 'coeur', 'carreau', 'trefle', 'atout', 'excuse'
+  suit          VARCHAR(10)  NOT NULL,
+  -- 1..10, V, C, D, R pour couleurs ; 1..21 pour atouts ; 0 pour excuse
+  rank_label    VARCHAR(3)   NOT NULL,
+  -- valeur ordinale pour tri/affichage
+  display_order INT          NOT NULL,
+  INDEX idx_cards_suit (suit)
+) ENGINE=InnoDB;
+
+-- =====================================================
+-- JEUX DE DONNES PRÉ-TIRÉES
+-- Reproduit liste_genedonne / genedonne du legacy.
+-- =====================================================
+
+CREATE TABLE donne_sets (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(150) NOT NULL,
+  nb_donne    INT          NOT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 78 cartes × N donnes, position parmi N/S/E/O/ECART (chien)
+CREATE TABLE donne_cards (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  donne_set_id  INT NOT NULL,
+  donne_number  INT NOT NULL,
+  card_id       INT NOT NULL,
+  position      ENUM('N','S','E','O','ECART') NOT NULL,
+  CONSTRAINT fk_dc_set
+    FOREIGN KEY (donne_set_id) REFERENCES donne_sets(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_dc_card
+    FOREIGN KEY (card_id) REFERENCES cards(id)
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  UNIQUE KEY uniq_dc (donne_set_id, donne_number, card_id),
+  INDEX idx_dc_donne (donne_set_id, donne_number)
+) ENGINE=InnoDB;
+
+-- =====================================================
 -- DONNÉES DE RÉFÉRENCE (toujours présentes)
 -- =====================================================
 
@@ -362,3 +416,40 @@ CREATE TABLE parameters (
 -- N fixe, S+1, E+2, O-1 modulo nb_table — règle FFT Libre par 4.
 INSERT INTO movement_patterns (table_count, offset_n, offset_s, offset_e, offset_o, label)
 VALUES (0, 0, 1, 2, -1, 'Mouvement par défaut Libre par 4');
+
+-- 78 cartes du jeu de Tarot français :
+--   - 4 couleurs (pique, coeur, carreau, trefle) × 14 valeurs (1..10, V, C, D, R) = 56
+--   - 21 atouts (1..21)
+--   - 1 excuse
+INSERT INTO cards (code, suit, rank_label, display_order) VALUES
+  -- Pique
+  ('P_1','pique','1',1),  ('P_2','pique','2',2),  ('P_3','pique','3',3),  ('P_4','pique','4',4),
+  ('P_5','pique','5',5),  ('P_6','pique','6',6),  ('P_7','pique','7',7),  ('P_8','pique','8',8),
+  ('P_9','pique','9',9),  ('P_10','pique','10',10),('P_V','pique','V',11),('P_C','pique','C',12),
+  ('P_D','pique','D',13),('P_R','pique','R',14),
+  -- Coeur
+  ('C_1','coeur','1',15), ('C_2','coeur','2',16), ('C_3','coeur','3',17), ('C_4','coeur','4',18),
+  ('C_5','coeur','5',19), ('C_6','coeur','6',20), ('C_7','coeur','7',21), ('C_8','coeur','8',22),
+  ('C_9','coeur','9',23), ('C_10','coeur','10',24),('C_V','coeur','V',25),('C_C','coeur','C',26),
+  ('C_D','coeur','D',27),('C_R','coeur','R',28),
+  -- Carreau
+  ('K_1','carreau','1',29),('K_2','carreau','2',30),('K_3','carreau','3',31),('K_4','carreau','4',32),
+  ('K_5','carreau','5',33),('K_6','carreau','6',34),('K_7','carreau','7',35),('K_8','carreau','8',36),
+  ('K_9','carreau','9',37),('K_10','carreau','10',38),('K_V','carreau','V',39),('K_C','carreau','C',40),
+  ('K_D','carreau','D',41),('K_R','carreau','R',42),
+  -- Trefle
+  ('T_1','trefle','1',43),('T_2','trefle','2',44),('T_3','trefle','3',45),('T_4','trefle','4',46),
+  ('T_5','trefle','5',47),('T_6','trefle','6',48),('T_7','trefle','7',49),('T_8','trefle','8',50),
+  ('T_9','trefle','9',51),('T_10','trefle','10',52),('T_V','trefle','V',53),('T_C','trefle','C',54),
+  ('T_D','trefle','D',55),('T_R','trefle','R',56),
+  -- Atouts (1..21)
+  ('A_1','atout','1',57),  ('A_2','atout','2',58),  ('A_3','atout','3',59),  ('A_4','atout','4',60),
+  ('A_5','atout','5',61),  ('A_6','atout','6',62),  ('A_7','atout','7',63),  ('A_8','atout','8',64),
+  ('A_9','atout','9',65),  ('A_10','atout','10',66),('A_11','atout','11',67),('A_12','atout','12',68),
+  ('A_13','atout','13',69),('A_14','atout','14',70),('A_15','atout','15',71),('A_16','atout','16',72),
+  ('A_17','atout','17',73),('A_18','atout','18',74),('A_19','atout','19',75),('A_20','atout','20',76),
+  ('A_21','atout','21',77),
+  -- Excuse
+  ('EXC','excuse','0',78);
+
+SET FOREIGN_KEY_CHECKS = 1;

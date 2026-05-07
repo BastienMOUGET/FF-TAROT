@@ -3,7 +3,7 @@ const { notFound } = require('../../utils/httpError');
 
 const SELECT_BASE = `
   SELECT st.id, st.tournament_id, st.label, st.color, st.color_name,
-         st.indice_pcn, st.championnat,
+         st.indice_pcn, st.championnat, st.donne_set_id,
          t.code AS tournament_code, t.name AS tournament_name
   FROM sub_tournaments st
   JOIN tournaments t ON t.id = st.tournament_id
@@ -37,8 +37,9 @@ async function create(tournamentId, data) {
   try {
     const result = await conn.query(
       `INSERT INTO sub_tournaments
-         (tournament_id, label, color, color_name, indice_pcn, championnat)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (tournament_id, label, color, color_name,
+          indice_pcn, championnat, donne_set_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         tournamentId,
         data.label,
@@ -46,6 +47,7 @@ async function create(tournamentId, data) {
         data.color_name || null,
         data.indice_pcn ?? 0,
         data.championnat ? 1 : 0,
+        data.donne_set_id ?? null,
       ]
     );
     return getById(Number(result.insertId));
@@ -60,7 +62,7 @@ async function update(id, data) {
     const result = await conn.query(
       `UPDATE sub_tournaments
          SET label = ?, color = ?, color_name = ?,
-             indice_pcn = ?, championnat = ?
+             indice_pcn = ?, championnat = ?, donne_set_id = ?
        WHERE id = ?`,
       [
         data.label,
@@ -68,6 +70,7 @@ async function update(id, data) {
         data.color_name || null,
         data.indice_pcn ?? 0,
         data.championnat ? 1 : 0,
+        data.donne_set_id ?? null,
         id,
       ]
     );

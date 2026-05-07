@@ -51,7 +51,13 @@
       "Bash(python3 -c ' *)",
       "Bash(curl -s -i http://localhost:3001/sub-tournaments/1/ranking/export-pcn.csv)",
       "Bash(curl -s -X POST http://localhost:3001/rounds/2/generate)",
-      "Bash(curl -s http://localhost:3001/sub-tournaments/1/route-sheet)"
+      "Bash(curl -s http://localhost:3001/sub-tournaments/1/route-sheet)",
+      "Bash(mysql -h localhost -u fft_user -pfft_password fft -e \"SELECT COUNT\\(*\\) as cards FROM cards; SELECT suit, COUNT\\(*\\) FROM cards GROUP BY suit;\")",
+      "Bash(curl -s http://localhost:3001/cards)",
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);print\\(f'cards: {len\\(d\\)} | first: {d[0]} | last: {d[-1]}'\\)\")",
+      "Bash(curl -s -X POST http://localhost:3001/donne-sets -H \"Content-Type: application/json\" -d '{\"name\":\"Test Tournoi 2026-05\",\"nb_donne\":5}')",
+      "Bash(curl -s http://localhost:3001/donne-sets/1/donnes/1)",
+      "Bash(curl -s http://localhost:3001/donne-sets/1/donnes/2)"
     ]
   }
 }

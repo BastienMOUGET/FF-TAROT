@@ -22,6 +22,7 @@ const bodyRules = [
     .isLength({ max: 50 }),
   body('indice_pcn').optional().isFloat({ min: 0, max: 99 }),
   body('championnat').optional().isBoolean(),
+  body('donne_set_id').optional({ nullable: true }).isInt({ min: 1 }),
 ];
 
 // Used both as /tournaments/:tournamentId/sub-tournaments and as

@@ -34,6 +34,10 @@ const ppGridsRoutes = require('./modules/pp-grids/pp-grids.routes');
 // Feuille de route (agrégation imprimable)
 const routeSheetRoutes = require('./modules/route-sheet/route-sheet.routes');
 
+// Cartes & jeux de donnes pré-tirées
+const cardsRoutes = require('./modules/cards/cards.routes');
+const donneSetsRoutes = require('./modules/donne-sets/donne-sets.routes');
+
 const app = express();
 
 app.use(cors());
@@ -101,6 +105,10 @@ app.use(
   '/sub-tournaments/:subTournamentId/route-sheet',
   routeSheetRoutes
 );
+
+// Cartes & jeux de donnes pré-tirées
+app.use('/cards', cardsRoutes);
+app.use('/donne-sets', donneSetsRoutes);
 
 app.get('/', (req, res) => {
   res.json({

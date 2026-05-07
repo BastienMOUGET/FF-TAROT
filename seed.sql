@@ -5,6 +5,8 @@ USE fft;
 
 -- ----- nettoyage (ordre inverse des FK) -----
 SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE donne_cards;
+TRUNCATE donne_sets;
 TRUNCATE pp_grids;
 TRUNCATE rankings;
 TRUNCATE hand_results;
