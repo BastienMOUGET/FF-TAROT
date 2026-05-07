@@ -94,7 +94,8 @@
       "Bash(chmod +x install.sh docker-entrypoint.sh)",
       "Bash(docker compose *)",
       "Bash(tar -tzf /tmp/ff-tarot-2.0.2-test-linux.tar.gz)",
-      "Bash(rm -rf /tmp/ff-tarot-2.0.2-test /tmp/ff-tarot-2.0.2-test-linux.tar.gz)"
+      "Bash(rm -rf /tmp/ff-tarot-2.0.2-test /tmp/ff-tarot-2.0.2-test-linux.tar.gz)",
+      "Bash(curl -s http://localhost:3000/)"
     ],
     "additionalDirectories": [
       "/tmp/ff-tarot-2.0.2-test"

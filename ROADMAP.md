@@ -140,16 +140,52 @@ Documentation centralisée dans `INSTALL.md`. README.md refait.
 ### V2.0.3 livré (CI/CD GitHub Actions + packages Releases)
 - `.github/workflows/ci.yml` : sur chaque push/PR, build front + lint
   back, valide docker-compose et Dockerfile, vérifie scripts shell
-- `.github/workflows/release.yml` : sur tag `v*`, génère
-  `ff-tarot-VERSION-windows.zip` et `ff-tarot-VERSION-linux.tar.gz`
-  (front pré-buildé inclus), build et push image Docker sur ghcr.io,
-  crée la GitHub Release avec assets attachés et release notes
-- Installeurs adaptés : `install.sh` et `install.ps1` détectent
-  `frontend/dist/frontend/browser/index.html` et skippent
-  l'install/build front (valable pour les packages release)
-- README.md avec badges CI/Release et liens vers la page Releases
+- `.github/workflows/release.yml` : sur tag `v*`, génère archives
+  Linux/Windows + Docker image
+- Installeurs adaptés : skip ng build si front pré-buildé
 
-### V2.0.4 (à venir)
+### V2.0.4 livré (installeur Windows .exe Inno Setup + service NSSM)
+- **`installer/setup.iss`** : script Inno Setup 100% Pascal Script
+  (pas de PowerShell embarqué). Couvre :
+  - winget install Node.js LTS + MariaDB Server (silent)
+  - Génération mots de passe DB et JWT aléatoires (Pascal `Random`)
+  - Création DB + utilisateur `fft_user` + grants
+  - Application de db.sql + seed.sql
+  - Écriture .env
+  - npm install (back + front si pas pré-buildé)
+  - Installation NSSM comme service Windows "FF-TAROT" :
+    - démarre automatiquement au boot (SERVICE_AUTO_START)
+    - redémarre tout seul en cas de crash (`sc failure`)
+    - logs rotatifs (10 Mo) dans logs\server.log
+    - démarrage immédiat à l'install
+  - Raccourcis Menu Démarrer + Bureau pointant directement sur
+    http://localhost:3000 (le service tourne déjà)
+  - Désinstalleur propre (stop service + remove + cleanup .env / logs)
+
+- **`install.ps1`** mis à jour : utilise NSSM aussi pour cohérence
+  (téléchargement automatique depuis nssm.cc si absent), start.bat /
+  stop.bat pilotent le service via `net start`/`net stop` avec
+  fallback vers mode standalone si le service n'est pas installé
+
+- **`.github/workflows/release.yml`** :
+  - Nouveau job `inno-installer` (windows-latest) : télécharge NSSM
+    2.24, build le front, compile setup.iss avec iscc en passant
+    `/DAppVersion=$version`, upload le .exe en artifact
+  - Synchronisation auto de la version (tag git → environment.ts via
+    `sed`/`Get-Content` + package.json via `npm pkg set version`)
+  - Le release final attache les 3 archives : `.exe`, `.zip`, `.tar.gz`
+    + image Docker GHCR
+
+- **Front** : version affichée dans la sidebar (sous "FF-TAROT") et
+  sous le titre du login. Lue depuis `environment.appVersion`,
+  injectée par la CI au build pour rester synchro avec le tag.
+
+- **Démarrage automatique** garanti partout :
+  - Windows : service NSSM `FF-TAROT` (auto-start)
+  - Linux : `systemctl enable ff-tarot.service`
+  - Docker : `restart: unless-stopped` dans docker-compose.yml
+
+### V2.0.5 (à venir)
 Tests E2E Playwright. Polish UX (loading states, gestion erreurs sur
 tous les écrans, responsive mobile pour la saisie au bord de table).
 

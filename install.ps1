@@ -6,17 +6,29 @@
 #   - Node.js LTS (via winget) si absent
 #   - MariaDB serveur (via winget) si absent
 #   - Crée la base `fft` + un utilisateur dédié avec mot de passe aléatoire
-#   - Construit le front Angular et installe les dépendances back
+#   - Construit le front Angular si pas déjà pré-buildé
 #   - Crée start.bat / stop.bat à la racine
-#   - Crée un raccourci "FF-TAROT" sur le Bureau qui démarre + ouvre le navigateur
+#   - Crée un raccourci "FF-TAROT" sur le Bureau (sauf si -NoShortcut)
+#   - Lance le serveur et ouvre le navigateur (sauf si -NoStart)
 #
 # Usage (clic droit -> Exécuter avec PowerShell, OU dans une console admin) :
 #   PS> .\install.ps1
+#
+# Paramètres :
+#   -NoShortcut   Pas de raccourci Bureau (utilisé par Inno Setup qui crée
+#                 ses propres raccourcis via [Icons]).
+#   -NoStart      Ne pas lancer le serveur ni ouvrir le navigateur à la fin
+#                 (utilisé par Inno Setup qui gère sa propre étape postinstall).
 #
 # Si la politique d'exécution refuse, lancer une fois en admin :
 #   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 #
 # Prérequis : Windows 10/11 + winget (déjà inclus sur W10 1809+ via App Installer).
+
+param(
+    [switch]$NoShortcut,
+    [switch]$NoStart
+)
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -198,59 +210,143 @@ if (Test-Path $FrontIndex) {
     Write-Ok "Front buildé dans frontend\dist\frontend\browser"
 }
 
-# ---------------------------- Scripts start/stop ----------------------------
+# ---------------------------- Service Windows via NSSM ----------------------------
+
+# NSSM transforme node.exe en vrai service Windows :
+#   - démarre au boot (auto)
+#   - redémarre tout seul en cas de crash
+#   - logs dans logs\server.log
+
+$ServiceName = 'FF-TAROT'
+$LogsDir     = Join-Path $InstallDir 'logs'
+New-Item -Path $LogsDir -ItemType Directory -Force | Out-Null
+
+# Localiser NSSM (priorité : bundle dans installer/, puis dans bin/, puis téléchargement)
+$NssmExe = $null
+$NssmCandidates = @(
+    (Join-Path $InstallDir 'bin\nssm.exe'),
+    (Join-Path $InstallDir 'installer\bin\nssm.exe')
+)
+foreach ($c in $NssmCandidates) {
+    if (Test-Path $c) { $NssmExe = $c; break }
+}
+
+if (-not $NssmExe) {
+    Write-Step "Téléchargement de NSSM (Non-Sucking Service Manager)..."
+    $NssmDir = Join-Path $InstallDir 'bin'
+    New-Item -Path $NssmDir -ItemType Directory -Force | Out-Null
+    $NssmZip = Join-Path $env:TEMP 'nssm.zip'
+    try {
+        Invoke-WebRequest -UseBasicParsing `
+            -Uri 'https://nssm.cc/release/nssm-2.24.zip' `
+            -OutFile $NssmZip
+        $extractDir = Join-Path $env:TEMP 'nssm-extract'
+        if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+        Expand-Archive -Path $NssmZip -DestinationPath $extractDir -Force
+        $arch = if ([Environment]::Is64BitOperatingSystem) { 'win64' } else { 'win32' }
+        Copy-Item -Path (Join-Path $extractDir "nssm-2.24\$arch\nssm.exe") `
+                  -Destination (Join-Path $NssmDir 'nssm.exe') -Force
+        $NssmExe = Join-Path $NssmDir 'nssm.exe'
+        Write-Ok "NSSM installé : $NssmExe"
+    } catch {
+        Write-Warn2 "Échec du téléchargement NSSM : $_"
+        Write-Warn2 "Le service ne sera pas créé. Lance le serveur manuellement avec : node src\server.js"
+        $NssmExe = $null
+    }
+}
+
+if ($NssmExe) {
+    $NodeExe   = (Get-Command node).Source
+    $ServerJs  = Join-Path $InstallDir 'src\server.js'
+
+    # Si le service existe déjà, on l'arrête et le supprime avant réinstall
+    & $NssmExe stop $ServiceName 2>$null | Out-Null
+    & sc.exe query $ServiceName 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        & $NssmExe remove $ServiceName confirm | Out-Null
+    }
+
+    Write-Step "Création du service Windows '$ServiceName'..."
+    & $NssmExe install $ServiceName $NodeExe $ServerJs | Out-Null
+    & $NssmExe set $ServiceName AppDirectory $InstallDir | Out-Null
+    & $NssmExe set $ServiceName AppStdout (Join-Path $LogsDir 'server.log') | Out-Null
+    & $NssmExe set $ServiceName AppStderr (Join-Path $LogsDir 'server.log') | Out-Null
+    & $NssmExe set $ServiceName AppRotateFiles 1 | Out-Null
+    & $NssmExe set $ServiceName AppRotateBytes 10485760 | Out-Null  # 10 Mo
+    & $NssmExe set $ServiceName Start SERVICE_AUTO_START | Out-Null
+    & $NssmExe set $ServiceName Description "FF-TAROT - Gestion de tournois FFT (Libre par 4)" | Out-Null
+    & $NssmExe set $ServiceName DisplayName "FF-TAROT" | Out-Null
+
+    # Restart automatique en cas de crash
+    & sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/15000 | Out-Null
+
+    Write-Step "Démarrage du service..."
+    & $NssmExe start $ServiceName | Out-Null
+    Start-Sleep -Seconds 2
+    Write-Ok "Service '$ServiceName' installé et démarré (auto-start au boot)"
+}
+
+# ---------------------------- Scripts start/stop pilotant le service ----------------------------
 
 $StartBat = Join-Path $InstallDir 'start.bat'
 $StopBat  = Join-Path $InstallDir 'stop.bat'
 
 @'
 @echo off
-REM Lance FF-TAROT en arrière-plan, log dans logs\server.log
-cd /d "%~dp0"
-if not exist logs mkdir logs
-
-REM Si déjà lancé, juste ouvrir le navigateur
-for /f %%I in ('powershell -nop -c "Try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 http://localhost:3000/api).StatusCode } Catch { 0 }"') do set RUNNING=%%I
-if "%RUNNING%"=="200" (
-  echo [FFT] deja demarre. Ouverture du navigateur...
-  start http://localhost:3000
-  exit /b
+REM Démarre le service FF-TAROT puis ouvre le navigateur
+sc query "FF-TAROT" >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    net start "FF-TAROT" >nul 2>&1
+    timeout /t 1 /nobreak >nul
+    start http://localhost:3000
+    echo [FFT] Service demarre. http://localhost:3000  (admin / admin123)
+) else (
+    echo [FFT] Service introuvable, demarrage en mode standalone...
+    cd /d "%~dp0"
+    if not exist logs mkdir logs
+    start /b "" cmd /c "node src\server.js > logs\server.log 2>&1"
+    timeout /t 3 /nobreak >nul
+    start http://localhost:3000
 )
-
-start /b "" cmd /c "node src/server.js > logs\server.log 2>&1"
-echo [FFT] Demarrage en cours...
-timeout /t 3 /nobreak >nul
-start http://localhost:3000
-echo [FFT] OK. http://localhost:3000  (admin / admin123)
 '@ | Out-File -FilePath $StartBat -Encoding ASCII -Force
 
 @'
 @echo off
-REM Stoppe les processus node servant src\server.js
-for /f "tokens=2" %%P in ('tasklist /fi "imagename eq node.exe" /fo table /nh ^| findstr /v "INFO"') do (
-  taskkill /pid %%P /f >nul 2>&1
+REM Arrête le service FF-TAROT (ou les processus standalone en fallback)
+sc query "FF-TAROT" >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    net stop "FF-TAROT" >nul 2>&1
+    echo [FFT] Service arrete
+) else (
+    for /f "tokens=2" %%P in ('tasklist /fi "imagename eq node.exe" /fo table /nh ^| findstr /v "INFO"') do (
+        taskkill /pid %%P /f >nul 2>&1
+    )
+    echo [FFT] Processus standalone arretes
 )
-echo [FFT] Arret demande
 '@ | Out-File -FilePath $StopBat -Encoding ASCII -Force
 
-Write-Ok "Scripts start.bat / stop.bat créés"
+Write-Ok "Scripts start.bat / stop.bat créés (pilotent le service)"
 
 # ---------------------------- Raccourci Bureau ----------------------------
 
-try {
-    $WshShell = New-Object -ComObject WScript.Shell
-    $Desktop  = [Environment]::GetFolderPath('Desktop')
-    $Lnk      = $WshShell.CreateShortcut((Join-Path $Desktop 'FF-TAROT.lnk'))
-    $Lnk.TargetPath        = $StartBat
-    $Lnk.WorkingDirectory  = $InstallDir
-    $Lnk.WindowStyle       = 7  # minimisé
-    $Lnk.Description       = 'Démarrer FF-TAROT et ouvrir l\''interface'
-    $IconPath = Join-Path $InstallDir 'frontend\public\favicon.ico'
-    if (Test-Path $IconPath) { $Lnk.IconLocation = $IconPath }
-    $Lnk.Save()
-    Write-Ok "Raccourci 'FF-TAROT' créé sur le Bureau"
-} catch {
-    Write-Warn2 "Impossible de créer le raccourci Bureau : $_"
+if (-not $NoShortcut) {
+    try {
+        $WshShell = New-Object -ComObject WScript.Shell
+        $Desktop  = [Environment]::GetFolderPath('Desktop')
+        $Lnk      = $WshShell.CreateShortcut((Join-Path $Desktop 'FF-TAROT.lnk'))
+        $Lnk.TargetPath        = $StartBat
+        $Lnk.WorkingDirectory  = $InstallDir
+        $Lnk.WindowStyle       = 7  # minimisé
+        $Lnk.Description       = 'Démarrer FF-TAROT et ouvrir l''interface'
+        $IconPath = Join-Path $InstallDir 'frontend\public\favicon.ico'
+        if (Test-Path $IconPath) { $Lnk.IconLocation = $IconPath }
+        $Lnk.Save()
+        Write-Ok "Raccourci 'FF-TAROT' créé sur le Bureau"
+    } catch {
+        Write-Warn2 "Impossible de créer le raccourci Bureau : $_"
+    }
+} else {
+    Write-Step "Raccourci Bureau ignoré (-NoShortcut, géré par l'installeur appelant)"
 }
 
 # ---------------------------- Récap ----------------------------
@@ -269,7 +365,11 @@ Write-Host '  Arrêter   : .\stop.bat'
 Write-Host '  Logs      : Get-Content logs\server.log -Wait'
 Write-Host ''
 
-# Démarrage immédiat
-Write-Step 'Démarrage du serveur...'
-Start-Process -FilePath $StartBat -WorkingDirectory $InstallDir
-Write-Ok 'Serveur lancé. Le navigateur va s''ouvrir sur http://localhost:3000'
+# Démarrage immédiat (sauf si -NoStart, auquel cas l'appelant gère)
+if (-not $NoStart) {
+    Write-Step 'Démarrage du serveur...'
+    Start-Process -FilePath $StartBat -WorkingDirectory $InstallDir
+    Write-Ok 'Serveur lancé. Le navigateur va s''ouvrir sur http://localhost:3000'
+} else {
+    Write-Step "Lancement automatique ignoré (-NoStart, géré par l'installeur appelant)"
+}

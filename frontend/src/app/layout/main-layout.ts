@@ -9,6 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 
 import { AuthService } from '../core/auth.service';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-main-layout',
@@ -28,7 +29,10 @@ import { AuthService } from '../core/auth.service';
       <mat-sidenav mode="side" opened class="sidenav">
         <div class="brand">
           <mat-icon>casino</mat-icon>
-          <span>FF-TAROT</span>
+          <div class="brand-text">
+            <span class="brand-name">FF-TAROT</span>
+            <span class="brand-version">v{{ version }}</span>
+          </div>
         </div>
         <mat-nav-list>
           <a
@@ -87,12 +91,13 @@ import { AuthService } from '../core/auth.service';
       align-items: center;
       gap: 12px;
       padding: 20px 16px;
-      font-weight: 600;
-      font-size: 1.1em;
       color: #1976d2;
       border-bottom: 1px solid #e0e0e0;
     }
     .brand mat-icon { color: #1976d2; }
+    .brand-text { display: flex; flex-direction: column; }
+    .brand-name { font-weight: 600; font-size: 1.1em; line-height: 1; }
+    .brand-version { font-size: 0.75em; color: #757575; line-height: 1.4; }
     .topbar {
       position: sticky;
       top: 0;
@@ -113,4 +118,5 @@ import { AuthService } from '../core/auth.service';
 })
 export class MainLayout {
   protected auth = inject(AuthService);
+  protected version = environment.appVersion;
 }

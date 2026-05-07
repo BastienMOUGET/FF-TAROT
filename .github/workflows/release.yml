@@ -10,8 +10,11 @@ permissions:
   packages: write    # publier l'image Docker sur GHCR
 
 jobs:
+  # ====================================================================
+  # 1. Package : archives source + front pré-buildé (Linux + Windows zip)
+  # ====================================================================
   package:
-    name: Package archives Linux + Windows
+    name: Archives Linux + Windows zip
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -32,31 +35,37 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      # ---- Build front ----
+      # ---- Inject version into front environment (source unique = tag git) ----
+      - name: Inject version into front environment.ts
+        run: |
+          sed -i "s/appVersion: '[^']*'/appVersion: '${{ steps.version.outputs.version }}'/" \
+              frontend/src/environments/environment.ts
+          grep appVersion frontend/src/environments/environment.ts
+
+      - name: Sync version in package.json files
+        run: |
+          npm pkg set version=${{ steps.version.outputs.version }}
+          cd frontend && npm pkg set version=${{ steps.version.outputs.version }}
+
+      # ---- Build front (production) ----
       - name: Install front deps
         working-directory: frontend
         run: npm ci --no-fund --no-audit
 
-      - name: Build front (production)
+      - name: Build front
         working-directory: frontend
         run: npm run build
 
-      # ---- Préparer le contenu du package ----
+      # ---- Préparer le contenu ----
       - name: Prepare release tree
         run: |
           set -euo pipefail
           STAGE=ff-tarot-${{ steps.version.outputs.version }}
           mkdir -p "$STAGE"
 
-          # Source back
           cp -r src "$STAGE/"
-          cp package.json package-lock.json "$STAGE/"
+          cp package.json package-lock.json db.sql seed.sql "$STAGE/"
 
-          # Schéma DB + seed
-          cp db.sql seed.sql "$STAGE/"
-
-          # Front : on inclut le dist pré-buildé pour éviter ng build
-          # côté utilisateur, mais aussi le source au cas où il faut rebuild.
           mkdir -p "$STAGE/frontend"
           cp -r frontend/src "$STAGE/frontend/"
           cp -r frontend/public "$STAGE/frontend/"
@@ -65,18 +74,13 @@ jobs:
           cp frontend/angular.json frontend/proxy.conf.json "$STAGE/frontend/"
           cp frontend/tsconfig*.json "$STAGE/frontend/"
 
-          # Installeurs
           cp install.sh install.ps1 "$STAGE/"
           chmod +x "$STAGE/install.sh"
 
-          # Docker
           cp Dockerfile docker-compose.yml docker-entrypoint.sh .dockerignore "$STAGE/"
           chmod +x "$STAGE/docker-entrypoint.sh"
 
-          # Doc
           cp README.md INSTALL.md ROADMAP.md LICENSE "$STAGE/"
-
-          ls -la "$STAGE/"
 
       - name: Create Linux tarball
         run: |
@@ -85,26 +89,102 @@ jobs:
 
       - name: Create Windows zip
         run: |
-          # zip avec sauts de ligne CRLF pour les fichiers texte (.ps1, .bat,
-          # README, etc.) — utile pour le double-clic sous Windows.
-          # Mais pour rester simple, on zip tel quel : PowerShell s'en fout.
           zip -rq ff-tarot-${{ steps.version.outputs.version }}-windows.zip \
               ff-tarot-${{ steps.version.outputs.version }}/
 
       - name: Show archive sizes
         run: ls -lh ff-tarot-*.tar.gz ff-tarot-*.zip
 
-      - name: Upload artifacts (for the release job)
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-archives
+          name: archives-zip-tar
           path: |
             ff-tarot-*.tar.gz
             ff-tarot-*.zip
           retention-days: 1
 
+  # ====================================================================
+  # 2. Inno Setup : installeur .exe Windows tout-en-un
+  # ====================================================================
+  inno-installer:
+    name: Inno Setup .exe (Windows)
+    runs-on: windows-latest
+    needs: package
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+
+      - name: Inject version into front environment.ts (PowerShell)
+        shell: pwsh
+        run: |
+          $version = '${{ needs.package.outputs.version }}'
+          $file = 'frontend/src/environments/environment.ts'
+          (Get-Content $file) `
+            -replace "appVersion: '[^']*'", "appVersion: '$version'" `
+            | Set-Content $file
+          Get-Content $file | Select-String 'appVersion'
+
+      - name: Build front (production)
+        working-directory: frontend
+        run: |
+          npm ci --no-fund --no-audit
+          npm run build
+
+      - name: Download NSSM 2.24
+        shell: pwsh
+        run: |
+          $url = 'https://nssm.cc/release/nssm-2.24.zip'
+          $zip = "$env:TEMP\nssm.zip"
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
+          $extract = "$env:TEMP\nssm-extract"
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          New-Item -ItemType Directory -Path "installer\bin" -Force | Out-Null
+          Copy-Item -Path "$extract\nssm-2.24\win64\nssm.exe" `
+                    -Destination "installer\bin\nssm.exe"
+          Get-Item installer\bin\nssm.exe | Select Name, Length
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          # Inno Setup est pré-installé sur windows-latest sous
+          # 'C:\Program Files (x86)\Inno Setup 6'. On vérifie.
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          Get-Command iscc.exe -ErrorAction SilentlyContinue
+          Get-Item $iscc -ErrorAction SilentlyContinue
+
+      - name: Compile setup.iss
+        shell: pwsh
+        working-directory: installer
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          $version = '${{ needs.package.outputs.version }}'
+          & $iscc "/DAppVersion=$version" setup.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+          Get-ChildItem output
+
+      - name: Upload .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inno-installer
+          path: installer/output/ff-tarot-*-setup.exe
+          retention-days: 1
+
+  # ====================================================================
+  # 3. Docker : build + push image GHCR
+  # ====================================================================
   docker:
-    name: Build & push Docker image to GHCR
+    name: Docker image (GHCR)
     runs-on: ubuntu-latest
     needs: package
     steps:
@@ -135,17 +215,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # ====================================================================
+  # 4. Release : crée la GitHub Release et y attache toutes les archives
+  # ====================================================================
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [package, docker]
+    needs: [package, inno-installer, docker]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download archives
+      - name: Download zip/tar.gz archives
         uses: actions/download-artifact@v4
         with:
-          name: release-archives
+          name: archives-zip-tar
+
+      - name: Download Inno Setup .exe
+        uses: actions/download-artifact@v4
+        with:
+          name: inno-installer
+
+      - name: List release files
+        run: ls -lh ff-tarot-*
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -154,18 +245,34 @@ jobs:
           body: |
             ## FF-TAROT v${{ needs.package.outputs.version }}
 
-            ### 📦 Téléchargement
+            ### 📦 Téléchargement (3 méthodes au choix)
 
-            - **Windows** : `ff-tarot-${{ needs.package.outputs.version }}-windows.zip`
-              → dézipper, ouvrir PowerShell admin dans le dossier, lancer `.\install.ps1`
-            - **Linux** : `ff-tarot-${{ needs.package.outputs.version }}-linux.tar.gz`
-              → décompresser, `cd ff-tarot-${{ needs.package.outputs.version }}`, lancer `sudo ./install.sh`
-            - **Docker** : `docker pull ghcr.io/${{ github.repository }}:${{ needs.package.outputs.version }}`
+            **🪟 Windows — installeur .exe (recommandé, le plus simple)**
+            - `ff-tarot-${{ needs.package.outputs.version }}-setup.exe`
+            - Double-clic, suivre l'assistant. Installe Node + MariaDB
+              automatiquement (winget), enregistre FF-TAROT comme service
+              Windows (auto-start au boot, restart on crash via NSSM).
+
+            **🪟 Windows — archive zip + script PowerShell (alternative)**
+            - `ff-tarot-${{ needs.package.outputs.version }}-windows.zip`
+            - Dézipper, ouvrir PowerShell admin dans le dossier, `.\install.ps1`.
+
+            **🐧 Linux — archive tar.gz + script bash**
+            - `ff-tarot-${{ needs.package.outputs.version }}-linux.tar.gz`
+            - Décompresser, `cd ff-tarot-${{ needs.package.outputs.version }}`,
+              `sudo ./install.sh`. Service systemd installé pour auto-start au boot.
+
+            **🐳 Docker (cross-platform)**
+            - `docker pull ghcr.io/${{ github.repository }}:${{ needs.package.outputs.version }}`
+            - Ou clone du repo + `docker compose up -d`.
+
+            ---
 
             Voir [INSTALL.md](https://github.com/${{ github.repository }}/blob/v${{ needs.package.outputs.version }}/INSTALL.md)
-            pour les détails d'installation.
+            pour les détails complets.
 
-            URL après install : http://localhost:3000 (admin / admin123 par défaut, **à changer immédiatement**).
+            URL après install : http://localhost:3000
+            (admin / admin123 par défaut — **à changer immédiatement** via la page Admin).
 
             ### 🗒 Changelog
 
@@ -173,5 +280,6 @@ jobs:
           files: |
             ff-tarot-*.tar.gz
             ff-tarot-*.zip
+            ff-tarot-*-setup.exe
           draft: false
           prerelease: false

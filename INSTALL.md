@@ -1,31 +1,56 @@
 # Installation FF-TAROT
 
-3 façons d'installer, choisis celle qui te convient.
+4 façons d'installer, choisis celle qui te convient.
 
-> 💡 **Le plus rapide** : télécharge le package **prêt à l'emploi** depuis
-> la [page Releases GitHub](../../releases) (dossier `Releases` à droite
-> du repo). Tu auras `ff-tarot-X.Y.Z-windows.zip` et
-> `ff-tarot-X.Y.Z-linux.tar.gz` avec le front pré-buildé : pas besoin
-> d'installer Angular CLI, l'install est ~2 min.
+> 💡 **Le plus simple sous Windows** : télécharger
+> `ff-tarot-X.Y.Z-setup.exe` depuis la
+> [page Releases GitHub](../../releases) et double-cliquer. L'installeur
+> Inno Setup s'occupe de tout (Node, MariaDB, base, service Windows
+> auto-start, raccourci Bureau).
 >
-> Sinon, clone le repo source et utilise les scripts ci-dessous (le
-> front sera buildé pendant l'install, +1-2 min).
+> Toutes les méthodes installent FF-TAROT en **service auto-démarré au
+> boot** : Windows (NSSM), Linux (systemd), Docker (`restart: unless-stopped`).
 
 ---
 
-## 🪟 Windows — installeur clé en main
+## 🪟 Windows — installeur .exe Inno Setup (recommandé)
 
-**Prérequis** : Windows 10/11 avec winget (App Installer du Microsoft Store).
+**Prérequis** : Windows 10 1809+ avec winget.
+
+1. Télécharger `ff-tarot-X.Y.Z-setup.exe` depuis la [page Releases](../../releases)
+2. Double-clic sur le fichier
+3. Suivre l'assistant : Suivant → Suivant → Installer
+4. Le wizard fait tout :
+   - Installe Node.js LTS via winget (si absent)
+   - Installe MariaDB Server via winget (si absent)
+   - Crée la base + utilisateur avec mots de passe aléatoires
+   - Build le front Angular si pas déjà pré-buildé
+   - Enregistre **FF-TAROT comme service Windows** (NSSM, auto-start au boot,
+     restart automatique en cas de crash)
+   - Crée des raccourcis Menu Démarrer + Bureau (pointant sur http://localhost:3000)
+5. À la fin, le navigateur s'ouvre tout seul. Login : `admin` / `admin123`
+
+### Au quotidien
+- **Le service tourne en permanence en arrière-plan** : pas besoin de le démarrer
+- Cliquer sur le raccourci **FF-TAROT** ouvre directement le navigateur
+- Gestion : Menu Démarrer > FF-TAROT > Démarrer/Arrêter le service
+- Logs : `C:\FF-TAROT\logs\server.log`
+- Désinstallation : Panneau de configuration > Programmes > FF-TAROT > Désinstaller
+  (stoppe et supprime le service automatiquement)
+
+---
+
+## 🪟 Windows — archive zip + PowerShell (alternative pour customisation)
+
+**Prérequis** : Windows 10 1809+ avec winget.
 
 ```powershell
-# Ouvrir PowerShell EN ADMIN (clic droit -> Exécuter en admin)
+# Télécharger ff-tarot-X.Y.Z-windows.zip depuis la page Releases, dézipper.
+# Ouvrir PowerShell EN ADMIN (clic droit -> Exécuter en admin) dans le dossier.
 # Si la politique d'exécution refuse les scripts, autoriser une fois :
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
-# Aller dans le dossier où tu as cloné/dézippé FF-TAROT
-cd C:\chemin\vers\FF-TAROT
-
-# Lancer l'installeur
+cd C:\chemin\vers\ff-tarot
 .\install.ps1
 ```
 

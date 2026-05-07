@@ -10,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 import { AuthService } from '../../core/auth.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-login-page',
@@ -26,7 +27,7 @@ import { AuthService } from '../../core/auth.service';
     <div class="login-wrapper">
       <mat-card class="login-card">
         <mat-card-header>
-          <mat-card-title>FF-TAROT</mat-card-title>
+          <mat-card-title>FF-TAROT <small class="version">v{{ version }}</small></mat-card-title>
           <mat-card-subtitle>Connexion arbitre</mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
@@ -94,12 +95,20 @@ import { AuthService } from '../../core/auth.service';
       gap: 6px;
       margin: 8px 0 16px;
     }
+    .version {
+      font-size: 0.55em;
+      color: #757575;
+      font-weight: normal;
+      margin-left: 6px;
+    }
   `,
 })
 export class LoginPage {
   private fb = inject(FormBuilder);
   private auth = inject(AuthService);
   private router = inject(Router);
+
+  protected version = environment.appVersion;
 
   loading = signal(false);
   errorMsg = signal<string | null>(null);
