@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 
 const errorHandler = require('./middleware/errorHandler');
 const { authenticate, requireAuth, requireRole } = require('./middleware/auth');
@@ -55,104 +57,151 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// Parse Bearer token (no-op if absent). req.user set if valid token.
-app.use(authenticate);
-
 /*
 |--------------------------------------------------------------------------
-| ROUTES PUBLIQUES (sans auth)
+| API : tout le métier sous /api/*
 |--------------------------------------------------------------------------
 */
 
-app.get('/', (req, res) => {
-  res.json({
-    app: 'FFT TAROT API',
-    version: '1.0.0',
-  });
+const apiRouter = express.Router();
+
+// Parse Bearer token (no-op si absent). req.user set si token valide.
+apiRouter.use(authenticate);
+
+// Endpoint de santé / info
+apiRouter.get('/', (req, res) => {
+  res.json({ app: 'FFT TAROT API', version: '1.0.0' });
 });
 
-app.use('/auth', authRoutes.router);
+// Auth (login public, /me et /users sous le router)
+apiRouter.use('/auth', authRoutes.router);
 
-/*
-|--------------------------------------------------------------------------
-| GUARD : mutations (POST/PUT/PATCH/DELETE) requièrent auth.
-| GET / HEAD / OPTIONS restent accessibles à tous (lecture publique).
-|--------------------------------------------------------------------------
-*/
-app.use((req, res, next) => {
+// Guard : mutations -> auth required. GET / HEAD / OPTIONS publics.
+apiRouter.use((req, res, next) => {
   const m = req.method;
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return next();
   return requireAuth(req, res, next);
 });
 
-/*
-|--------------------------------------------------------------------------
-| ROUTES MÉTIER
-|--------------------------------------------------------------------------
-*/
-
-// Référentiel : POST/PUT/DELETE = admin uniquement (déjà auth via guard ci-dessus)
+// Référentiel : POST/PUT/DELETE = admin
 const adminOnly = (req, res, next) => {
-  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
-    return next();
-  }
+  const m = req.method;
+  if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return next();
   return requireRole('admin')(req, res, next);
 };
 
-app.use('/ligues', adminOnly, liguesRoutes);
-app.use('/comites', adminOnly, comitesRoutes);
-app.use('/clubs', adminOnly, clubsRoutes);
-app.use('/players', adminOnly, playersRoutes);
-app.use('/penalty-types', adminOnly, penaltyTypesRoutes);
-app.use('/users', authRoutes.usersRouter);
+apiRouter.use('/ligues', adminOnly, liguesRoutes);
+apiRouter.use('/comites', adminOnly, comitesRoutes);
+apiRouter.use('/clubs', adminOnly, clubsRoutes);
+apiRouter.use('/players', adminOnly, playersRoutes);
+apiRouter.use('/penalty-types', adminOnly, penaltyTypesRoutes);
+apiRouter.use('/users', authRoutes.usersRouter);
 
-// Tournois & sub-tournois (nested + standalone)
-app.use(
+// Tournois & sub-tournois
+apiRouter.use(
   '/tournaments/:tournamentId/sub-tournaments',
   subTournamentsRoutes
 );
-app.use('/tournaments', tournamentsRoutes);
-app.use('/sub-tournaments', subTournamentsRoutes);
+apiRouter.use('/tournaments', tournamentsRoutes);
+apiRouter.use('/sub-tournaments', subTournamentsRoutes);
 
-// Équipes (nested + standalone)
-app.use('/sub-tournaments/:subTournamentId/teams', teamsRoutes);
-app.use('/teams', teamsRoutes);
+// Équipes
+apiRouter.use('/sub-tournaments/:subTournamentId/teams', teamsRoutes);
+apiRouter.use('/teams', teamsRoutes);
 
-// Rounds (nested + standalone)
-app.use('/sub-tournaments/:subTournamentId/rounds', roundsRoutes);
-app.use('/rounds', roundsRoutes);
+// Rounds
+apiRouter.use('/sub-tournaments/:subTournamentId/rounds', roundsRoutes);
+apiRouter.use('/rounds', roundsRoutes);
 
-// Patrons de mouvement (modifiable par admin uniquement)
-app.use('/movement-patterns', adminOnly, movementPatternsRoutes);
+// Patrons de mouvement
+apiRouter.use('/movement-patterns', adminOnly, movementPatternsRoutes);
 
-// Saisie scores : table-results et hands sur les rounds
-app.use('/rounds/:roundId', scoringRoutes.tableRouter);
-app.use('/hands', scoringRoutes.handRouter);
+// Saisie scores
+apiRouter.use('/rounds/:roundId', scoringRoutes.tableRouter);
+apiRouter.use('/hands', scoringRoutes.handRouter);
 
 // Classement
-app.use('/sub-tournaments/:subTournamentId/ranking', rankingRoutes);
+apiRouter.use('/sub-tournaments/:subTournamentId/ranking', rankingRoutes);
 
 // Pénalités
-app.use(
+apiRouter.use(
   '/tournaments/:tournamentId/penalties',
   penaltiesRoutes.tournamentRouter
 );
-app.use('/penalties', penaltiesRoutes.standaloneRouter);
+apiRouter.use('/penalties', penaltiesRoutes.standaloneRouter);
 
-// Grille PP par sous-tournoi
-app.use('/sub-tournaments/:subTournamentId/pp-grid', ppGridsRoutes);
+// Grille PP
+apiRouter.use('/sub-tournaments/:subTournamentId/pp-grid', ppGridsRoutes);
 
-// Feuille de route imprimable
-app.use(
+// Feuille de route
+apiRouter.use(
   '/sub-tournaments/:subTournamentId/route-sheet',
   routeSheetRoutes
 );
 
-// Cartes & jeux de donnes pré-tirées
-app.use('/cards', cardsRoutes);
-app.use('/donne-sets', donneSetsRoutes);
+// Cartes & donnes
+apiRouter.use('/cards', cardsRoutes);
+apiRouter.use('/donne-sets', donneSetsRoutes);
 
-// 404
+// 404 API
+apiRouter.use((req, res) => {
+  res.status(404).json({ error: 'Route API introuvable' });
+});
+
+// Mount the API
+app.use('/api', apiRouter);
+
+/*
+|--------------------------------------------------------------------------
+| FRONT STATIQUE : sert le bundle Angular si présent.
+| Active uniquement si frontend/dist/frontend/browser/index.html existe
+| (i.e. l'app a été build via `cd frontend && npm run build`).
+|--------------------------------------------------------------------------
+*/
+
+const FRONT_DIST = path.join(
+  __dirname,
+  '..',
+  'frontend',
+  'dist',
+  'frontend',
+  'browser'
+);
+const FRONT_INDEX = path.join(FRONT_DIST, 'index.html');
+
+if (fs.existsSync(FRONT_INDEX)) {
+  app.use(
+    express.static(FRONT_DIST, {
+      maxAge: '1h',
+      index: false, // on gère index.html via le fallback
+    })
+  );
+
+  // Fallback SPA : toute requête GET non-API renvoie index.html.
+  // C'est ce qui permet à /tournaments/42 de marcher après refresh.
+  app.get(/.*/, (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/socket.io/')) {
+      return next();
+    }
+    res.sendFile(FRONT_INDEX);
+  });
+} else {
+  // Pas de front buildé : juste un message d'aide
+  app.get('/', (req, res) => {
+    res.json({
+      app: 'FFT TAROT API',
+      version: '1.0.0',
+      note: 'Front non buildé. Lancer `cd frontend && npm run build` pour servir l\'UI sur ce port.',
+      api: '/api',
+    });
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| 404 fallback (pour les rares cas où le static a laissé passer)
+|--------------------------------------------------------------------------
+*/
 app.use((req, res) => {
   res.status(404).json({ error: 'Route introuvable' });
 });

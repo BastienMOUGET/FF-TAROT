@@ -117,8 +117,29 @@ classement live (Socket.IO) avec couleurs podium.
 13 routes lazy-loadées, 13 composants page, ~3500 lignes front total.
 Front version 0.2.0.
 
-### V2.0.2 (qualité, à venir)
-Tests E2E end-to-end via Playwright + déploiement prod.
+### V2.0.2 livré (déploiement clé en main : Windows + Linux + Docker)
+Refonte back : toutes les routes API préfixées par `/api/*`, fallback
+SPA pour servir le bundle Angular sur la même origine. Le back devient
+le seul processus à lancer en production (1 port, 1 service, 1 URL).
+
+Refonte front : `apiUrl: '/api'` et `socketUrl: ''` (même origine),
+`proxy.conf.json` pour le dev mode (npm start sur :4200 proxifie /api
+et /socket.io vers :3000).
+
+3 méthodes d'install :
+- `install.ps1` (Windows, PowerShell admin) : winget pour Node + MariaDB,
+  DB + .env avec mots de passe aléatoires, build front, raccourci Bureau,
+  start.bat/stop.bat
+- `install.sh` (Linux : Debian/Ubuntu/Fedora/RHEL) : apt/dnf, systemd
+  unit ff-tarot.service pour démarrage auto au boot, start.sh/stop.sh
+- `docker-compose.yml` + Dockerfile multi-stage : conteneurs MariaDB +
+  app, entrypoint qui applique db.sql/seed.sql au premier boot
+
+Documentation centralisée dans `INSTALL.md`. README.md refait.
+
+### V2.0.3 (à venir)
+Tests E2E Playwright. Polish UX (loading states, gestion erreurs sur
+tous les écrans, responsive mobile pour la saisie au bord de table).
 
 ---
 
@@ -165,8 +186,10 @@ réel de V2.0.
 
 - **V1.0.x** : back Libre par 4 + auth (livré)
 - **V1.1.x** : petits chantiers de consolidation back
-- **V2.0.0** : front Angular MVP — squelette bout-en-bout livré
-- **V2.0.x** : consolidation front (CRUD admin complet, polish, tests)
+- **V2.0.0** : front Angular MVP — squelette bout-en-bout (livré)
+- **V2.0.1** : CRUD admin complet + grille PP + feuille de route (livré)
+- **V2.0.2** : packaging déployable (Windows/Linux/Docker, livré)
+- **V2.0.3** : tests E2E + polish
 - **V3.0.x** : autres disciplines + qualifs fédérales
 
 Numéros internes :

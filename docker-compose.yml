@@ -1,0 +1,47 @@
+# =====================================================
+# FF-TAROT — Stack Docker complète
+# =====================================================
+# Lancer :  docker compose up -d
+# Arrêter : docker compose down
+# Reset   : docker compose down -v   (efface aussi les données DB)
+#
+# Accès : http://localhost:3000  (admin / admin123)
+
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw_change_me
+      MYSQL_DATABASE: fft
+      MYSQL_USER: fft_user
+      MYSQL_PASSWORD: fft_password
+    volumes:
+      - fft-db-data:/var/lib/mysql
+    healthcheck:
+      test:
+        ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    image: ff-tarot:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_USER: fft_user
+      DB_PASSWORD: fft_password
+      DB_NAME: fft
+      JWT_SECRET: change-me-in-production-please
+      JWT_EXPIRES_IN: 12h
+    ports:
+      - '3000:3000'
+
+volumes:
+  fft-db-data:
