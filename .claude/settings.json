@@ -60,7 +60,19 @@
       "Bash(curl -s http://localhost:3001/donne-sets/1/donnes/2)",
       "Bash(npm install *)",
       "Bash(node -e \"console.log\\(require\\('bcryptjs'\\).hashSync\\('admin123',10\\)\\)\")",
-      "Bash(mysql -h localhost -u fft_user -pfft_password fft -e \"SELECT id, username, role, full_name FROM users;\")"
+      "Bash(mysql -h localhost -u fft_user -pfft_password fft -e \"SELECT id, username, role, full_name FROM users;\")",
+      "Bash(npx -y @angular/cli@21 new frontend --routing=true --style=scss --strict --skip-git --package-manager=npm --ssr=false --standalone=true --defaults)",
+      "Bash(npx -y -p @angular/cli@21 ng add @angular/material --skip-confirmation --theme=azure-blue --typography=true --animations=enabled --defaults)",
+      "Bash(npx -y -p @angular/cli@21 ng build)",
+      "Bash(PORT=3000 node src/server.js)",
+      "Bash(npx -y -p @angular/cli@21 ng serve --port 4200 --no-open)",
+      "Bash(curl -s -o /dev/null -w \"Back HTTP: %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"Front HTTP: %{http_code}\\\\n\" http://localhost:4200/)",
+      "Bash(curl -s http://localhost:4200/)",
+      "Bash(curl -s -o /dev/null -w \"Login OK ? %{http_code}\\\\n\" -X POST http://localhost:3000/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(pkill -f \"ng serve\")",
+      "Bash(pkill -f \"@angular/cli\")",
+      "Bash(kill 122679 122691 122692)"
     ]
   }
 }

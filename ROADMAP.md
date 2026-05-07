@@ -67,29 +67,48 @@ Backend fonctionnellement complet pour gérer un tournoi FFT en mode
 
 **Objectif : MVP utilisable par un vrai club pour un vrai tournoi.**
 
+### Stack retenue (acté)
+- Angular 21 (standalone components, signals + RxJS)
+- Angular Material (azure-blue + Roboto)
+- Socket.IO client pour le live ranking
+- Build zoneless (provideZonelessChangeDetection)
+- App dans `frontend/` à la racine du repo (un seul git, deux package.json)
+
 ### Tâches V2.0
 | Sujet | Effort | État |
 |---|---|---|
-| Workspace Angular + routing | 1 j | À faire |
-| Service API + intercepteur JWT | 1 j | À faire |
-| Page login | 0.5 j | À faire |
-| Page liste / création tournois | 1 j | À faire |
-| Page détail tournoi (sub-tournois, équipes, rounds) | 2-3 j | À faire |
-| Page inscriptions équipes (4 joueurs NS+EO) | 1 j | À faire |
-| Page mise en place / feuille de route | 1 j | À faire |
-| Page saisie de scores (donne par donne) | 2-3 j | À faire |
-| Écran classement live (Socket.IO) | 1-2 j | À faire |
-| Page admin (référentiel + utilisateurs) | 1-2 j | À faire |
-| Build de prod + déploiement | 1 j | À faire |
+| Workspace Angular + Material + routing | 1 j | ✅ V2.0.0 |
+| Service API + intercepteur JWT + auth state (signals) | 1 j | ✅ V2.0.0 |
+| Page login | 0.5 j | ✅ V2.0.0 |
+| Layout authentifié (toolbar + sidenav + guards) | 0.5 j | ✅ V2.0.0 |
+| Page liste / création tournois | 1 j | ✅ V2.0.0 |
+| Page détail tournoi (sub-tournois, équipes, rounds) | 2-3 j | ✅ V2.0.0 (basique) |
+| Page inscriptions équipes (4 joueurs NS+EO) | 1 j | ✅ V2.0.0 |
+| Page round detail (mise en place visuelle) | 1 j | ✅ V2.0.0 |
+| Page saisie de scores (donne par donne) | 2-3 j | ✅ V2.0.0 (basique) |
+| Écran classement live (Socket.IO) | 1-2 j | ✅ V2.0.0 |
+| Page admin (référentiel + utilisateurs) | 1-2 j | ⚠️ V2.0.0 (lecture seule) |
+| Build de prod + déploiement | 1 j | À faire (V2.0.1) |
+| CRUD admin complet (créer/éditer ligues/clubs/joueurs/users) | 2-3 j | À faire (V2.0.1) |
+| Polish UX (loading states, erreurs, validations front) | 2-3 j | À faire (V2.0.1) |
+| Page feuille de route imprimable | 1 j | À faire (V2.0.1) |
+| Gestion grille PP côté front | 1 j | À faire (V2.0.1) |
+| Tests E2E Playwright | 3-5 j | À faire (V2.0.2) |
 
-**Total estimé : 2-4 semaines à temps plein** pour le front V2.0.
+### V2.0.0 livré (premier squelette utilisable bout-en-bout)
+Workflow couvert : login → liste/création tournois → sub-tournois →
+inscription équipes 4 joueurs NS+EO → création/régénération de round →
+saisie scores donne par donne avec totaux auto → validation table →
+classement live (Socket.IO) avec couleurs podium.
 
-### Décisions prises pour V2.0
-- Stack : Angular 21+ (CLI déjà installé)
-- Standalone components (pas de NgModules)
-- Signals + RxJS pour le state
-- Angular Material pour l'UI (à confirmer avec le user)
-- `frontend/` ou `web/` à la racine (à confirmer)
+11 routes lazy-loadées, 7 pages métier, Material Design.
+
+### V2.0.1 (consolidation, à venir)
+CRUD complet de l'admin (créer un joueur, gérer la grille PP, etc.),
+polish UX, déploiement prod.
+
+### V2.0.2 (qualité)
+Tests E2E end-to-end via Playwright.
 
 ---
 
@@ -136,8 +155,14 @@ réel de V2.0.
 
 - **V1.0.x** : back Libre par 4 + auth (livré)
 - **V1.1.x** : petits chantiers de consolidation back
-- **V2.0.x** : front Angular + déploiement prod
+- **V2.0.0** : front Angular MVP — squelette bout-en-bout livré
+- **V2.0.x** : consolidation front (CRUD admin complet, polish, tests)
 - **V3.0.x** : autres disciplines + qualifs fédérales
+
+Numéros internes :
+- Back (`package.json` racine) : `1.0.0`
+- Front (`frontend/package.json`) : `0.1.0` → passera à `1.0.0` quand
+  l'admin CRUD sera complet et le déploiement opérationnel
 
 Format : [SemVer](https://semver.org). Major = changement de périmètre
 fonctionnel. Minor = ajout de fonctionnalité. Patch = bugfix / sécurité.
