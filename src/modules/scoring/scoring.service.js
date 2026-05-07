@@ -1,7 +1,14 @@
 const pool = require('../../config/db');
 const { notFound, badRequest } = require('../../utils/httpError');
+const ranking = require('../ranking/ranking.service');
 
 const SEATS = ['N', 'S', 'E', 'O'];
+
+// Run a ranking refresh + broadcast in the background. Never blocks
+// the caller and never throws (errors logged in ranking module).
+function scheduleRankingRefresh(subTournamentId) {
+  setImmediate(() => ranking.refreshAndBroadcast(subTournamentId));
+}
 
 /* -----------------------------------------------------------
  * Helpers
@@ -14,6 +21,18 @@ async function findRoundOrFail(conn, roundId) {
   );
   if (rows.length === 0) throw notFound('Round introuvable');
   return rows[0];
+}
+
+async function getSubTournamentIdForHand(conn, handId) {
+  const rows = await conn.query(
+    `SELECT r.sub_tournament_id
+     FROM hand_results h
+     JOIN table_results tr ON tr.id = h.table_result_id
+     JOIN rounds r ON r.id = tr.round_id
+     WHERE h.id = ?`,
+    [handId]
+  );
+  return rows.length > 0 ? rows[0].sub_tournament_id : null;
 }
 
 async function findTableResult(conn, roundId, tableNumber) {
@@ -136,8 +155,10 @@ async function getByRoundAndTable(roundId, tableNumber) {
 
 async function setCodifs(roundId, tableNumber, codifs) {
   const conn = await pool.getConnection();
+  let subTournamentId = null;
   try {
-    await findRoundOrFail(conn, roundId);
+    const round = await findRoundOrFail(conn, roundId);
+    subTournamentId = round.sub_tournament_id;
     await conn.beginTransaction();
     try {
       const tr = await ensureTableResult(conn, roundId, tableNumber);
@@ -161,13 +182,16 @@ async function setCodifs(roundId, tableNumber, codifs) {
     }
   } finally {
     conn.release();
+    if (subTournamentId) scheduleRankingRefresh(subTournamentId);
   }
 }
 
 async function validate(roundId, tableNumber) {
   const conn = await pool.getConnection();
+  let subTournamentId = null;
   try {
-    await findRoundOrFail(conn, roundId);
+    const round = await findRoundOrFail(conn, roundId);
+    subTournamentId = round.sub_tournament_id;
     await conn.beginTransaction();
     try {
       const tr = await ensureTableResult(conn, roundId, tableNumber);
@@ -185,13 +209,16 @@ async function validate(roundId, tableNumber) {
     }
   } finally {
     conn.release();
+    if (subTournamentId) scheduleRankingRefresh(subTournamentId);
   }
 }
 
 async function unvalidate(roundId, tableNumber) {
   const conn = await pool.getConnection();
+  let subTournamentId = null;
   try {
-    await findRoundOrFail(conn, roundId);
+    const round = await findRoundOrFail(conn, roundId);
+    subTournamentId = round.sub_tournament_id;
     const tr = await findTableResult(conn, roundId, tableNumber);
     if (!tr) throw notFound('Résultat de table introuvable');
     await conn.query(
@@ -201,18 +228,22 @@ async function unvalidate(roundId, tableNumber) {
     return loadTableResultWithHands(conn, tr.id);
   } finally {
     conn.release();
+    if (subTournamentId) scheduleRankingRefresh(subTournamentId);
   }
 }
 
 async function removeByRoundAndTable(roundId, tableNumber) {
   const conn = await pool.getConnection();
+  let subTournamentId = null;
   try {
-    await findRoundOrFail(conn, roundId);
+    const round = await findRoundOrFail(conn, roundId);
+    subTournamentId = round.sub_tournament_id;
     const tr = await findTableResult(conn, roundId, tableNumber);
     if (!tr) throw notFound('Résultat de table introuvable');
     await conn.query(`DELETE FROM table_results WHERE id = ?`, [tr.id]);
   } finally {
     conn.release();
+    if (subTournamentId) scheduleRankingRefresh(subTournamentId);
   }
 }
 
@@ -233,8 +264,10 @@ async function addHand(roundId, tableNumber, data) {
   validateHandPayload(data);
 
   const conn = await pool.getConnection();
+  let subTournamentId = null;
   try {
-    await findRoundOrFail(conn, roundId);
+    const round = await findRoundOrFail(conn, roundId);
+    subTournamentId = round.sub_tournament_id;
     await conn.beginTransaction();
     try {
       const tr = await ensureTableResult(conn, roundId, tableNumber);
@@ -265,6 +298,7 @@ async function addHand(roundId, tableNumber, data) {
     }
   } finally {
     conn.release();
+    if (subTournamentId) scheduleRankingRefresh(subTournamentId);
   }
 }
 
@@ -317,12 +351,15 @@ async function updateHand(id, data) {
   }
 
   const conn = await pool.getConnection();
+  let subTournamentId = null;
   try {
     const existing = await conn.query(
       `SELECT id, table_result_id FROM hand_results WHERE id = ?`,
       [id]
     );
     if (existing.length === 0) throw notFound('Donne introuvable');
+
+    subTournamentId = await getSubTournamentIdForHand(conn, id);
 
     if (fields.length === 0) return getHandById(id);
 
@@ -342,17 +379,20 @@ async function updateHand(id, data) {
     }
   } finally {
     conn.release();
+    if (subTournamentId) scheduleRankingRefresh(subTournamentId);
   }
 }
 
 async function removeHand(id) {
   const conn = await pool.getConnection();
+  let subTournamentId = null;
   try {
     const existing = await conn.query(
       `SELECT id, table_result_id FROM hand_results WHERE id = ?`,
       [id]
     );
     if (existing.length === 0) throw notFound('Donne introuvable');
+    subTournamentId = await getSubTournamentIdForHand(conn, id);
 
     await conn.beginTransaction();
     try {
@@ -365,6 +405,7 @@ async function removeHand(id) {
     }
   } finally {
     conn.release();
+    if (subTournamentId) scheduleRankingRefresh(subTournamentId);
   }
 }
 

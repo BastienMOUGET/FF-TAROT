@@ -30,7 +30,10 @@
       "Bash(curl -s -X PUT http://localhost:3001/hands/1 -H \"Content-Type: application/json\" -d '{\"score_s\":-200}')",
       "Bash(curl -s -X PUT http://localhost:3001/hands/1 -H \"Content-Type: application/json\" -d '{\"taker_seat\":null}')",
       "Bash(curl -s -X PUT http://localhost:3001/hands/1 -H \"Content-Type: application/json\" -d '{\"hand_number\":1}')",
-      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);print\\('hand_number',d['hand_number'],'taker_seat',d['taker_seat']\\)\")"
+      "Bash(python3 -c \"import json,sys;d=json.load\\(sys.stdin\\);print\\('hand_number',d['hand_number'],'taker_seat',d['taker_seat']\\)\")",
+      "Bash(curl -s http://localhost:3001/sub-tournaments/1/ranking)",
+      "Bash(curl -s -X POST http://localhost:3001/rounds/1/tables/2/hands -H \"Content-Type: application/json\" -d '{\"hand_number\":1,\"taker_seat\":\"O\",\"score_n\":-50,\"score_s\":-50,\"score_e\":-50,\"score_o\":150}')",
+      "Bash(curl -s -X POST http://localhost:3001/rounds/1/tables/2/validate)"
     ]
   }
 }
