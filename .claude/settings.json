@@ -95,7 +95,8 @@
       "Bash(docker compose *)",
       "Bash(tar -tzf /tmp/ff-tarot-2.0.2-test-linux.tar.gz)",
       "Bash(rm -rf /tmp/ff-tarot-2.0.2-test /tmp/ff-tarot-2.0.2-test-linux.tar.gz)",
-      "Bash(curl -s http://localhost:3000/)"
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(git commit -m 'fix\\(installer\\): remove Randomize\\(\\) — n'\\\\''existe pas en Inno Pascal Script *)"
     ],
     "additionalDirectories": [
       "/tmp/ff-tarot-2.0.2-test"

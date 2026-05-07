@@ -401,7 +401,8 @@ end;
 
 procedure InitializeWizard;
 begin
-  Randomize;
+  // NB : pas de Randomize() en Inno Pascal Script (la fonction n'existe
+  // pas, le générateur Random() est auto-seedé au démarrage du script).
   DbPassword := GenerateRandomPassword(24);
   JwtSecret  := GenerateRandomPassword(48);
   ProgressPage := CreateOutputProgressPage(
