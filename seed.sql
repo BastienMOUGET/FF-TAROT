@@ -10,8 +10,6 @@ TRUNCATE hand_results;
 TRUNCATE table_results;
 TRUNCATE seats;
 TRUNCATE rounds;
-TRUNCATE movement_steps;
-TRUNCATE movements;
 TRUNCATE team_players;
 TRUNCATE teams;
 TRUNCATE sub_tournaments;

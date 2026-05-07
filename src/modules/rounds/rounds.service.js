@@ -1,658 +1,210 @@
 const pool = require('../../config/db');
+const { notFound, badRequest } = require('../../utils/httpError');
+const placement = require('../../utils/placement');
+const movementService = require('../movement-patterns/movement-patterns.service');
 
-/*
-|--------------------------------------------------------------------------
-| SHUFFLE
-|--------------------------------------------------------------------------
-*/
+async function listBySubTournament(subTournamentId) {
+  const conn = await pool.getConnection();
+  try {
+    return await conn.query(
+      `SELECT id, sub_tournament_id, round_number, coef,
+              started_at, closed_at
+       FROM rounds
+       WHERE sub_tournament_id = ?
+       ORDER BY round_number ASC`,
+      [subTournamentId]
+    );
+  } finally {
+    conn.release();
+  }
+}
 
-function shuffle(array) {
+async function getById(id) {
+  const conn = await pool.getConnection();
+  try {
+    const rounds = await conn.query(
+      `SELECT id, sub_tournament_id, round_number, coef,
+              started_at, closed_at
+       FROM rounds WHERE id = ?`,
+      [id]
+    );
+    if (rounds.length === 0) throw notFound('Round introuvable');
 
-  for (let i = array.length - 1; i > 0; i--) {
-
-    const j = Math.floor(
-      Math.random() * (i + 1)
+    const seats = await conn.query(
+      `SELECT s.table_number, s.seat, s.player_id, s.team_id,
+              p.licence, p.name, p.firstname,
+              t.team_number
+       FROM seats s
+       JOIN players p ON p.id = s.player_id
+       LEFT JOIN teams t ON t.id = s.team_id
+       WHERE s.round_id = ?
+       ORDER BY s.table_number ASC, FIELD(s.seat, 'N','S','E','O')`,
+      [id]
     );
 
-    [array[i], array[j]] =
-      [array[j], array[i]];
-  }
-
-  return array;
-}
-
-/*
-|--------------------------------------------------------------------------
-| PLAYER CONFLICTS
-|--------------------------------------------------------------------------
-*/
-
-async function getPlayerConflicts(conn) {
-
-  const rows = await conn.query(`
-    SELECT
-      tp1.player_id AS p1,
-      tp2.player_id AS p2,
-      COUNT(*) AS total
-
-    FROM table_players tp1
-
-    JOIN table_players tp2
-      ON tp1.table_id = tp2.table_id
-
-    WHERE tp1.player_id != tp2.player_id
-
-    GROUP BY p1, p2
-  `);
-
-  const map = {};
-
-  for (const row of rows) {
-
-    const key =
-      `${row.p1}-${row.p2}`;
-
-    map[key] =
-      Number(row.total);
-
-  }
-
-  return map;
-}
-
-/*
-|--------------------------------------------------------------------------
-| GROUP CONFLICT SCORE
-|--------------------------------------------------------------------------
-*/
-
-function getGroupConflictScore(
-  group,
-  conflicts
-) {
-
-  let score = 0;
-
-  for (let i = 0; i < group.length; i++) {
-
-    for (let j = i + 1; j < group.length; j++) {
-
-      const a = group[i].id;
-      const b = group[j].id;
-
-      score +=
-        conflicts[`${a}-${b}`] || 0;
-
-      score +=
-        conflicts[`${b}-${a}`] || 0;
-
+    // Group by table for nicer payload
+    const byTable = new Map();
+    for (const row of seats) {
+      const list = byTable.get(row.table_number) || [];
+      list.push(row);
+      byTable.set(row.table_number, list);
     }
+    const tables = [...byTable.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([table_number, seats]) => ({ table_number, seats }));
 
-  }
-
-  return score;
-}
-
-/*
-|--------------------------------------------------------------------------
-| PLAYER STATS
-|--------------------------------------------------------------------------
-*/
-
-async function getPlayerStats(conn) {
-
-  const rows = await conn.query(`
-    SELECT
-      player_id,
-      seat,
-      role,
-      COUNT(*) AS total
-
-    FROM table_players
-
-    GROUP BY
-      player_id,
-      seat,
-      role
-  `);
-
-  const stats = {};
-
-  for (const row of rows) {
-
-    if (!stats[row.player_id]) {
-
-      stats[row.player_id] = {
-        seats: {},
-        roles: {}
-      };
-
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | SEATS
-    |--------------------------------------------------------------------------
-    */
-
-    if (row.seat !== null) {
-
-      stats[row.player_id]
-        .seats[row.seat] =
-          Number(row.total);
-
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | ROLES
-    |--------------------------------------------------------------------------
-    */
-
-    if (row.role) {
-
-      stats[row.player_id]
-        .roles[row.role] =
-          Number(row.total);
-
-    }
-
-  }
-
-  return stats;
-}
-
-/*
-|--------------------------------------------------------------------------
-| SEAT PENALTY
-|--------------------------------------------------------------------------
-*/
-
-function getSeatPenalty(
-  player,
-  seat,
-  stats
-) {
-
-  const playerStats =
-    stats[player.id];
-
-  if (!playerStats) {
-    return 0;
-  }
-
-  return playerStats
-    .seats[seat] || 0;
-}
-
-/*
-|--------------------------------------------------------------------------
-| CREATE ROUND
-|--------------------------------------------------------------------------
-*/
-
-async function createRound(
-  tournamentId,
-  roundNumber
-) {
-
-  const conn = await pool.getConnection();
-
-  try {
-
-    const result = await conn.query(`
-      INSERT INTO rounds (
-        tournament_id,
-        round_number
-      )
-      VALUES (?, ?)
-    `, [
-      tournamentId,
-      roundNumber
-    ]);
-
-    return {
-      id: Number(result.insertId),
-      tournament_id: tournamentId,
-      round_number: roundNumber
-    };
-
+    return { ...rounds[0], tables };
   } finally {
-
     conn.release();
-
   }
-
 }
 
-/*
-|--------------------------------------------------------------------------
-| GET ROUNDS
-|--------------------------------------------------------------------------
-*/
-
-async function getRounds(tournamentId) {
-
+async function create(subTournamentId, { coef } = {}) {
   const conn = await pool.getConnection();
-
   try {
+    const subt = await conn.query(
+      `SELECT id FROM sub_tournaments WHERE id = ?`,
+      [subTournamentId]
+    );
+    if (subt.length === 0) throw notFound('Sous-tournoi introuvable');
 
-    return await conn.query(`
-      SELECT *
-      FROM rounds
-      WHERE tournament_id = ?
-      ORDER BY round_number
-    `, [tournamentId]);
+    const numRow = await conn.query(
+      `SELECT COALESCE(MAX(round_number), 0) + 1 AS next_num
+       FROM rounds WHERE sub_tournament_id = ?`,
+      [subTournamentId]
+    );
+    const roundNumber = Number(numRow[0].next_num);
 
+    const result = await conn.query(
+      `INSERT INTO rounds (sub_tournament_id, round_number, coef)
+       VALUES (?, ?, ?)`,
+      [subTournamentId, roundNumber, coef ?? 1.0]
+    );
+    return getById(Number(result.insertId));
   } finally {
-
     conn.release();
-
   }
-
 }
 
-/*
-|--------------------------------------------------------------------------
-| GENERATE TABLES
-|--------------------------------------------------------------------------
-*/
-
-async function generateTables(roundId) {
-
+async function remove(id) {
   const conn = await pool.getConnection();
-
   try {
+    const result = await conn.query(`DELETE FROM rounds WHERE id = ?`, [id]);
+    if (result.affectedRows === 0) throw notFound('Round introuvable');
+  } finally {
+    conn.release();
+  }
+}
 
-    /*
-    |--------------------------------------------------------------------------
-    | GET ROUND
-    |--------------------------------------------------------------------------
-    */
-
-    const rounds = await conn.query(`
-      SELECT *
-      FROM rounds
-      WHERE id = ?
-      LIMIT 1
-    `, [roundId]);
-
-    if (rounds.length === 0) {
-
-      throw new Error(
-        'Round introuvable'
-      );
-
-    }
-
+// Generate (or regenerate) the placement for a round.
+// - Round 1: random table assignment + N/S/E/O within team
+// - Round N+1: apply movement_patterns offsets on round N seats
+async function generatePlacement(roundId) {
+  const conn = await pool.getConnection();
+  try {
+    const rounds = await conn.query(
+      `SELECT id, sub_tournament_id, round_number FROM rounds WHERE id = ?`,
+      [roundId]
+    );
+    if (rounds.length === 0) throw notFound('Round introuvable');
     const round = rounds[0];
 
-    /*
-    |--------------------------------------------------------------------------
-    | DELETE OLD TABLES
-    |--------------------------------------------------------------------------
-    */
+    let seats;
 
-    await conn.query(`
-      DELETE FROM table_players
-      WHERE table_id IN (
-        SELECT id
-        FROM game_tables
-        WHERE round_id = ?
-      )
-    `, [roundId]);
+    if (round.round_number === 1) {
+      // Pull all teams + their 4 players for this sub-tournament
+      const teams = await conn.query(
+        `SELECT id FROM teams WHERE sub_tournament_id = ?
+         ORDER BY team_number ASC`,
+        [round.sub_tournament_id]
+      );
+      if (teams.length === 0) {
+        throw badRequest('Aucune équipe inscrite dans ce sous-tournoi');
+      }
 
-    await conn.query(`
-      DELETE FROM game_tables
-      WHERE round_id = ?
-    `, [roundId]);
-
-    /*
-    |--------------------------------------------------------------------------
-    | DELETE OLD BYES
-    |--------------------------------------------------------------------------
-    */
-
-    await conn.query(`
-      DELETE FROM byes
-      WHERE round_id = ?
-    `, [roundId]);
-
-    /*
-    |--------------------------------------------------------------------------
-    | GET PLAYERS
-    |--------------------------------------------------------------------------
-    */
-
-    let players = await conn.query(`
-      SELECT *
-      FROM players
-      ORDER BY id
-    `);
-
-    if (players.length < 4) {
-
-      throw new Error(
-        'Pas assez de joueurs'
+      const ids = teams.map((t) => t.id);
+      const placeholders = ids.map(() => '?').join(',');
+      const players = await conn.query(
+        `SELECT team_id, player_id, player_number
+         FROM team_players
+         WHERE team_id IN (${placeholders})
+         ORDER BY team_id, player_number`,
+        ids
       );
 
+      const playersByTeam = new Map();
+      for (const p of players) {
+        const list = playersByTeam.get(p.team_id) || [];
+        list.push(p);
+        playersByTeam.set(p.team_id, list);
+      }
+      const teamsWithPlayers = teams.map((t) => ({
+        id: t.id,
+        players: playersByTeam.get(t.id) || [],
+      }));
+
+      const incomplete = teamsWithPlayers.filter((t) => t.players.length !== 4);
+      if (incomplete.length > 0) {
+        throw badRequest(
+          `Équipe(s) incomplète(s) : ${incomplete.map((t) => t.id).join(', ')}`
+        );
+      }
+
+      seats = placement.generateInitialSeats(teamsWithPlayers);
+    } else {
+      // Find previous round's seats
+      const prevRound = await conn.query(
+        `SELECT id FROM rounds
+         WHERE sub_tournament_id = ? AND round_number = ?`,
+        [round.sub_tournament_id, round.round_number - 1]
+      );
+      if (prevRound.length === 0) {
+        throw badRequest('Round précédent introuvable');
+      }
+      const prevSeats = await conn.query(
+        `SELECT table_number, seat, player_id, team_id
+         FROM seats WHERE round_id = ?`,
+        [prevRound[0].id]
+      );
+      if (prevSeats.length === 0) {
+        throw badRequest(
+          'Le round précédent ne contient pas de mise en place'
+        );
+      }
+
+      const nbTables = Math.max(...prevSeats.map((s) => s.table_number));
+      const pattern = await movementService.getForTableCount(nbTables);
+      seats = placement.generateNextSeats(prevSeats, pattern);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | SHUFFLE
-    |--------------------------------------------------------------------------
-    */
-
-    players = shuffle(players);
-
-    /*
-    |--------------------------------------------------------------------------
-    | CONFLICTS
-    |--------------------------------------------------------------------------
-    */
-
-    const conflicts =
-      await getPlayerConflicts(conn);
-
-    /*
-    |--------------------------------------------------------------------------
-    | PLAYER STATS
-    |--------------------------------------------------------------------------
-    */
-
-    const stats =
-      await getPlayerStats(conn);
-
-    /*
-    |--------------------------------------------------------------------------
-    | SMART GENERATION
-    |--------------------------------------------------------------------------
-    */
-
-    const remaining = [...players];
-
-    const tables = [];
-
-    let tableNumber = 1;
-
-    while (remaining.length >= 4) {
-
-      let bestGroup = null;
-
-      let bestScore = Infinity;
-
-      /*
-      |--------------------------------------------------------------------------
-      | FIND BEST GROUP
-      |--------------------------------------------------------------------------
-      */
-
-      for (let a = 0; a < remaining.length; a++) {
-
-        for (let b = a + 1; b < remaining.length; b++) {
-
-          for (let c = b + 1; c < remaining.length; c++) {
-
-            for (let d = c + 1; d < remaining.length; d++) {
-
-              const group = [
-
-                remaining[a],
-
-                remaining[b],
-
-                remaining[c],
-
-                remaining[d]
-
-              ];
-
-              const score =
-                getGroupConflictScore(
-                  group,
-                  conflicts
-                );
-
-              if (score < bestScore) {
-
-                bestScore = score;
-
-                bestGroup = group;
-
-              }
-
-            }
-
-          }
-
-        }
-
+    // Persist seats in transaction
+    await conn.beginTransaction();
+    try {
+      await conn.query(`DELETE FROM seats WHERE round_id = ?`, [roundId]);
+      for (const s of seats) {
+        await conn.query(
+          `INSERT INTO seats
+             (round_id, table_number, seat, player_id, team_id)
+           VALUES (?, ?, ?, ?, ?)`,
+          [roundId, s.table_number, s.seat, s.player_id, s.team_id]
+        );
       }
-
-      /*
-      |--------------------------------------------------------------------------
-      | REMOVE PLAYERS
-      |--------------------------------------------------------------------------
-      */
-
-      for (const player of bestGroup) {
-
-        const index =
-          remaining.findIndex(
-            p => p.id === player.id
-          );
-
-        remaining.splice(index, 1);
-
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | CREATE TABLE
-      |--------------------------------------------------------------------------
-      */
-
-      const result = await conn.query(`
-        INSERT INTO game_tables (
-          tournament_id,
-          round_id,
-          table_number
-        )
-        VALUES (?, ?, ?)
-      `, [
-
-        round.tournament_id,
-
-        round.id,
-
-        tableNumber
-
-      ]);
-
-      const tableId =
-        Number(result.insertId);
-
-      /*
-      |--------------------------------------------------------------------------
-      | SMART SEATING
-      |--------------------------------------------------------------------------
-      */
-
-      const seats = [1, 2, 3, 4];
-
-      const seating = [];
-
-      const usedSeats = new Set();
-
-      for (const player of bestGroup) {
-
-        let bestSeat = null;
-
-        let bestPenalty = Infinity;
-
-        for (const seat of seats) {
-
-          if (usedSeats.has(seat)) {
-            continue;
-          }
-
-          const penalty =
-            getSeatPenalty(
-              player,
-              seat,
-              stats
-            );
-
-          if (penalty < bestPenalty) {
-
-            bestPenalty = penalty;
-
-            bestSeat = seat;
-
-          }
-
-        }
-
-        usedSeats.add(bestSeat);
-
-        seating.push({
-          player,
-          seat: bestSeat
-        });
-
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | INSERT PLAYERS
-      |--------------------------------------------------------------------------
-      */
-
-      for (const item of seating) {
-
-        await conn.query(`
-          INSERT INTO table_players (
-            table_id,
-            player_id,
-            seat
-          )
-          VALUES (?, ?, ?)
-        `, [
-
-          tableId,
-
-          item.player.id,
-
-          item.seat
-
-        ]);
-
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | RESULT
-      |--------------------------------------------------------------------------
-      */
-
-      tables.push({
-
-        table_id: tableId,
-
-        table_number: tableNumber,
-
-        conflict_score: bestScore,
-
-        players: seating
-
-      });
-
-      tableNumber++;
-
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | HANDLE BYES
-    |--------------------------------------------------------------------------
-    */
-
-    if (remaining.length > 0) {
-
-      for (const player of remaining) {
-
-        await conn.query(`
-          INSERT INTO byes (
-            tournament_id,
-            round_id,
-            player_id
-          )
-          VALUES (?, ?, ?)
-        `, [
-
-          round.tournament_id,
-
-          round.id,
-
-          player.id
-
-        ]);
-
-      }
-
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | GET BYES
-    |--------------------------------------------------------------------------
-    */
-
-    const byes = await conn.query(`
-      SELECT
-        b.*,
-        p.name,
-        p.firstname
-
-      FROM byes b
-
-      JOIN players p
-        ON p.id = b.player_id
-
-      WHERE b.round_id = ?
-    `, [roundId]);
-
-    /*
-    |--------------------------------------------------------------------------
-    | RETURN
-    |--------------------------------------------------------------------------
-    */
-
-    return {
-
-      tables,
-
-      byes
-
-    };
-
+    return getById(roundId);
   } finally {
-
     conn.release();
-
   }
-
 }
 
-/*
-|--------------------------------------------------------------------------
-| EXPORTS
-|--------------------------------------------------------------------------
-*/
-
 module.exports = {
-  createRound,
-  getRounds,
-  generateTables
+  listBySubTournament,
+  getById,
+  create,
+  remove,
+  generatePlacement,
 };

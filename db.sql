@@ -21,6 +21,7 @@ DROP TABLE IF EXISTS hand_results;
 DROP TABLE IF EXISTS table_results;
 DROP TABLE IF EXISTS seats;
 DROP TABLE IF EXISTS rounds;
+DROP TABLE IF EXISTS movement_patterns;
 DROP TABLE IF EXISTS movement_steps;
 DROP TABLE IF EXISTS movements;
 DROP TABLE IF EXISTS team_players;
@@ -160,31 +161,21 @@ CREATE TABLE team_players (
 ) ENGINE=InnoDB;
 
 -- =====================================================
--- MOUVEMENTS (patrons : mouv3tables / mouv4tables / mouvjoueur8t…)
+-- MOUVEMENTS (patron d'offsets par nb de tables)
+-- Reproduit la table mouvJoueurLib4 du legacy : pour chaque
+-- nombre de tables, on stocke l'offset à appliquer sur le
+-- numéro de table d'un joueur en fonction de sa place (N/S/E/O).
+-- L'entrée table_count = 0 sert de patron par défaut.
 -- =====================================================
 
-CREATE TABLE movements (
-  id            INT AUTO_INCREMENT PRIMARY KEY,
-  code          VARCHAR(50)  NOT NULL UNIQUE,
-  label         VARCHAR(150) NOT NULL,
-  table_count   INT          NOT NULL,
-  round_count   INT          NOT NULL,
-  description   TEXT NULL
-) ENGINE=InnoDB;
-
--- Décrit, pour chaque round du patron, où une équipe (par son numéro
--- d'origine) se retrouve : table cible + place (N/S/E/O).
-CREATE TABLE movement_steps (
-  id             INT AUTO_INCREMENT PRIMARY KEY,
-  movement_id    INT NOT NULL,
-  round_number   INT NOT NULL,
-  source_team    INT NOT NULL,            -- numéro d'équipe à l'origine (1..N)
-  target_table   INT NOT NULL,
-  target_seat    ENUM('N','S','E','O') NOT NULL,
-  CONSTRAINT fk_step_movement
-    FOREIGN KEY (movement_id) REFERENCES movements(id)
-    ON DELETE CASCADE ON UPDATE CASCADE,
-  UNIQUE KEY uniq_step (movement_id, round_number, source_team)
+CREATE TABLE movement_patterns (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  table_count INT          NOT NULL UNIQUE,    -- 0 = défaut (toutes tailles)
+  offset_n    INT          NOT NULL DEFAULT 0,
+  offset_s    INT          NOT NULL DEFAULT 1,
+  offset_e    INT          NOT NULL DEFAULT 2,
+  offset_o    INT          NOT NULL DEFAULT -1,
+  label       VARCHAR(150) NULL
 ) ENGINE=InnoDB;
 
 -- =====================================================
@@ -195,16 +186,12 @@ CREATE TABLE rounds (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
   sub_tournament_id   INT NOT NULL,
   round_number        INT NOT NULL,
-  movement_id         INT NULL,
   coef                DECIMAL(4,2) NOT NULL DEFAULT 1.00,
   started_at          TIMESTAMP NULL,
   closed_at           TIMESTAMP NULL,
   CONSTRAINT fk_rounds_subt
     FOREIGN KEY (sub_tournament_id) REFERENCES sub_tournaments(id)
     ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT fk_rounds_movement
-    FOREIGN KEY (movement_id) REFERENCES movements(id)
-    ON DELETE SET NULL ON UPDATE CASCADE,
   UNIQUE KEY uniq_round (sub_tournament_id, round_number)
 ) ENGINE=InnoDB;
 
@@ -344,3 +331,12 @@ CREATE TABLE parameters (
     ON DELETE CASCADE ON UPDATE CASCADE,
   UNIQUE KEY uniq_param (scope, tournament_id, param_key)
 ) ENGINE=InnoDB;
+
+-- =====================================================
+-- DONNÉES DE RÉFÉRENCE (toujours présentes)
+-- =====================================================
+
+-- Patron de mouvement par défaut (table_count = 0 = "toutes tailles") :
+-- N fixe, S+1, E+2, O-1 modulo nb_table — règle FFT Libre par 4.
+INSERT INTO movement_patterns (table_count, offset_n, offset_s, offset_e, offset_o, label)
+VALUES (0, 0, 1, 2, -1, 'Mouvement par défaut Libre par 4');

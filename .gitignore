@@ -145,3 +145,6 @@ vite.config.ts.timestamp-*
 # Legacy ASP archive (référence seulement, pas d'historique git)
 old/extracted/
 
+# Claude Code local permissions (peut contenir des credentials)
+.claude/settings.local.json
+

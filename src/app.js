@@ -14,14 +14,9 @@ const tournamentsRoutes = require('./modules/tournaments/tournaments.routes');
 const subTournamentsRoutes = require('./modules/sub-tournaments/sub-tournaments.routes');
 const teamsRoutes = require('./modules/teams/teams.routes');
 
-// NOTE: les modules ci-dessous référencent l'ancien schéma supprimé
-// en Phase 1. Ils seront refondus aux Phases 4-6 (movements, seats,
-// table_results, hand_results, rankings).
-// const roundsRoutes = require('./modules/rounds/rounds.routes');
-// const scoresRoutes = require('./modules/scores/scores.routes');
-// const rankingRoutes = require('./modules/ranking/ranking.routes');
-// const tablesRoutes = require('./modules/tables/tables.routes');
-// const tableScoreRoutes = require('./modules/table-score/table-score.routes');
+// Rounds & mouvements
+const roundsRoutes = require('./modules/rounds/rounds.routes');
+const movementPatternsRoutes = require('./modules/movement-patterns/movement-patterns.routes');
 
 const app = express();
 
@@ -48,20 +43,24 @@ app.use('/comites', comitesRoutes);
 app.use('/clubs', clubsRoutes);
 app.use('/players', playersRoutes);
 
-// Tournois (nested + standalone)
+// Tournois & sub-tournois (nested + standalone)
 app.use(
   '/tournaments/:tournamentId/sub-tournaments',
   subTournamentsRoutes
 );
 app.use('/tournaments', tournamentsRoutes);
-
-app.use(
-  '/sub-tournaments/:subTournamentId/teams',
-  teamsRoutes
-);
 app.use('/sub-tournaments', subTournamentsRoutes);
 
+// Équipes (nested + standalone)
+app.use('/sub-tournaments/:subTournamentId/teams', teamsRoutes);
 app.use('/teams', teamsRoutes);
+
+// Rounds (nested + standalone)
+app.use('/sub-tournaments/:subTournamentId/rounds', roundsRoutes);
+app.use('/rounds', roundsRoutes);
+
+// Patrons de mouvement
+app.use('/movement-patterns', movementPatternsRoutes);
 
 app.get('/', (req, res) => {
   res.json({

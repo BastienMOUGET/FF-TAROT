@@ -1,63 +1,33 @@
 const service = require('./rounds.service');
 
+async function listBySubTournament(req, res) {
+  const subTournamentId = req.params.subTournamentId || req.params.id;
+  res.json(await service.listBySubTournament(subTournamentId));
+}
+
+async function getById(req, res) {
+  res.json(await service.getById(req.params.id));
+}
+
 async function create(req, res) {
-  try {
-    const data = await service.createRound(
-      req.body.tournament_id,
-      req.body.round_number
-    );
-
-    res.json(data);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      error: 'Erreur serveur'
-    });
-  }
+  const subTournamentId =
+    req.params.subTournamentId || req.body.sub_tournament_id;
+  res.status(201).json(await service.create(subTournamentId, req.body));
 }
 
-async function list(req, res) {
-  try {
-    const data = await service.getRounds(
-      req.params.tournamentId
-    );
-
-    res.json(data);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      error: 'Erreur serveur'
-    });
-  }
+async function remove(req, res) {
+  await service.remove(req.params.id);
+  res.status(204).end();
 }
 
-async function generate(req, res) {
-
-  try {
-
-    const data =
-      await service.generateTables(
-        req.params.id
-      );
-
-    res.json(data);
-
-  } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({
-      error: err.message
-    });
-
-  }
-
+async function generatePlacement(req, res) {
+  res.json(await service.generatePlacement(req.params.id));
 }
 
 module.exports = {
+  listBySubTournament,
+  getById,
   create,
-  list,
-  generate
+  remove,
+  generatePlacement,
 };
