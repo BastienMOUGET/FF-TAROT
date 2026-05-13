@@ -71,3 +71,109 @@ jobs:
           push: false
           load: false
           tags: ff-tarot:ci
+
+  build-installer:
+    name: Build installer Windows (.exe)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build front (production)
+        working-directory: frontend
+        run: |
+          npm ci --no-fund --no-audit
+          npm run build
+
+      - name: Get NSSM (Chocolatey, fallback nssm.cc)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "installer\bin" -Force | Out-Null
+          $target = "installer\bin\nssm.exe"
+
+          try {
+            choco install nssm -y --no-progress --no-color | Out-Null
+            $candidates = @(
+              'C:\ProgramData\chocolatey\lib\nssm\tools\nssm.exe',
+              'C:\ProgramData\chocolatey\bin\nssm.exe'
+            )
+            foreach ($c in $candidates) {
+              if (Test-Path $c) {
+                Copy-Item $c $target -Force
+                Write-Host "NSSM via Chocolatey : $c"
+                break
+              }
+            }
+          } catch {
+            Write-Host "Chocolatey KO : $_"
+          }
+
+          if (-not (Test-Path $target)) {
+            $url = 'https://nssm.cc/release/nssm-2.24.zip'
+            $zip = "$env:TEMP\nssm.zip"
+            $extract = "$env:TEMP\nssm-extract"
+            $ok = $false
+            1..3 | ForEach-Object {
+              if ($ok) { return }
+              try {
+                Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30
+                $ok = $true
+              } catch {
+                Write-Host "Tentative $_ nssm.cc KO : $($_.Exception.Message)"
+                Start-Sleep -Seconds 5
+              }
+            }
+            if ($ok) {
+              Expand-Archive -Path $zip -DestinationPath $extract -Force
+              Copy-Item "$extract\nssm-2.24\win64\nssm.exe" $target -Force
+            }
+          }
+
+          if (-not (Test-Path $target)) {
+            throw "Impossible d'obtenir nssm.exe (Chocolatey + nssm.cc échoués)"
+          }
+          Get-Item $target | Select-Object Name, Length, FullName
+
+      - name: Check / install Inno Setup 6
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          Get-Item $iscc | Select-Object Name, VersionInfo
+
+      - name: Compile setup.iss
+        shell: pwsh
+        working-directory: installer
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          Write-Host "=== Contenu installer/ ==="
+          Get-ChildItem -Recurse -Force | Where-Object { -not $_.PSIsContainer } |
+            Select-Object FullName, Length | Format-Table -AutoSize
+          Write-Host "=== frontend\dist ==="
+          Get-ChildItem -Path '..\frontend\dist' -ErrorAction SilentlyContinue
+
+          $output = & $iscc "/DAppVersion=0.0.0-ci" setup.iss 2>&1 | Out-String
+          Write-Host '--- ISCC OUTPUT ---'
+          Write-Host $output
+          Write-Host '--- END ISCC OUTPUT ---'
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ISCC a échoué (exit code $LASTEXITCODE)"
+            exit $LASTEXITCODE
+          }
+          Get-ChildItem output
+
+      - name: Upload .exe (debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-ci
+          path: installer/output/ff-tarot-*-setup.exe
+          retention-days: 3
