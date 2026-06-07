@@ -318,20 +318,58 @@ begin
   Result := FindMysqlExe() <> '';
 end;
 
+// Teste une connexion root (auth donnée) via 'SELECT 1'. Pas de redirection
+// cmd ici : on appelle mariadb.exe directement, on ne veut que le code retour.
+function ProbeRoot(const MysqlExe, Auth: String): Boolean;
+var
+  ExitCode: Integer;
+begin
+  Result := ExecAndWait(MysqlExe, Auth + ' --connect-timeout=3 -e "SELECT 1"', '', ExitCode)
+            and (ExitCode = 0);
+end;
+
+// Attend que MariaDB accepte les connexions (mysqld met plusieurs secondes à
+// démarrer après l'install du service) ET résout l'auth root qui marche :
+// d'abord avec le mot de passe qu'on a fixé via le MSI, sinon en passwordless
+// (install MariaDB préexistante). Renvoie '' si rien ne marche après ~60s.
+function ResolveRootAuth(const MysqlExe: String): String;
+var
+  i: Integer;
+  WithPw: String;
+begin
+  WithPw := '--user=root --password=' + MariaRootPassword;
+  Result := '';
+  for i := 1 to 30 do
+  begin
+    if (MariaRootPassword <> '') and ProbeRoot(MysqlExe, WithPw) then
+    begin Result := WithPw; Exit; end;
+    if ProbeRoot(MysqlExe, '--user=root') then
+    begin Result := '--user=root'; Exit; end;
+    Sleep(2000);
+  end;
+end;
+
 function ConfigureDatabase(const MysqlExe: String): Boolean;
 var
   ExitCode: Integer;
-  SqlInit, EnvFile, EnvContent, RootAuth: String;
+  SqlInit, EnvFile, EnvContent, RootAuth, DbLog: String;
 begin
-  SetProgress('Configuration de la base de données...');
+  SetProgress('Attente du démarrage de MariaDB...');
 
-  // Identifiants root : si NOUS avons installé MariaDB, on connaît le mot de
-  // passe root (fixé via le MSI). Sinon (install préexistante), on retombe sur
-  // l'hypothèse "root local sans mot de passe" (config par défaut MariaDB).
-  if MariaWeInstalled then
-    RootAuth := '--user=root --password=' + MariaRootPassword
-  else
-    RootAuth := '--user=root';
+  // mysqld n'accepte pas les connexions immédiatement après l'install du
+  // service : on attend activement et on récupère l'auth root opérante.
+  RootAuth := ResolveRootAuth(MysqlExe);
+  if RootAuth = '' then
+  begin
+    SuppressibleMsgBox('Impossible de se connecter à MariaDB en root après 60s.'#13#10 +
+           'Le service MariaDB n''a peut-être pas démarré. Voir db-setup.log.',
+           mbCriticalError, MB_OK, IDOK);
+    Result := False;
+    Exit;
+  end;
+
+  SetProgress('Configuration de la base de données...');
+  DbLog := ExpandConstant('{app}\db-setup.log');  // dumpé par la CI en cas d'échec
 
   SqlInit := ExpandConstant('{tmp}\fft-init.sql');
   SaveStringToFile(SqlInit,
@@ -341,19 +379,19 @@ begin
     'GRANT ALL PRIVILEGES ON `fft`.* TO ''fft_user''@''localhost'';' + #13#10 +
     'FLUSH PRIVILEGES;' + #13#10, False);
 
-  if not ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' < "' + SqlInit + '"', '', ExitCode)
+  if not ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' < "' + SqlInit + '" >> "' + DbLog + '" 2>&1', '', ExitCode)
      or (ExitCode <> 0) then
   begin
     SuppressibleMsgBox('Échec de la création de la base de données (code ' + IntToStr(ExitCode) + ').'#13#10 +
-           'Si MariaDB était déjà installé, le compte root doit être accessible localement sans mot de passe.',
+           'Voir db-setup.log pour le détail de l''erreur MariaDB.',
            mbCriticalError, MB_OK, IDOK);
     Result := False;
     Exit;
   end;
 
-  ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' < "' + ExpandConstant('{app}\db.sql') + '"',
+  ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' < "' + ExpandConstant('{app}\db.sql') + '" >> "' + DbLog + '" 2>&1',
                '', ExitCode);
-  ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' fft < "' + ExpandConstant('{app}\seed.sql') + '"',
+  ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' fft < "' + ExpandConstant('{app}\seed.sql') + '" >> "' + DbLog + '" 2>&1',
                '', ExitCode);
 
   EnvFile := ExpandConstant('{app}\.env');

@@ -293,5 +293,7 @@ jobs:
         shell: pwsh
         run: |
           Get-Content 'C:\fft-install.log' -ErrorAction SilentlyContinue
+          Write-Host '--- db-setup.log (sortie client MariaDB) ---'
+          Get-Content 'C:\FF-TAROT\db-setup.log' -ErrorAction SilentlyContinue
           Write-Host '--- server.log ---'
           Get-Content 'C:\FF-TAROT\logs\server.log' -ErrorAction SilentlyContinue
