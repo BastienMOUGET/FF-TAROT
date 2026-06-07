@@ -1,0 +1,152 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module teams — équipes Libre par 4 (2 paires NS + 2 paires EO).
+public class ModTeams {
+
+    // Joueurs d'une équipe → tableau JSON (jointure team_players + players).
+    static JsonValue PlayersJson(Db db, string teamId) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT tp.player_id, tp.pair, tp.player_number, p.licence, p.name, p.firstname, p.club_id, p.category FROM team_players tp JOIN players p ON p.id = tp.player_id WHERE tp.team_id = ? ORDER BY tp.player_number",
+            Db.P1(teamId))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("player_id", J.CellInt(r.Get(0)))
+            o.AppendEntry("pair", J.CellStr(r.Get(1)))
+            o.AppendEntry("player_number", J.CellInt(r.Get(2)))
+            o.AppendEntry("licence", J.CellStrN(r.Get(3)))
+            o.AppendEntry("name", J.CellStr(r.Get(4)))
+            o.AppendEntry("firstname", J.CellStr(r.Get(5)))
+            o.AppendEntry("club_id", J.CellIntN(r.Get(6)))
+            o.AppendEntry("category", J.CellStrN(r.Get(7)))
+            arr.AppendItem(o)
+        }
+        return arr
+    }
+
+    static JsonValue TeamJson(Db db, List<string> teamRow) {
+        let o: JsonValue = J.Obj()
+        let id: string = teamRow.Get(0)
+        o.AppendEntry("id", J.CellInt(id))
+        o.AppendEntry("sub_tournament_id", J.CellInt(teamRow.Get(1)))
+        o.AppendEntry("team_number", J.CellInt(teamRow.Get(2)))
+        o.AppendEntry("players", ModTeams.PlayersJson(db, id))
+        return o
+    }
+
+    // GET /api/sub-tournaments/:subTournamentId/teams
+    public static HttpResponse ListBySubTournament(WebContext ctx, Db db) {
+        let subId: string = ctx.Param("subTournamentId")
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, sub_tournament_id, team_number FROM teams WHERE sub_tournament_id = ? ORDER BY team_number ASC",
+            Db.P1(subId))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModTeams.TeamJson(db, r))
+        }
+        return J.Ok(arr)
+    }
+
+    // GET /api/teams/:id
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, sub_tournament_id, team_number FROM teams WHERE id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModTeams.TeamJson(db, r0))
+    }
+
+    // POST /api/sub-tournaments/:subTournamentId/teams (admin)
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let subId: string = ctx.Param("subTournamentId")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let playersV: JsonValue = b.Get("players")
+        if (!playersV.IsArray()) { return HttpErr.BadRequest("players doit être un tableau") }
+        if (playersV.Length() != 4) { return HttpErr.BadRequest("Une équipe Libre par 4 doit contenir 4 joueurs") }
+
+        // Validation 2 NS / 2 EO + pas de doublon ; collecte ordonnée NS puis EO.
+        let nsIds: List<string> = new List<string>()
+        let eoIds: List<string> = new List<string>()
+        let seen: List<string> = new List<string>()
+        for i in 0..4 {
+            let p: JsonValue = playersV.At(i)
+            let pidV: JsonValue = p.Get("player_id")
+            let pairV: JsonValue = p.Get("pair")
+            if (!pidV.IsInt()) { return HttpErr.BadRequest("player_id entier requis") }
+            if (!pairV.IsString()) { return HttpErr.BadRequest("pair requis") }
+            let pid: string = String.FromInt(pidV.AsInt())
+            let pair: string = pairV.AsString()
+            for s in seen { if (s == pid) { return HttpErr.BadRequest("Doublon de joueur dans l'équipe") } }
+            seen.Add(pid)
+            if (pair == "NS") { nsIds.Add(pid) }
+            else { if (pair == "EO") { eoIds.Add(pid) } else { return HttpErr.BadRequest("pair doit être NS ou EO") } }
+        }
+        if (nsIds.Count() != 2) { return HttpErr.BadRequest("L'équipe doit avoir exactement 2 joueurs NS et 2 joueurs EO") }
+        if (eoIds.Count() != 2) { return HttpErr.BadRequest("L'équipe doit avoir exactement 2 joueurs NS et 2 joueurs EO") }
+
+        let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
+        if (subt.Count() == 0) { return HttpErr.NotFound() }
+
+        db.Begin()
+        let numRows: List<List<string>> = db.Rows(
+            "SELECT COALESCE(MAX(team_number), 0) + 1 AS n FROM teams WHERE sub_tournament_id = ?", Db.P1(subId))
+        let nr0: List<string> = numRows.Get(0)
+        let teamNumber: int = Db.CellInt(nr0.Get(0))
+
+        let insOk: bool = db.Exec("INSERT INTO teams (sub_tournament_id, team_number) VALUES (?, ?)", Db.P2(subId, String.FromInt(teamNumber)))
+        if (!insOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        let teamId: int = db.LastInsertId()
+        let teamIdS: string = String.FromInt(teamId)
+
+        // NS d'abord (player_number 1,2) puis EO (3,4)
+        var num: int = 1
+        for ns in nsIds {
+            if (!ModTeams.InsTp(db, teamIdS, ns, "NS", num)) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+            num = num + 1
+        }
+        for eo in eoIds {
+            if (!ModTeams.InsTp(db, teamIdS, eo, "EO", num)) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+            num = num + 1
+        }
+        db.Commit()
+
+        let rows: List<List<string>> = db.Rows("SELECT id, sub_tournament_id, team_number FROM teams WHERE id = ?", Db.P1(teamIdS))
+        let r0: List<string> = rows.Get(0)
+        let resp: HttpResponse = J.Ok(ModTeams.TeamJson(db, r0))
+        return resp.Status(201)
+    }
+
+    static bool InsTp(Db db, string teamId, string playerId, string pair, int num) {
+        let ps: List<string> = new List<string>()
+        ps.Add(teamId)
+        ps.Add(playerId)
+        ps.Add(pair)
+        ps.Add(String.FromInt(num))
+        return db.Exec("INSERT INTO team_players (team_id, player_id, pair, player_number) VALUES (?, ?, ?, ?)", ps)
+    }
+
+    // DELETE /api/teams/:id (admin)
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM teams WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+}

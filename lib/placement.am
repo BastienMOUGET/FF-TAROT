@@ -1,0 +1,132 @@
+namespace App
+
+import Amalgame.Random
+
+// Portage de src/utils/placement.js — placement Libre par 4 (pur).
+// Round 1 : une équipe par table (tables tirées au sort), 4 joueurs N/S/E/O
+// dans l'ordre player_number. Rounds N+1 : offset par siège, wrap modulo nbTables.
+
+public class TeamPlayerIn {
+    public PlayerId:     int
+    public PlayerNumber: int
+    public TeamPlayerIn() {}
+}
+
+public class TeamIn {
+    public Id:      int
+    public Players: List<TeamPlayerIn>
+    public TeamIn() {}
+}
+
+public class SeatRow {
+    public TableNumber: int
+    public Seat:        string
+    public PlayerId:    int
+    public TeamId:      int
+    public SeatRow() {}
+}
+
+public class Placement {
+
+    // Siège par index 0..3 → N/S/E/O.
+    public static string SeatAt(int idx) {
+        if (idx == 0) { return "N" }
+        if (idx == 1) { return "S" }
+        if (idx == 2) { return "E" }
+        return "O"
+    }
+
+    // Entier uniforme dans [0, n) via CSPRNG (4 octets système).
+    public static int Below(int n) {
+        if (n <= 1) { return 0 }
+        let b: List<int> = Random.SystemBytes(4)
+        var v: int = 0
+        for x in b { v = v * 256 + x }
+        if (v < 0) { v = 0 - v }
+        return v % n
+    }
+
+    // wrapTable(current, offset, nbTables) = ((current-1+offset) mod nb + nb) mod nb + 1
+    public static int WrapTable(int currentTable, int offset, int nbTables) {
+        if (nbTables <= 0) { return currentTable }
+        let idx: int = ((currentTable - 1 + offset) % nbTables + nbTables) % nbTables
+        return idx + 1
+    }
+
+    // Places du round 1 : tables tirées au sort, 4 joueurs N/S/E/O.
+    public static List<SeatRow> GenerateInitialSeats(List<TeamIn> teams) {
+        let nb: int = teams.Count()
+        // Pool [1..nb] mélangé par Fisher-Yates (tirage sans remise).
+        let pool: List<int> = new List<int>()
+        for i in 0..nb { pool.Add(i + 1) }
+        let tableNumbers: List<int> = new List<int>()
+        while (pool.Count() > 0) {
+            let j: int = Placement.Below(pool.Count())
+            tableNumbers.Add(pool.Get(j))
+            pool.RemoveAt(j)
+        }
+
+        let seats: List<SeatRow> = new List<SeatRow>()
+        for ti in 0..nb {
+            let team: TeamIn = teams.Get(ti)
+            let tableNumber: int = tableNumbers.Get(ti)
+            let ordered: List<TeamPlayerIn> = Placement.SortByPlayerNumber(team.Players)
+            for idx in 0..ordered.Count() {
+                let p: TeamPlayerIn = ordered.Get(idx)
+                let row: SeatRow = new SeatRow()
+                row.TableNumber = tableNumber
+                row.Seat = Placement.SeatAt(idx)
+                row.PlayerId = p.PlayerId
+                row.TeamId = team.Id
+                seats.Add(row)
+            }
+        }
+        return seats
+    }
+
+    // Places du round suivant : offset par siège sur le numéro de table.
+    public static List<SeatRow> GenerateNextSeats(List<SeatRow> prevSeats, int offN, int offS, int offE, int offO) {
+        let out: List<SeatRow> = new List<SeatRow>()
+        if (prevSeats.Count() == 0) { return out }
+
+        var nbTables: int = 0
+        for s in prevSeats {
+            if (s.TableNumber > nbTables) { nbTables = s.TableNumber }
+        }
+
+        for s in prevSeats {
+            var off: int = offN
+            if (s.Seat == "S") { off = offS }
+            if (s.Seat == "E") { off = offE }
+            if (s.Seat == "O") { off = offO }
+            let row: SeatRow = new SeatRow()
+            row.TableNumber = Placement.WrapTable(s.TableNumber, off, nbTables)
+            row.Seat = s.Seat
+            row.PlayerId = s.PlayerId
+            row.TeamId = s.TeamId
+            out.Add(row)
+        }
+        return out
+    }
+
+    // Tri stable ascendant par player_number (sélection — 4 éléments).
+    public static List<TeamPlayerIn> SortByPlayerNumber(List<TeamPlayerIn> players) {
+        let out: List<TeamPlayerIn> = new List<TeamPlayerIn>()
+        for p in players { out.Add(p) }
+        let n: int = out.Count()
+        for i in 0..n {
+            var min: int = i
+            for j in (i + 1)..n {
+                let pj: TeamPlayerIn = out.Get(j)
+                let pmin: TeamPlayerIn = out.Get(min)
+                if (pj.PlayerNumber < pmin.PlayerNumber) { min = j }
+            }
+            if (min != i) {
+                let tmp: TeamPlayerIn = out.Get(i)
+                out.Set(i, out.Get(min))
+                out.Set(min, tmp)
+            }
+        }
+        return out
+    }
+}

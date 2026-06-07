@@ -1,0 +1,82 @@
+namespace App
+
+import Amalgame.Net.Http
+import Amalgame.Threading
+
+// Serveur Socket.IO minimal (Engine.IO v4 / Socket.IO v5), WebSocket-only.
+// Permet au socket.io-client@4 du front de se connecter sans modif et de
+// recevoir les broadcasts `ranking:update`. Tourne sur un thread dédié
+// (port séparé) ; Emit() est appelé depuis le thread HTTP principal →
+// registre de connexions gardé par mutex.
+//
+// Séquence par connexion : 0{open} → 40{connect} → puis broadcasts 42[...].
+// Pas de heartbeat serveur en v1 (le client reconnecte seul si la TCP tombe).
+public class SocketIO {
+
+    public Mu:      AmalgameMutex
+    public Conns:   List<AmalgameWsConn>
+    public NextSid: int
+
+    public SocketIO() {
+        this.Mu = Threading.MutexNew()
+        this.Conns = new List<AmalgameWsConn>()
+        this.NextSid = 1
+    }
+
+    // Boucle d'une connexion (un thread par conn via Ws.ServeMt).
+    public int HandleConn(AmalgameWsConn conn) {
+        Threading.MutexLock(this.Mu)
+        let sid: string = "s" + String.FromInt(this.NextSid)
+        this.NextSid = this.NextSid + 1
+        this.Conns.Add(conn)
+        Threading.MutexUnlock(this.Mu)
+
+        // Engine.IO OPEN (upgrades vide : on est déjà en WS) + Socket.IO CONNECT.
+        WsConn.SendText(conn, "0{\"sid\":\"" + sid + "\",\"upgrades\":[],\"pingInterval\":25000,\"pingTimeout\":20000,\"maxPayload\":1000000}")
+        WsConn.SendText(conn, "40{\"sid\":\"" + sid + "\"}")
+
+        // Lecture jusqu'à déconnexion (msg vide = fermé). On ignore l'entrant
+        // (le front ne fait qu'écouter) hormis répondre pong à un ping client.
+        while (!WsConn.IsClosed(conn)) {
+            let msg: string = WsConn.ReceiveText(conn)
+            if (String.Length(msg) == 0) { return 0 }
+            if (msg == "2") { WsConn.SendText(conn, "3") }
+        }
+        return 0
+    }
+
+    // Broadcast `42["<event>",<jsonPayload>]` à toutes les conns vivantes.
+    // Reconstruit le registre en éliminant les conns fermées. Renvoie le
+    // nombre de clients atteints.
+    public int Emit(string event, string jsonPayload) {
+        let frame: string = "42[\"" + event + "\"," + jsonPayload + "]"
+        Threading.MutexLock(this.Mu)
+        let alive: List<AmalgameWsConn> = new List<AmalgameWsConn>()
+        var sent: int = 0
+        for i in 0..this.Conns.Count() {
+            let c: AmalgameWsConn = this.Conns.Get(i)
+            if (!WsConn.IsClosed(c)) {
+                if (WsConn.SendText(c, frame)) {
+                    sent = sent + 1
+                    alive.Add(c)
+                }
+            }
+        }
+        this.Conns = alive
+        Threading.MutexUnlock(this.Mu)
+        return sent
+    }
+
+    // Lance le serveur WS sur un thread de fond (non bloquant pour app.Serve).
+    public void ServeBackground(int port) {
+        let sio: SocketIO = this
+        Threading.ThreadSpawn(arg => sio.RunServer(port), 0)
+    }
+
+    public int RunServer(int port) {
+        let sio: SocketIO = this
+        let handler = conn => sio.HandleConn(conn)
+        Ws.ServeMt(port, handler)
+        return 0
+    }
+}

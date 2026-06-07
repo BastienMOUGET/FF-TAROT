@@ -468,10 +468,10 @@ INSERT INTO cards (code, suit, rank_label, display_order) VALUES
   ('EXC','excuse','0',78);
 
 -- Utilisateur admin par défaut (mot de passe : admin123)
--- Hash bcrypt 10 rounds. Changez immédiatement en prod.
+-- Hash scrypt (amalgame-crypto Password.Hash). Changez immédiatement en prod.
 INSERT INTO users (username, password_hash, role, full_name) VALUES
   ('admin',
-   '$2b$10$kFeNV3I.tP1lK20Bbuvvw.cvimvLQlMvT7KZJELVVc2zqypT6QCte',
+   '$scrypt$ln=15,r=8,p=1$lzTnhnClOkY7RcXOaJJS-g$UQLg5juPCb6q3Js07u-_V1woLKtzjBj4dU4yKLtPgkQ',
    'admin',
    'Administrateur');
 

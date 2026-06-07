@@ -1,0 +1,89 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module route-sheet — feuille de route imprimable d'un sous-tournoi
+// (agrégation tournoi → rounds → tables → sièges).
+public class ModRouteSheet {
+
+    // Sièges d'un round groupés par table → tableau JSON de tables.
+    static JsonValue TablesForRound(Db db, string roundId) {
+        let seatRows: List<List<string>> = db.Rows(
+            "SELECT s.table_number, s.seat, s.player_id, s.team_id, p.licence, p.name, p.firstname, t.team_number FROM seats s JOIN players p ON p.id = s.player_id LEFT JOIN teams t ON t.id = s.team_id WHERE s.round_id = ? ORDER BY s.table_number, FIELD(s.seat, 'N','S','E','O')",
+            Db.P1(roundId))
+        let tables: JsonValue = J.Arr()
+        var curTable: int = -1
+        var curSeats: JsonValue = J.Arr()
+        var curObj: JsonValue = J.Obj()
+        for i in 0..seatRows.Count() {
+            let sr: List<string> = seatRows.Get(i)
+            let tnum: int = Db.CellInt(sr.Get(0))
+            if (tnum != curTable) {
+                if (curTable != -1) {
+                    curObj.AppendEntry("seats", curSeats)
+                    tables.AppendItem(curObj)
+                }
+                curTable = tnum
+                curObj = J.Obj()
+                curObj.AppendEntry("table_number", J.Int(tnum))
+                curSeats = J.Arr()
+            }
+            let seat: JsonValue = J.Obj()
+            seat.AppendEntry("seat", J.CellStr(sr.Get(1)))
+            seat.AppendEntry("player_id", J.CellInt(sr.Get(2)))
+            seat.AppendEntry("team_id", J.CellIntN(sr.Get(3)))
+            seat.AppendEntry("licence", J.CellStrN(sr.Get(4)))
+            seat.AppendEntry("name", J.CellStr(sr.Get(5)))
+            seat.AppendEntry("firstname", J.CellStr(sr.Get(6)))
+            seat.AppendEntry("team_number", J.CellIntN(sr.Get(7)))
+            curSeats.AppendItem(seat)
+        }
+        if (curTable != -1) {
+            curObj.AppendEntry("seats", curSeats)
+            tables.AppendItem(curObj)
+        }
+        return tables
+    }
+
+    // GET /api/sub-tournaments/:subTournamentId/route-sheet
+    public static HttpResponse Get(WebContext ctx, Db db) {
+        let subId: string = ctx.Param("subTournamentId")
+        let subRows: List<List<string>> = db.Rows(
+            "SELECT st.id, st.label, st.color, st.color_name, t.id AS tournament_id, t.code AS tournament_code, t.name AS tournament_name, t.date AS tournament_date FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id WHERE st.id = ?",
+            Db.P1(subId))
+        if (subRows.Count() == 0) { return HttpErr.NotFound() }
+        let s0: List<string> = subRows.Get(0)
+
+        let tournament: JsonValue = J.Obj()
+        tournament.AppendEntry("id", J.CellInt(s0.Get(4)))
+        tournament.AppendEntry("code", J.CellStr(s0.Get(5)))
+        tournament.AppendEntry("name", J.CellStr(s0.Get(6)))
+        tournament.AppendEntry("date", J.CellStrN(s0.Get(7)))
+
+        let subTournament: JsonValue = J.Obj()
+        subTournament.AppendEntry("id", J.CellInt(s0.Get(0)))
+        subTournament.AppendEntry("label", J.CellStr(s0.Get(1)))
+        subTournament.AppendEntry("color", J.CellStrN(s0.Get(2)))
+        subTournament.AppendEntry("color_name", J.CellStrN(s0.Get(3)))
+
+        let roundRows: List<List<string>> = db.Rows(
+            "SELECT id, round_number, coef FROM rounds WHERE sub_tournament_id = ? ORDER BY round_number ASC", Db.P1(subId))
+        let rounds: JsonValue = J.Arr()
+        for i in 0..roundRows.Count() {
+            let rr: List<string> = roundRows.Get(i)
+            let rid: string = rr.Get(0)
+            let ro: JsonValue = J.Obj()
+            ro.AppendEntry("round_number", J.CellInt(rr.Get(1)))
+            ro.AppendEntry("coef", J.CellFloat(rr.Get(2)))
+            ro.AppendEntry("tables", ModRouteSheet.TablesForRound(db, rid))
+            rounds.AppendItem(ro)
+        }
+
+        let out: JsonValue = J.Obj()
+        out.AppendEntry("tournament", tournament)
+        out.AppendEntry("sub_tournament", subTournament)
+        out.AppendEntry("rounds", rounds)
+        return J.Ok(out)
+    }
+}

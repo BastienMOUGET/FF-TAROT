@@ -1,0 +1,123 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module sub-tournaments — sous-tournois (divisions). Liste sous un tournoi.
+public class ModSubTournaments {
+
+    static string SELECT_BASE() {
+        return "SELECT st.id, st.tournament_id, st.label, st.color, st.color_name, st.indice_pcn, st.championnat, st.donne_set_id, t.code AS tournament_code, t.name AS tournament_name FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id"
+    }
+
+    public static JsonValue Row(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("tournament_id", J.CellInt(r.Get(1)))
+        o.AppendEntry("label", J.CellStr(r.Get(2)))
+        o.AppendEntry("color", J.CellStrN(r.Get(3)))
+        o.AppendEntry("color_name", J.CellStrN(r.Get(4)))
+        o.AppendEntry("indice_pcn", J.CellFloat(r.Get(5)))
+        o.AppendEntry("championnat", J.CellBool(r.Get(6)))
+        o.AppendEntry("donne_set_id", J.CellIntN(r.Get(7)))
+        o.AppendEntry("tournament_code", J.CellStrN(r.Get(8)))
+        o.AppendEntry("tournament_name", J.CellStrN(r.Get(9)))
+        return o
+    }
+
+    // GET /api/tournaments/:tournamentId/sub-tournaments
+    public static HttpResponse ListByTournament(WebContext ctx, Db db) {
+        let tid: string = ctx.Param("tournamentId")
+        let rows: List<List<string>> = db.Rows(
+            ModSubTournaments.SELECT_BASE() + " WHERE st.tournament_id = ? ORDER BY st.label ASC", Db.P1(tid))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModSubTournaments.Row(r))
+        }
+        return J.Ok(arr)
+    }
+
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows(ModSubTournaments.SELECT_BASE() + " WHERE st.id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModSubTournaments.Row(r0))
+    }
+
+    static HttpResponse Refetch(Db db, int id) {
+        let rows: List<List<string>> = db.Rows(ModSubTournaments.SELECT_BASE() + " WHERE st.id = ?", Db.P1(String.FromInt(id)))
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModSubTournaments.Row(r0))
+    }
+
+    static void Fill(SqlIns ins, JsonValue b, string tournamentId) {
+        ins.Set("tournament_id", tournamentId)
+        ins.Set("label", Fld.Str(b, "label"))
+        if (Fld.HasStr(b, "color")) { ins.Set("color", Fld.Str(b, "color")) } else { ins.SetNull("color") }
+        if (Fld.HasStr(b, "color_name")) { ins.Set("color_name", Fld.Str(b, "color_name")) } else { ins.SetNull("color_name") }
+        ins.Set("indice_pcn", Fld.NumOr(b, "indice_pcn", "0"))
+        ins.Set("championnat", Fld.BoolTo01(b, "championnat"))
+        if (Fld.HasInt(b, "donne_set_id")) { ins.Set("donne_set_id", Fld.IntStr(b, "donne_set_id")) } else { ins.SetNull("donne_set_id") }
+    }
+
+    // POST /api/tournaments/:tournamentId/sub-tournaments (admin)
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let tid: string = ctx.Param("tournamentId")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasStr(b, "label")) { return HttpErr.BadRequest("label requis") }
+
+        let ins: SqlIns = new SqlIns()
+        ModSubTournaments.Fill(ins, b, tid)
+        let ok: bool = db.Exec(ins.Sql("sub_tournaments"), ins.Params())
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let resp: HttpResponse = ModSubTournaments.Refetch(db, db.LastInsertId())
+        return resp.Status(201)
+    }
+
+    // PUT /api/sub-tournaments/:id (admin)
+    public static HttpResponse Update(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasStr(b, "label")) { return HttpErr.BadRequest("label requis") }
+
+        let upd: SqlUpd = new SqlUpd()
+        upd.Set("label", Fld.Str(b, "label"))
+        if (Fld.HasStr(b, "color")) { upd.Set("color", Fld.Str(b, "color")) } else { upd.SetNull("color") }
+        if (Fld.HasStr(b, "color_name")) { upd.Set("color_name", Fld.Str(b, "color_name")) } else { upd.SetNull("color_name") }
+        upd.Set("indice_pcn", Fld.NumOr(b, "indice_pcn", "0"))
+        upd.Set("championnat", Fld.BoolTo01(b, "championnat"))
+        if (Fld.HasInt(b, "donne_set_id")) { upd.Set("donne_set_id", Fld.IntStr(b, "donne_set_id")) } else { upd.SetNull("donne_set_id") }
+
+        let ok: bool = db.Exec(upd.Sql("sub_tournaments"), upd.ParamsWithId(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return ModSubTournaments.Refetch(db, String.ToInt(id))
+    }
+
+    // DELETE /api/sub-tournaments/:id (admin)
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM sub_tournaments WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+}

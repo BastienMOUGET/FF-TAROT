@@ -1,0 +1,26 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module cards — référentiel des 78 cartes (lecture publique).
+public class ModCards {
+
+    public static HttpResponse List(WebContext ctx, Db db) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, code, suit, rank_label, display_order FROM cards ORDER BY display_order ASC",
+            Db.NoParams())
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("id", J.CellInt(r.Get(0)))
+            o.AppendEntry("code", J.CellStr(r.Get(1)))
+            o.AppendEntry("suit", J.CellStr(r.Get(2)))
+            o.AppendEntry("rank", J.CellStr(r.Get(3)))
+            o.AppendEntry("display_order", J.CellInt(r.Get(4)))
+            arr.AppendItem(o)
+        }
+        return J.Ok(arr)
+    }
+}

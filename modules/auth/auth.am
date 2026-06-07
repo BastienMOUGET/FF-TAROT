@@ -1,0 +1,189 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+import Amalgame.Crypto
+
+// Module auth — login (scrypt + JWT), profil, gestion des utilisateurs.
+public class ModAuth {
+
+    // Mapping utilisateur public (SELECT sans password_hash) :
+    // id, username, role, full_name, email, created_at
+    public static JsonValue PublicUser(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("username", J.CellStr(r.Get(1)))
+        o.AppendEntry("role", J.CellStr(r.Get(2)))
+        o.AppendEntry("full_name", J.CellStrN(r.Get(3)))
+        o.AppendEntry("email", J.CellStrN(r.Get(4)))
+        o.AppendEntry("created_at", J.CellStrN(r.Get(5)))
+        return o
+    }
+
+    static string SELECT_PUBLIC() {
+        return "SELECT id, username, role, full_name, email, created_at FROM users"
+    }
+
+    static bool ValidRole(string role) {
+        if (role == "admin") { return true }
+        if (role == "arbitre") { return true }
+        if (role == "viewer") { return true }
+        return false
+    }
+
+    // POST /api/auth/login (public)
+    public static HttpResponse Login(WebContext ctx, Db db) {
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let uV: JsonValue = b.Get("username")
+        let pV: JsonValue = b.Get("password")
+        if (!uV.IsString()) { return HttpErr.BadRequest("username requis") }
+        if (!pV.IsString()) { return HttpErr.BadRequest("password requis") }
+        let username: string = uV.AsString()
+        let password: string = pV.AsString()
+
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, username, password_hash, role, full_name, email, created_at FROM users WHERE username = ?",
+            Db.P1(username))
+        if (rows.Count() == 0) { return J.Err(401, "Identifiants invalides") }
+        let r0: List<string> = rows.Get(0)
+        let hash: string = r0.Get(2)
+        if (!Password.Verify(password, hash)) { return J.Err(401, "Identifiants invalides") }
+
+        let id: int = Db.CellInt(r0.Get(0))
+        let role: string = r0.Get(3)
+        let token: string = Auth.Sign(id, username, role, Auth.Secret())
+
+        // user public (indices du SELECT login : id0, username1, role3, full_name4, email5, created_at6)
+        let user: JsonValue = J.Obj()
+        user.AppendEntry("id", J.CellInt(r0.Get(0)))
+        user.AppendEntry("username", J.CellStr(r0.Get(1)))
+        user.AppendEntry("role", J.CellStr(r0.Get(3)))
+        user.AppendEntry("full_name", J.CellStrN(r0.Get(4)))
+        user.AppendEntry("email", J.CellStrN(r0.Get(5)))
+        user.AppendEntry("created_at", J.CellStrN(r0.Get(6)))
+
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("token", J.Str(token))
+        o.AppendEntry("user", user)
+        return J.Ok(o)
+    }
+
+    // GET /api/auth/me (authentifié)
+    public static HttpResponse Me(WebContext ctx, Db db) {
+        let claims: JsonValue = Auth.ClaimsOf(ctx)
+        if (claims.IsNull()) { return HttpErr.Unauthorized() }
+        let id: int = Auth.SubOf(claims)
+        return ModAuth.FetchUser(db, id)
+    }
+
+    static HttpResponse FetchUser(Db db, int id) {
+        let rows: List<List<string>> = db.Rows(ModAuth.SELECT_PUBLIC() + " WHERE id = ?", Db.P1(String.FromInt(id)))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModAuth.PublicUser(r0))
+    }
+
+    // PUT /api/auth/me/password (authentifié)
+    public static HttpResponse ChangeMyPassword(WebContext ctx, Db db) {
+        let claims: JsonValue = Auth.ClaimsOf(ctx)
+        if (claims.IsNull()) { return HttpErr.Unauthorized() }
+        let id: int = Auth.SubOf(claims)
+        return ModAuth.DoChangePassword(ctx, db, id)
+    }
+
+    static HttpResponse DoChangePassword(WebContext ctx, Db db, int userId) {
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let npV: JsonValue = b.Get("new_password")
+        if (!npV.IsString()) { return HttpErr.BadRequest("new_password requis") }
+        let np: string = npV.AsString()
+        if (String.Length(np) < 6) { return HttpErr.BadRequest("password doit faire au moins 6 caractères") }
+        let hash: string = Password.Hash(np)
+        let ok: bool = db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", Db.P2(hash, String.FromInt(userId)))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+
+    // GET /api/users (admin)
+    public static HttpResponse ListUsers(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let rows: List<List<string>> = db.Rows(ModAuth.SELECT_PUBLIC() + " ORDER BY username ASC", Db.NoParams())
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModAuth.PublicUser(r))
+        }
+        return J.Ok(arr)
+    }
+
+    // GET /api/users/:id (admin)
+    public static HttpResponse GetUser(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let id: string = ctx.Param("id")
+        return ModAuth.FetchUser(db, String.ToInt(id))
+    }
+
+    // POST /api/users (admin)
+    public static HttpResponse CreateUser(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let uV: JsonValue = b.Get("username")
+        let pV: JsonValue = b.Get("password")
+        let roleV: JsonValue = b.Get("role")
+        if (!uV.IsString()) { return HttpErr.BadRequest("username requis") }
+        if (!pV.IsString()) { return HttpErr.BadRequest("password requis") }
+        if (!roleV.IsString()) { return HttpErr.BadRequest("role requis") }
+        let username: string = uV.AsString()
+        let password: string = pV.AsString()
+        let role: string = roleV.AsString()
+        if (!ModAuth.ValidRole(role)) { return HttpErr.BadRequest("role doit être admin, arbitre ou viewer") }
+        if (String.Length(password) < 6) { return HttpErr.BadRequest("password doit faire au moins 6 caractères") }
+
+        let hash: string = Password.Hash(password)
+        let ins: SqlIns = new SqlIns()
+        ins.Set("username", username)
+        ins.Set("password_hash", hash)
+        ins.Set("role", role)
+        if (Fld.HasStr(b, "full_name")) { ins.Set("full_name", Fld.Str(b, "full_name")) } else { ins.SetNull("full_name") }
+        if (Fld.HasStr(b, "email")) { ins.Set("email", Fld.Str(b, "email")) } else { ins.SetNull("email") }
+
+        let ok: bool = db.Exec(ins.Sql("users"), ins.Params())
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let resp: HttpResponse = ModAuth.FetchUser(db, db.LastInsertId())
+        return resp.Status(201)
+    }
+
+    // PUT /api/users/:id/password (admin)
+    public static HttpResponse ChangeUserPassword(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let id: string = ctx.Param("id")
+        return ModAuth.DoChangePassword(ctx, db, String.ToInt(id))
+    }
+
+    // DELETE /api/users/:id (admin)
+    public static HttpResponse DeleteUser(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM users WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+}

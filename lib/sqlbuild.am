@@ -1,0 +1,108 @@
+namespace App
+
+import Amalgame.Json
+
+// Builders INSERT/UPDATE gérant les colonnes nullable : chaque colonne
+// émet soit `?` (avec un paramètre) soit le littéral `NULL`. Évite la
+// combinatoire de SQL branché quand plusieurs champs sont nullable.
+//
+// Helpers d'extraction JSON reproduisant la sémantique Node :
+//   - StrOrNull  : `val || null`     ("" → NULL)
+//   - IntOrNull  : `val ?? null`     (absent → NULL, 0 conservé)
+//   - IntOr      : `val ?? def`      (absent → défaut)
+//   - NumOr      : idem pour décimal
+//   - BoolTo01   : `val ? 1 : 0`
+
+public class SqlIns {
+    public Cols: List<string>
+    public Phs:  List<string>
+    public Vals: List<string>
+    public SqlIns() {
+        this.Cols = new List<string>()
+        this.Phs = new List<string>()
+        this.Vals = new List<string>()
+    }
+    public void Set(string col, string val) {
+        this.Cols.Add(col)
+        this.Phs.Add("?")
+        this.Vals.Add(val)
+    }
+    public void SetNull(string col) {
+        this.Cols.Add(col)
+        this.Phs.Add("NULL")
+    }
+    public string Sql(string table) {
+        return "INSERT INTO " + table + " (" + String.Join(this.Cols, ", ") + ") VALUES (" + String.Join(this.Phs, ", ") + ")"
+    }
+    public List<string> Params() { return this.Vals }
+}
+
+public class SqlUpd {
+    public Sets: List<string>   // "col = ?" ou "col = NULL"
+    public Vals: List<string>
+    public SqlUpd() {
+        this.Sets = new List<string>()
+        this.Vals = new List<string>()
+    }
+    public void Set(string col, string val) {
+        this.Sets.Add(col + " = ?")
+        this.Vals.Add(val)
+    }
+    public void SetNull(string col) {
+        this.Sets.Add(col + " = NULL")
+    }
+    // SQL UPDATE ... SET ... WHERE id = ? ; ajoute l'id en dernier paramètre.
+    public string Sql(string table) {
+        return "UPDATE " + table + " SET " + String.Join(this.Sets, ", ") + " WHERE id = ?"
+    }
+    public List<string> ParamsWithId(string id) {
+        let p: List<string> = new List<string>()
+        for v in this.Vals { p.Add(v) }
+        p.Add(id)
+        return p
+    }
+}
+
+// Extraction de champs JSON avec sémantique Node.
+public class Fld {
+    // `val || null` : string non-vide sinon "absent".
+    public static bool HasStr(JsonValue b, string key) {
+        let v: JsonValue = b.Get(key)
+        if (!v.IsString()) { return false }
+        return String.Length(v.AsString()) > 0
+    }
+    public static string Str(JsonValue b, string key) {
+        let v: JsonValue = b.Get(key)
+        return v.AsString()
+    }
+    // `val ?? null` : présent si int (0 inclus).
+    public static bool HasInt(JsonValue b, string key) {
+        let v: JsonValue = b.Get(key)
+        return v.IsInt()
+    }
+    public static string IntStr(JsonValue b, string key) {
+        let v: JsonValue = b.Get(key)
+        return String.FromInt(v.AsInt())
+    }
+    // Nombre (int ou float) → string ; `def` si absent.
+    public static string NumOr(JsonValue b, string key, string def) {
+        let v: JsonValue = b.Get(key)
+        if (v.IsInt()) { return String.FromInt(v.AsInt()) }
+        if (v.IsFloat()) { return String.FromFloat(v.AsFloat()) }
+        return def
+    }
+    // Entier ; `def` si absent.
+    public static string IntOr(JsonValue b, string key, string def) {
+        let v: JsonValue = b.Get(key)
+        if (v.IsInt()) { return String.FromInt(v.AsInt()) }
+        return def
+    }
+    // `val ? 1 : 0`.
+    public static string BoolTo01(JsonValue b, string key) {
+        let v: JsonValue = b.Get(key)
+        if (v.IsBool()) {
+            if (v.AsBool()) { return "1" }
+        }
+        return "0"
+    }
+}

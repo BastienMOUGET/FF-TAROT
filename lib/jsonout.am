@@ -1,0 +1,97 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Helpers de construction/sérialisation JSON pour les réponses HTTP.
+// L'API stdlib (Amalgame.Json) est read-only côté accesseurs ; pour
+// CONSTRUIRE on utilise JsonValue.Set*/Append* puis Json.Encode.
+public class J {
+
+    // ── Constructeurs de valeurs scalaires ───────────────
+    public static JsonValue Str(string s) {
+        let v: JsonValue = new JsonValue()
+        v.SetString(s)
+        return v
+    }
+
+    public static JsonValue Int(int n) {
+        let v: JsonValue = new JsonValue()
+        v.SetInt(n)
+        return v
+    }
+
+    public static JsonValue Bool(bool b) {
+        let v: JsonValue = new JsonValue()
+        v.SetBool(b)
+        return v
+    }
+
+    public static JsonValue Null() {
+        let v: JsonValue = new JsonValue()
+        v.SetNull()
+        return v
+    }
+
+    // Objet vide prêt à recevoir des AppendEntry.
+    public static JsonValue Obj() {
+        let v: JsonValue = new JsonValue()
+        let ks: List<string> = new List<string>()
+        let vs: List<JsonValue> = new List<JsonValue>()
+        v.SetObject(ks, vs)
+        return v
+    }
+
+    // Tableau vide prêt à recevoir des AppendItem.
+    public static JsonValue Arr() {
+        let v: JsonValue = new JsonValue()
+        let xs: List<JsonValue> = new List<JsonValue>()
+        v.SetArray(xs)
+        return v
+    }
+
+    public static JsonValue Float(float f) {
+        let v: JsonValue = new JsonValue()
+        v.SetFloat(f)
+        return v
+    }
+
+    // ── Cellules SQL (string) → valeur JSON typée ────────
+    // NULL = "" côté driver ; les *N renvoient null JSON si vide.
+    public static JsonValue CellInt(string cell) { return J.Int(Db.CellInt(cell)) }
+    public static JsonValue CellFloat(string cell) { return J.Float(Db.CellFloat(cell)) }
+    public static JsonValue CellBool(string cell) { return J.Bool(Db.CellBool(cell)) }
+    public static JsonValue CellStr(string cell) { return J.Str(cell) }
+
+    public static JsonValue CellIntN(string cell) {
+        if (Db.IsNull(cell)) { return J.Null() }
+        return J.Int(Db.CellInt(cell))
+    }
+    public static JsonValue CellStrN(string cell) {
+        if (Db.IsNull(cell)) { return J.Null() }
+        return J.Str(cell)
+    }
+    public static JsonValue CellFloatN(string cell) {
+        if (Db.IsNull(cell)) { return J.Null() }
+        return J.Float(Db.CellFloat(cell))
+    }
+
+    // ── Réponses HTTP ────────────────────────────────────
+    public static HttpResponse Ok(JsonValue v) {
+        return HttpResponse.New().Status(200).Json(Json.Encode(v))
+    }
+
+    public static HttpResponse Created(JsonValue v) {
+        return HttpResponse.New().Status(201).Json(Json.Encode(v))
+    }
+
+    public static HttpResponse NoContent() {
+        return HttpResponse.New().Status(204)
+    }
+
+    public static HttpResponse Err(int status, string msg) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("error", J.Str(msg))
+        return HttpResponse.New().Status(status).Json(Json.Encode(o))
+    }
+}

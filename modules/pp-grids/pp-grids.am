@@ -1,0 +1,99 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module pp-grids — grille Points de Palmarès par sous-tournoi.
+// GET liste ; PUT remplace en bloc (transaction) ; DELETE vide.
+// Déclenche un refresh classement (câblé avec ranking + socketio).
+public class ModPpGrids {
+
+    static bool SubExists(Db db, string subId) {
+        let rows: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
+        return rows.Count() > 0
+    }
+
+    static JsonValue GridJson(Db db, string subId) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT place, pp FROM pp_grids WHERE sub_tournament_id = ? ORDER BY place ASC", Db.P1(subId))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("place", J.CellInt(r.Get(0)))
+            o.AppendEntry("pp", J.CellFloat(r.Get(1)))
+            arr.AppendItem(o)
+        }
+        return arr
+    }
+
+    // GET /api/sub-tournaments/:subTournamentId/pp-grid
+    public static HttpResponse Get(WebContext ctx, Db db) {
+        let subId: string = ctx.Param("subTournamentId")
+        if (!ModPpGrids.SubExists(db, subId)) { return HttpErr.NotFound() }
+        return J.Ok(ModPpGrids.GridJson(db, subId))
+    }
+
+    // PUT /api/sub-tournaments/:subTournamentId/pp-grid (admin) — remplace tout.
+    public static HttpResponse Replace(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let subId: string = ctx.Param("subTournamentId")
+        if (!ModPpGrids.SubExists(db, subId)) { return HttpErr.NotFound() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let entries: JsonValue = b.Get("entries")
+        if (!entries.IsArray()) { return HttpErr.BadRequest("entries doit être un tableau") }
+
+        // Validation préalable (avant d'ouvrir la transaction).
+        let n: int = entries.Length()
+        for i in 0..n {
+            let e: JsonValue = entries.At(i)
+            let placeV: JsonValue = e.Get("place")
+            if (!placeV.IsInt()) { return HttpErr.BadRequest("Chaque entrée doit avoir un place entier") }
+            if (placeV.AsInt() < 1) { return HttpErr.BadRequest("place doit être >= 1") }
+            let ppV: JsonValue = e.Get("pp")
+            if (!ppV.IsInt()) {
+                if (!ppV.IsFloat()) { return HttpErr.BadRequest("pp doit être numérique") }
+            }
+        }
+
+        db.Begin()
+        let delOk: bool = db.Exec("DELETE FROM pp_grids WHERE sub_tournament_id = ?", Db.P1(subId))
+        if (!delOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        for i in 0..n {
+            let e: JsonValue = entries.At(i)
+            let placeV: JsonValue = e.Get("place")
+            let ppV: JsonValue = e.Get("pp")
+            var ppS: string = "0"
+            if (ppV.IsInt()) { ppS = String.FromInt(ppV.AsInt()) }
+            if (ppV.IsFloat()) { ppS = String.FromFloat(ppV.AsFloat()) }
+            let insOk: bool = db.Exec(
+                "INSERT INTO pp_grids (sub_tournament_id, place, pp) VALUES (?, ?, ?)",
+                Db.P3(subId, String.FromInt(placeV.AsInt()), ppS))
+            if (!insOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        }
+        db.Commit()
+
+        ModRanking.RefreshAndBroadcast(db, subId)
+        return J.Ok(ModPpGrids.GridJson(db, subId))
+    }
+
+    // DELETE /api/sub-tournaments/:subTournamentId/pp-grid (admin)
+    public static HttpResponse Clear(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let subId: string = ctx.Param("subTournamentId")
+        if (!ModPpGrids.SubExists(db, subId)) { return HttpErr.NotFound() }
+        let ok: bool = db.Exec("DELETE FROM pp_grids WHERE sub_tournament_id = ?", Db.P1(subId))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        ModRanking.RefreshAndBroadcast(db, subId)
+        return J.NoContent()
+    }
+}

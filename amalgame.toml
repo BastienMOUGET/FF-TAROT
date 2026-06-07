@@ -1,0 +1,60 @@
+
+[package]
+name = "ff-tarot-api"
+version = "2.0.0"
+entry = "server.am"
+description = "FF-TAROT — Backend Amalgame/Mosaic pour gestion de tournois FFT (Libre par 4)"
+
+[dependencies]
+
+[dependencies.crypto]
+git = "github.com/amalgame-lang/amalgame-crypto"
+tag = "v0.7.0"
+
+[dependencies.tls]
+git = "github.com/amalgame-lang/amalgame-tls"
+tag = "v0.3.3"
+
+[dependencies.async]
+git = "github.com/amalgame-lang/amalgame-async"
+tag = "v0.3.0"
+
+[dependencies.http]
+git = "github.com/amalgame-lang/amalgame-net-http"
+tag = "v0.24.0"
+
+[dependencies.datetime]
+git = "github.com/amalgame-lang/amalgame-datetime"
+tag = "v0.2.2"
+
+[dependencies.random]
+git = "github.com/amalgame-lang/amalgame-random"
+tag = "v0.1.0"
+
+[dependencies.logging]
+git = "github.com/amalgame-lang/amalgame-logging"
+tag = "v0.2.0"
+
+[dependencies.redis]
+git = "github.com/amalgame-lang/amalgame-database-nosql-redis"
+tag = "v0.2.0"
+
+[dependencies.threading]
+git = "github.com/amalgame-lang/amalgame-threading"
+tag = "v0.1.0"
+
+[dependencies.compress]
+git = "github.com/amalgame-lang/amalgame-compress"
+tag = "v0.1.0"
+
+[dependencies.web]
+git = "github.com/amalgame-lang/amalgame-web"
+tag = "v0.36.1"
+
+[dependencies.service]
+git = "github.com/amalgame-lang/amalgame-service"
+tag = "v0.2.0"
+
+[dependencies.mysql]
+git = "github.com/amalgame-lang/amalgame-database-mysql"
+tag = "v0.3.0"

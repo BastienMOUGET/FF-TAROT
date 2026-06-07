@@ -1,0 +1,271 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module donne-sets — jeux de donnes pré-tirées (78 cartes : N/S/E/O ×18 + ECART ×6).
+public class ModDonneSets {
+
+    static JsonValue SetRow(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("name", J.CellStr(r.Get(1)))
+        o.AppendEntry("nb_donne", J.CellInt(r.Get(2)))
+        o.AppendEntry("created_at", J.CellStrN(r.Get(3)))
+        return o
+    }
+
+    // Mélange Fisher-Yates via CSPRNG (tirage sans remise).
+    static List<string> Shuffle(List<string> arr) {
+        let pool: List<string> = new List<string>()
+        for x in arr { pool.Add(x) }
+        let out: List<string> = new List<string>()
+        while (pool.Count() > 0) {
+            let j: int = Placement.Below(pool.Count())
+            out.Add(pool.Get(j))
+            pool.RemoveAt(j)
+        }
+        return out
+    }
+
+    static string PosForIdx(int idx) {
+        if (idx < 18) { return "N" }
+        if (idx < 36) { return "S" }
+        if (idx < 54) { return "E" }
+        if (idx < 72) { return "O" }
+        return "ECART"
+    }
+
+    static List<string> LoadAllCardIds(Db db) {
+        let rows: List<List<string>> = db.Rows("SELECT id FROM cards ORDER BY id ASC", Db.NoParams())
+        let ids: List<string> = new List<string>()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            ids.Add(r.Get(0))
+        }
+        return ids
+    }
+
+    // Distribue une donne (78 inserts). Renvoie false sur erreur SQL.
+    static bool DealInto(Db db, string setId, string donneNumber, List<string> allCardIds) {
+        let shuffled: List<string> = ModDonneSets.Shuffle(allCardIds)
+        for idx in 0..shuffled.Count() {
+            let ps: List<string> = new List<string>()
+            ps.Add(setId)
+            ps.Add(donneNumber)
+            ps.Add(shuffled.Get(idx))
+            ps.Add(ModDonneSets.PosForIdx(idx))
+            if (!db.Exec("INSERT INTO donne_cards (donne_set_id, donne_number, card_id, position) VALUES (?, ?, ?, ?)", ps)) { return false }
+        }
+        return true
+    }
+
+    static int Guard(WebContext ctx) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        return rc
+    }
+
+    // GET /api/donne-sets
+    public static HttpResponse List(WebContext ctx, Db db) {
+        let rows: List<List<string>> = db.Rows("SELECT id, name, nb_donne, created_at FROM donne_sets ORDER BY created_at DESC", Db.NoParams())
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModDonneSets.SetRow(r))
+        }
+        return J.Ok(arr)
+    }
+
+    // GET /api/donne-sets/:id
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows("SELECT id, name, nb_donne, created_at FROM donne_sets WHERE id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModDonneSets.SetRow(r0))
+    }
+
+    // POST /api/donne-sets (admin) — crée + tire nb_donne donnes (transaction).
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = ModDonneSets.Guard(ctx)
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasInt(b, "nb_donne")) { return HttpErr.BadRequest("nb_donne requis") }
+        let nbV: JsonValue = b.Get("nb_donne")
+        let nb: int = nbV.AsInt()
+        if (nb < 1) { return HttpErr.BadRequest("nb_donne doit être entre 1 et 200") }
+        if (nb > 200) { return HttpErr.BadRequest("nb_donne doit être entre 1 et 200") }
+        var name: string = ""
+        if (Fld.HasStr(b, "name")) { name = Fld.Str(b, "name") }
+
+        let allCardIds: List<string> = ModDonneSets.LoadAllCardIds(db)
+        if (allCardIds.Count() != 78) { return HttpErr.BadRequest("Référentiel cards non initialisé (78 cartes attendues)") }
+
+        db.Begin()
+        let insOk: bool = db.Exec("INSERT INTO donne_sets (name, nb_donne) VALUES (?, ?)", Db.P2(name, String.FromInt(nb)))
+        if (!insOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        let setId: string = String.FromInt(db.LastInsertId())
+        for d in 1..(nb + 1) {
+            if (!ModDonneSets.DealInto(db, setId, String.FromInt(d), allCardIds)) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        }
+        db.Commit()
+
+        let rows: List<List<string>> = db.Rows("SELECT id, name, nb_donne, created_at FROM donne_sets WHERE id = ?", Db.P1(setId))
+        let r0: List<string> = rows.Get(0)
+        let resp: HttpResponse = J.Ok(ModDonneSets.SetRow(r0))
+        return resp.Status(201)
+    }
+
+    // PUT /api/donne-sets/:id (admin) — renomme.
+    public static HttpResponse Rename(WebContext ctx, Db db) {
+        let rc: int = ModDonneSets.Guard(ctx)
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let id: string = ctx.Param("id")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
+        let ok: bool = db.Exec("UPDATE donne_sets SET name = ? WHERE id = ?", Db.P2(Fld.Str(b, "name"), id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        let rows: List<List<string>> = db.Rows("SELECT id, name, nb_donne, created_at FROM donne_sets WHERE id = ?", Db.P1(id))
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModDonneSets.SetRow(r0))
+    }
+
+    // DELETE /api/donne-sets/:id (admin)
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = ModDonneSets.Guard(ctx)
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM donne_sets WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+
+    // Vérifie set + plage de donne ; renvoie nb_donne ou -1 si invalide.
+    static int CheckSetAndDonne(Db db, string setId, int donneNumber) {
+        let sets: List<List<string>> = db.Rows("SELECT id, nb_donne FROM donne_sets WHERE id = ?", Db.P1(setId))
+        if (sets.Count() == 0) { return -1 }
+        let s0: List<string> = sets.Get(0)
+        let nb: int = Db.CellInt(s0.Get(1))
+        if (donneNumber < 1) { return -1 }
+        if (donneNumber > nb) { return -1 }
+        return nb
+    }
+
+    static HttpResponse DonneJson(Db db, string setId, string donneNumber) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT dc.position, c.code, c.suit, c.rank_label, c.id FROM donne_cards dc JOIN cards c ON c.id = dc.card_id WHERE dc.donne_set_id = ? AND dc.donne_number = ? ORDER BY FIELD(dc.position, 'N','S','E','O','ECART'), c.display_order ASC",
+            Db.P2(setId, donneNumber))
+        let hands: JsonValue = J.Obj()
+        let n: JsonValue = J.Arr()
+        let s: JsonValue = J.Arr()
+        let e: JsonValue = J.Arr()
+        let o: JsonValue = J.Arr()
+        let ecart: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let pos: string = r.Get(0)
+            let card: JsonValue = J.Obj()
+            card.AppendEntry("card_id", J.CellInt(r.Get(4)))
+            card.AppendEntry("code", J.CellStr(r.Get(1)))
+            card.AppendEntry("suit", J.CellStr(r.Get(2)))
+            card.AppendEntry("rank", J.CellStr(r.Get(3)))
+            if (pos == "N") { n.AppendItem(card) }
+            if (pos == "S") { s.AppendItem(card) }
+            if (pos == "E") { e.AppendItem(card) }
+            if (pos == "O") { o.AppendItem(card) }
+            if (pos == "ECART") { ecart.AppendItem(card) }
+        }
+        hands.AppendEntry("N", n)
+        hands.AppendEntry("S", s)
+        hands.AppendEntry("E", e)
+        hands.AppendEntry("O", o)
+        hands.AppendEntry("ECART", ecart)
+        let out: JsonValue = J.Obj()
+        out.AppendEntry("donne_set_id", J.CellInt(setId))
+        out.AppendEntry("donne_number", J.CellInt(donneNumber))
+        out.AppendEntry("hands", hands)
+        return J.Ok(out)
+    }
+
+    // GET /api/donne-sets/:id/donnes/:donneNumber
+    public static HttpResponse GetDonne(WebContext ctx, Db db) {
+        let setId: string = ctx.Param("id")
+        let donneNumber: string = ctx.Param("donneNumber")
+        if (ModDonneSets.CheckSetAndDonne(db, setId, String.ToInt(donneNumber)) < 0) { return HttpErr.NotFound() }
+        return ModDonneSets.DonneJson(db, setId, donneNumber)
+    }
+
+    // POST /api/donne-sets/:id/donnes/:donneNumber/regenerate (admin)
+    public static HttpResponse Regenerate(WebContext ctx, Db db) {
+        let rc: int = ModDonneSets.Guard(ctx)
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let setId: string = ctx.Param("id")
+        let donneNumber: string = ctx.Param("donneNumber")
+        if (ModDonneSets.CheckSetAndDonne(db, setId, String.ToInt(donneNumber)) < 0) { return HttpErr.NotFound() }
+        let allCardIds: List<string> = ModDonneSets.LoadAllCardIds(db)
+
+        db.Begin()
+        let delOk: bool = db.Exec("DELETE FROM donne_cards WHERE donne_set_id = ? AND donne_number = ?", Db.P2(setId, donneNumber))
+        if (!delOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        if (!ModDonneSets.DealInto(db, setId, donneNumber, allCardIds)) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        db.Commit()
+        return ModDonneSets.DonneJson(db, setId, donneNumber)
+    }
+
+    // POST /api/donne-sets/:id/donnes/:donneNumber/swap (admin) — échange 2 sièges.
+    public static HttpResponse Swap(WebContext ctx, Db db) {
+        let rc: int = ModDonneSets.Guard(ctx)
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let setId: string = ctx.Param("id")
+        let donneNumber: string = ctx.Param("donneNumber")
+        if (ModDonneSets.CheckSetAndDonne(db, setId, String.ToInt(donneNumber)) < 0) { return HttpErr.NotFound() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let aV: JsonValue = b.Get("seatA")
+        let bV: JsonValue = b.Get("seatB")
+        if (!aV.IsString()) { return HttpErr.BadRequest("seatA requis") }
+        if (!bV.IsString()) { return HttpErr.BadRequest("seatB requis") }
+        let seatA: string = aV.AsString()
+        let seatB: string = bV.AsString()
+        if (seatA == seatB) { return HttpErr.BadRequest("Les deux sièges doivent être différents") }
+        if (!ModDonneSets.ValidPos(seatA)) { return HttpErr.BadRequest("Siège invalide") }
+        if (!ModDonneSets.ValidPos(seatB)) { return HttpErr.BadRequest("Siège invalide") }
+
+        // UPDATE atomique CASE (clé UNIQUE sur card_id, pas position).
+        let ps: List<string> = new List<string>()
+        ps.Add(seatA)
+        ps.Add(seatB)
+        ps.Add(seatB)
+        ps.Add(seatA)
+        ps.Add(setId)
+        ps.Add(donneNumber)
+        ps.Add(seatA)
+        ps.Add(seatB)
+        let ok: bool = db.Exec("UPDATE donne_cards SET position = CASE position WHEN ? THEN ? WHEN ? THEN ? END WHERE donne_set_id = ? AND donne_number = ? AND position IN (?, ?)", ps)
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        return ModDonneSets.DonneJson(db, setId, donneNumber)
+    }
+
+    static bool ValidPos(string p) {
+        if (p == "N") { return true }
+        if (p == "S") { return true }
+        if (p == "E") { return true }
+        if (p == "O") { return true }
+        if (p == "ECART") { return true }
+        return false
+    }
+}

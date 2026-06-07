@@ -1,0 +1,147 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module players — CRUD + recherche (search/club_id/licence), LEFT JOIN clubs.
+public class ModPlayers {
+
+    static string SELECT_BASE() {
+        return "SELECT p.id, p.licence, p.name, p.firstname, p.club_id, p.category, p.gender, p.birth_year, p.created_at, c.code AS club_code, c.name AS club_name FROM players p LEFT JOIN clubs c ON c.id = p.club_id"
+    }
+
+    public static JsonValue Row(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("licence", J.CellStrN(r.Get(1)))
+        o.AppendEntry("name", J.CellStr(r.Get(2)))
+        o.AppendEntry("firstname", J.CellStr(r.Get(3)))
+        o.AppendEntry("club_id", J.CellIntN(r.Get(4)))
+        o.AppendEntry("category", J.CellStrN(r.Get(5)))
+        o.AppendEntry("gender", J.CellStrN(r.Get(6)))
+        o.AppendEntry("birth_year", J.CellIntN(r.Get(7)))
+        o.AppendEntry("created_at", J.CellStrN(r.Get(8)))
+        o.AppendEntry("club_code", J.CellStrN(r.Get(9)))
+        o.AppendEntry("club_name", J.CellStrN(r.Get(10)))
+        return o
+    }
+
+    public static HttpResponse List(WebContext ctx, Db db) {
+        let licence: string = ctx.QueryParam("licence")
+        let clubId: string = ctx.QueryParam("club_id")
+        let search: string = ctx.QueryParam("search")
+
+        let conds: List<string> = new List<string>()
+        let params: List<string> = new List<string>()
+        if (String.Length(licence) > 0) {
+            conds.Add("p.licence = ?")
+            params.Add(licence)
+        }
+        if (String.Length(clubId) > 0) {
+            conds.Add("p.club_id = ?")
+            params.Add(clubId)
+        }
+        if (String.Length(search) > 0) {
+            conds.Add("(p.name LIKE ? OR p.firstname LIKE ? OR p.licence LIKE ?)")
+            let term: string = "%" + search + "%"
+            params.Add(term)
+            params.Add(term)
+            params.Add(term)
+        }
+
+        var sql: string = ModPlayers.SELECT_BASE()
+        if (conds.Count() > 0) {
+            sql = sql + " WHERE " + String.Join(conds, " AND ")
+        }
+        sql = sql + " ORDER BY p.name ASC, p.firstname ASC"
+
+        let rows: List<List<string>> = db.Rows(sql, params)
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModPlayers.Row(r))
+        }
+        return J.Ok(arr)
+    }
+
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows(ModPlayers.SELECT_BASE() + " WHERE p.id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModPlayers.Row(r0))
+    }
+
+    static HttpResponse Refetch(Db db, int id) {
+        let rows: List<List<string>> = db.Rows(ModPlayers.SELECT_BASE() + " WHERE p.id = ?", Db.P1(String.FromInt(id)))
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModPlayers.Row(r0))
+    }
+
+    // Remplit un builder INSERT/UPDATE-like via callbacks Set/SetNull.
+    // name/firstname requis ; le reste nullable (sémantique || null / ?? null).
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
+        if (!Fld.HasStr(b, "firstname")) { return HttpErr.BadRequest("firstname requis") }
+
+        let ins: SqlIns = new SqlIns()
+        if (Fld.HasStr(b, "licence")) { ins.Set("licence", Fld.Str(b, "licence")) } else { ins.SetNull("licence") }
+        ins.Set("name", Fld.Str(b, "name"))
+        ins.Set("firstname", Fld.Str(b, "firstname"))
+        if (Fld.HasInt(b, "club_id")) { ins.Set("club_id", Fld.IntStr(b, "club_id")) } else { ins.SetNull("club_id") }
+        if (Fld.HasStr(b, "category")) { ins.Set("category", Fld.Str(b, "category")) } else { ins.SetNull("category") }
+        if (Fld.HasStr(b, "gender")) { ins.Set("gender", Fld.Str(b, "gender")) } else { ins.SetNull("gender") }
+        if (Fld.HasInt(b, "birth_year")) { ins.Set("birth_year", Fld.IntStr(b, "birth_year")) } else { ins.SetNull("birth_year") }
+
+        let ok: bool = db.Exec(ins.Sql("players"), ins.Params())
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let resp: HttpResponse = ModPlayers.Refetch(db, db.LastInsertId())
+        return resp.Status(201)
+    }
+
+    public static HttpResponse Update(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
+        if (!Fld.HasStr(b, "firstname")) { return HttpErr.BadRequest("firstname requis") }
+
+        let upd: SqlUpd = new SqlUpd()
+        if (Fld.HasStr(b, "licence")) { upd.Set("licence", Fld.Str(b, "licence")) } else { upd.SetNull("licence") }
+        upd.Set("name", Fld.Str(b, "name"))
+        upd.Set("firstname", Fld.Str(b, "firstname"))
+        if (Fld.HasInt(b, "club_id")) { upd.Set("club_id", Fld.IntStr(b, "club_id")) } else { upd.SetNull("club_id") }
+        if (Fld.HasStr(b, "category")) { upd.Set("category", Fld.Str(b, "category")) } else { upd.SetNull("category") }
+        if (Fld.HasStr(b, "gender")) { upd.Set("gender", Fld.Str(b, "gender")) } else { upd.SetNull("gender") }
+        if (Fld.HasInt(b, "birth_year")) { upd.Set("birth_year", Fld.IntStr(b, "birth_year")) } else { upd.SetNull("birth_year") }
+
+        let ok: bool = db.Exec(upd.Sql("players"), upd.ParamsWithId(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return ModPlayers.Refetch(db, String.ToInt(id))
+    }
+
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM players WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+}

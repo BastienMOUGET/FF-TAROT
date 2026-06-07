@@ -1,0 +1,347 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+import Amalgame.Math
+
+// Module ranking — classement Libre par 4 (somme directe des scores validés
+// × coef), PCN géométrique avec abattement, PP par grille. compute() est
+// idempotent (DELETE + INSERT des rankings).
+public class RankEntry {
+    public PlayerId:     int
+    public Name:         string
+    public Firstname:    string
+    public RoundsPlayed: int
+    public Total:        float
+    public TotalGeneral: float
+    public Place:        int
+    public Pcn:          float
+    public Pp:           float
+    public RankEntry() {}
+}
+
+public class ModRanking {
+
+    // abatement = 0.69 + (nb_table - 3)*0.01, capé [0, 0.95].
+    static float Abatement(int nbTables) {
+        var ab: float = 0.69 + (nbTables - 3) * 0.01
+        if (ab > 0.95) { ab = 0.95 }
+        if (ab < 0.0) { ab = 0.0 }
+        return ab
+    }
+
+    // PCN par place (index = place-1), pour les nbPcn = nbTables*2 meilleurs.
+    // Valeurs stockées en string (le float ne survit pas au boxing générique).
+    static List<string> PcnList(int nbTables, float indicePcn) {
+        let out: List<string> = new List<string>()
+        if (indicePcn <= 0.0) { return out }
+        if (nbTables <= 0) { return out }
+        let pcnBase: float = nbTables * 40.0 * indicePcn
+        let ab: float = ModRanking.Abatement(nbTables)
+        let nbPcn: int = nbTables * 2
+        var prev: float = pcnBase
+        for place in 1..(nbPcn + 1) {
+            var val: float = pcnBase
+            if (place != 1) { val = Math.Floor(prev * ab) }
+            if (val > 80.0) { val = 80.0 }
+            if (val < 0.0) { val = 0.0 }
+            out.Add(String.FromFloat(val))
+            prev = val
+        }
+        return out
+    }
+
+    // Map<string,string> (float stocké en string) → float.
+    static float MapGetF(Map<string, string> m, string k) {
+        if (m.Has(k)) { return String.ToFloat(m.Get(k)) }
+        return 0.0
+    }
+    static int MapGetI(Map<string, int> m, string k) {
+        if (m.Has(k)) { return m.Get(k) }
+        return 0
+    }
+
+    // Calcule + persiste le classement. Renvoie false si sous-tournoi absent.
+    public static bool Compute(Db db, string subId) {
+        let subt: List<List<string>> = db.Rows(
+            "SELECT st.id, st.tournament_id, st.indice_pcn, st.championnat, t.coef_default FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id WHERE st.id = ?", Db.P1(subId))
+        if (subt.Count() == 0) { return false }
+        let s0: List<string> = subt.Get(0)
+        let tournamentId: string = s0.Get(1)
+        var coef: float = Db.CellFloat(s0.Get(4))
+        if (coef == 0.0) { coef = 1.0 }
+        let indicePcn: float = Db.CellFloat(s0.Get(2))
+
+        // 1. Joueurs inscrits (via team_players)
+        let players: List<List<string>> = db.Rows(
+            "SELECT DISTINCT tp.player_id, p.name, p.firstname FROM team_players tp JOIN teams t ON t.id = tp.team_id JOIN players p ON p.id = tp.player_id WHERE t.sub_tournament_id = ?", Db.P1(subId))
+
+        // 2. Rounds
+        let rounds: List<List<string>> = db.Rows(
+            "SELECT id, round_number, coef FROM rounds WHERE sub_tournament_id = ? ORDER BY round_number ASC", Db.P1(subId))
+
+        // 3. Scores par joueur (sièges × table_results validés × round_coef)
+        let scoreByPlayer: Map<string, string> = new Map<string, string>()
+        let roundsPlayed: Map<string, int> = new Map<string, int>()
+        var lastRoundId: string = ""
+        for ri in 0..rounds.Count() {
+            let rr: List<string> = rounds.Get(ri)
+            lastRoundId = rr.Get(0)
+        }
+        for ri in 0..rounds.Count() {
+            let rr: List<string> = rounds.Get(ri)
+            let rid: string = rr.Get(0)
+            let seatRows: List<List<string>> = db.Rows(
+                "SELECT s.player_id, s.seat, tr.score_n, tr.score_s, tr.score_e, tr.score_o, tr.validated, r.coef FROM seats s JOIN rounds r ON r.id = s.round_id LEFT JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number WHERE s.round_id = ?", Db.P1(rid))
+            for i in 0..seatRows.Count() {
+                let row: List<string> = seatRows.Get(i)
+                let pid: string = row.Get(0)
+                let seat: string = row.Get(1)
+                let validated: string = row.Get(6)
+                if (!Db.CellBool(validated)) { continue }
+                var cell: string = ""
+                if (seat == "N") { cell = row.Get(2) }
+                if (seat == "S") { cell = row.Get(3) }
+                if (seat == "E") { cell = row.Get(4) }
+                if (seat == "O") { cell = row.Get(5) }
+                if (Db.IsNull(cell)) { continue }
+                var rcoef: float = Db.CellFloat(row.Get(7))
+                if (rcoef == 0.0) { rcoef = 1.0 }
+                let sc: float = Db.CellFloat(cell) * rcoef
+                scoreByPlayer.Set(pid, String.FromFloat(ModRanking.MapGetF(scoreByPlayer, pid) + sc))
+                roundsPlayed.Set(pid, ModRanking.MapGetI(roundsPlayed, pid) + 1)
+            }
+        }
+
+        // 4. Pénalités (somme par joueur pour le tournoi)
+        let penByPlayer: Map<string, string> = new Map<string, string>()
+        let penRows: List<List<string>> = db.Rows(
+            "SELECT player_id, COALESCE(SUM(points),0) FROM penalties WHERE tournament_id = ? GROUP BY player_id", Db.P1(tournamentId))
+        for i in 0..penRows.Count() {
+            let pr: List<string> = penRows.Get(i)
+            penByPlayer.Set(pr.Get(0), pr.Get(1))
+        }
+
+        // 5. Construction des entrées
+        let entries: List<RankEntry> = new List<RankEntry>()
+        for i in 0..players.Count() {
+            let p: List<string> = players.Get(i)
+            let pid: string = p.Get(0)
+            let e: RankEntry = new RankEntry()
+            e.PlayerId = Db.CellInt(pid)
+            e.Name = p.Get(1)
+            e.Firstname = p.Get(2)
+            e.RoundsPlayed = ModRanking.MapGetI(roundsPlayed, pid)
+            let sumScores: float = ModRanking.MapGetF(scoreByPlayer, pid)
+            e.Total = sumScores * coef
+            let penalty: float = ModRanking.MapGetF(penByPlayer, pid)
+            e.TotalGeneral = e.Total + penalty * coef
+            entries.Add(e)
+        }
+
+        // 6. Tri total_general DESC + places (égalités = même place)
+        ModRanking.SortDesc(entries)
+        var place: int = 1
+        for i in 0..entries.Count() {
+            let e: RankEntry = entries.Get(i)
+            if (i > 0) {
+                let prev: RankEntry = entries.Get(i - 1)
+                if (e.TotalGeneral < prev.TotalGeneral) { place = i + 1 }
+            }
+            e.Place = place
+        }
+
+        // 7. nb_tables (dernier round) + PCN
+        var nbTables: int = 0
+        if (String.Length(lastRoundId) > 0) {
+            let tc: List<List<string>> = db.Rows("SELECT COUNT(DISTINCT table_number) FROM seats WHERE round_id = ?", Db.P1(lastRoundId))
+            let tc0: List<string> = tc.Get(0)
+            nbTables = Db.CellInt(tc0.Get(0))
+        }
+        let pcnList: List<string> = ModRanking.PcnList(nbTables, indicePcn)
+
+        // 8. Grille PP
+        let ppByPlace: Map<string, string> = new Map<string, string>()
+        let ppRows: List<List<string>> = db.Rows("SELECT place, pp FROM pp_grids WHERE sub_tournament_id = ?", Db.P1(subId))
+        for i in 0..ppRows.Count() {
+            let pp: List<string> = ppRows.Get(i)
+            ppByPlace.Set(pp.Get(0), pp.Get(1))
+        }
+
+        // 9. pcn/pp par place
+        for i in 0..entries.Count() {
+            let e: RankEntry = entries.Get(i)
+            if (e.Place <= pcnList.Count()) { e.Pcn = String.ToFloat(pcnList.Get(e.Place - 1)) } else { e.Pcn = 0.0 }
+            e.Pp = ModRanking.MapGetF(ppByPlace, String.FromInt(e.Place))
+        }
+
+        // 10. Persistance idempotente
+        db.Begin()
+        let delOk: bool = db.Exec("DELETE FROM rankings WHERE sub_tournament_id = ?", Db.P1(subId))
+        if (!delOk) { db.Rollback() return false }
+        for i in 0..entries.Count() {
+            let e: RankEntry = entries.Get(i)
+            let ps: List<string> = new List<string>()
+            ps.Add(subId)
+            ps.Add(String.FromInt(e.PlayerId))
+            ps.Add(String.FromInt(e.RoundsPlayed))
+            ps.Add(String.FromFloat(e.Total))
+            ps.Add(String.FromFloat(e.TotalGeneral))
+            ps.Add(String.FromInt(e.Place))
+            ps.Add(String.FromFloat(e.Pcn))
+            ps.Add(String.FromFloat(e.Pp))
+            let insOk: bool = db.Exec("INSERT INTO rankings (sub_tournament_id, player_id, rounds_played, total, total_general, place, pcn, pp, eliminated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE)", ps)
+            if (!insOk) { db.Rollback() return false }
+        }
+        db.Commit()
+        return true
+    }
+
+    // Tri décroissant par TotalGeneral (sélection).
+    static void SortDesc(List<RankEntry> xs) {
+        let n: int = xs.Count()
+        for i in 0..n {
+            var best: int = i
+            for j in (i + 1)..n {
+                let xj: RankEntry = xs.Get(j)
+                let xb: RankEntry = xs.Get(best)
+                if (xj.TotalGeneral > xb.TotalGeneral) { best = j }
+            }
+            if (best != i) {
+                let tmp: RankEntry = xs.Get(i)
+                xs.Set(i, xs.Get(best))
+                xs.Set(best, tmp)
+            }
+        }
+    }
+
+    // Recompute + broadcast `ranking:update` (payload {sub_tournament_id, ranking}).
+    // Le socket vit dans db.Io (injecté dans Main).
+    public static void RefreshAndBroadcast(Db db, string subId) {
+        if (!ModRanking.Compute(db, subId)) { return }
+        let payload: string = "{\"sub_tournament_id\":" + subId + ",\"ranking\":" + ModRanking.RankingJson(db, subId) + "}"
+        db.Io.Emit("ranking:update", payload)
+    }
+
+    // Refresh à partir d'un round (récupère son sous-tournoi).
+    public static void RefreshForRound(Db db, string roundId) {
+        let rows: List<List<string>> = db.Rows("SELECT sub_tournament_id FROM rounds WHERE id = ?", Db.P1(roundId))
+        if (rows.Count() > 0) {
+            let r0: List<string> = rows.Get(0)
+            ModRanking.RefreshAndBroadcast(db, r0.Get(0))
+        }
+    }
+
+    // Refresh à partir d'un table_result (handlers de donnes).
+    public static void RefreshForTr(Db db, string trId) {
+        let rows: List<List<string>> = db.Rows("SELECT r.sub_tournament_id FROM table_results tr JOIN rounds r ON r.id = tr.round_id WHERE tr.id = ?", Db.P1(trId))
+        if (rows.Count() > 0) {
+            let r0: List<string> = rows.Get(0)
+            ModRanking.RefreshAndBroadcast(db, r0.Get(0))
+        }
+    }
+
+    // Refresh de tous les sous-tournois d'un tournoi (pénalités).
+    public static void RefreshForTournament(Db db, string tournamentId) {
+        let rows: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE tournament_id = ?", Db.P1(tournamentId))
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            ModRanking.RefreshAndBroadcast(db, r.Get(0))
+        }
+    }
+
+    // Le classement d'un sous-tournoi en tableau JSON (string).
+    public static string RankingJson(Db db, string subId) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp, r.eliminated, r.updated_at FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? ORDER BY r.place ASC, p.name ASC", Db.P1(subId))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("player_id", J.CellInt(r.Get(0)))
+            o.AppendEntry("licence", J.CellStrN(r.Get(1)))
+            o.AppendEntry("name", J.CellStr(r.Get(2)))
+            o.AppendEntry("firstname", J.CellStr(r.Get(3)))
+            o.AppendEntry("rounds_played", J.CellInt(r.Get(4)))
+            o.AppendEntry("total", J.CellFloat(r.Get(5)))
+            o.AppendEntry("total_general", J.CellFloat(r.Get(6)))
+            o.AppendEntry("place", J.CellInt(r.Get(7)))
+            o.AppendEntry("pcn", J.CellFloat(r.Get(8)))
+            o.AppendEntry("pp", J.CellFloat(r.Get(9)))
+            o.AppendEntry("eliminated", J.CellBool(r.Get(10)))
+            o.AppendEntry("updated_at", J.CellStrN(r.Get(11)))
+            arr.AppendItem(o)
+        }
+        return Json.Encode(arr)
+    }
+
+    // GET /api/sub-tournaments/:subTournamentId/ranking
+    public static HttpResponse GetRanking(WebContext ctx, Db db) {
+        let subId: string = ctx.Param("subTournamentId")
+        let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
+        if (subt.Count() == 0) { return HttpErr.NotFound() }
+        let rows: List<List<string>> = db.Rows(
+            "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp, r.eliminated, r.updated_at FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? ORDER BY r.place ASC, p.name ASC", Db.P1(subId))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("player_id", J.CellInt(r.Get(0)))
+            o.AppendEntry("licence", J.CellStrN(r.Get(1)))
+            o.AppendEntry("name", J.CellStr(r.Get(2)))
+            o.AppendEntry("firstname", J.CellStr(r.Get(3)))
+            o.AppendEntry("rounds_played", J.CellInt(r.Get(4)))
+            o.AppendEntry("total", J.CellFloat(r.Get(5)))
+            o.AppendEntry("total_general", J.CellFloat(r.Get(6)))
+            o.AppendEntry("place", J.CellInt(r.Get(7)))
+            o.AppendEntry("pcn", J.CellFloat(r.Get(8)))
+            o.AppendEntry("pp", J.CellFloat(r.Get(9)))
+            o.AppendEntry("eliminated", J.CellBool(r.Get(10)))
+            o.AppendEntry("updated_at", J.CellStrN(r.Get(11)))
+            arr.AppendItem(o)
+        }
+        return J.Ok(arr)
+    }
+
+    // POST /api/sub-tournaments/:subTournamentId/recompute (admin)
+    public static HttpResponse Recompute(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let subId: string = ctx.Param("subTournamentId")
+        let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
+        if (subt.Count() == 0) { return HttpErr.NotFound() }
+        ModRanking.RefreshAndBroadcast(db, subId)
+        return ModRanking.GetRanking(ctx, db)
+    }
+
+    // GET /api/sub-tournaments/:subTournamentId/export-pcn.csv
+    public static HttpResponse ExportPcn(WebContext ctx, Db db) {
+        let subId: string = ctx.Param("subTournamentId")
+        let subt: List<List<string>> = db.Rows(
+            "SELECT st.id, st.label, st.indice_pcn, t.code, t.name FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id WHERE st.id = ?", Db.P1(subId))
+        if (subt.Count() == 0) { return HttpErr.NotFound() }
+        let s0: List<string> = subt.Get(0)
+        let label: string = s0.Get(1)
+        let indicePcn: string = s0.Get(2)
+        let code: string = s0.Get(3)
+        let tname: string = s0.Get(4)
+
+        let rows: List<List<string>> = db.Rows(
+            "SELECT r.pcn, r.pp, p.licence, p.name, p.firstname FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND r.pcn > 0 ORDER BY r.pcn DESC", Db.P1(subId))
+
+        var indPcnInt: string = "0"
+        if (String.Length(indicePcn) > 0) { indPcnInt = String.FromInt(Db.CellInt(indicePcn)) }
+        var csv: string = code + ";" + String.FromInt(rows.Count()) + ";" + indPcnInt + ";1\n"
+        csv = csv + tname + " - " + label + "\n"
+        csv = csv + "numLicenceJoueur;nom prénom;Pcn;PP\n"
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let fullName: string = r.Get(3) + " " + r.Get(4)
+            csv = csv + r.Get(2) + ";" + fullName + ";" + String.FromInt(Db.CellInt(r.Get(0))) + ";" + String.FromInt(Db.CellInt(r.Get(1))) + "\n"
+        }
+        var fname: string = code
+        if (String.Length(fname) == 0) { fname = "tournoi" }
+        return HttpResponse.New().Status(200).Header("Content-Type", "text/csv; charset=utf-8").Header("Content-Disposition", "attachment; filename=\"" + fname + "-" + label + ".csv\"").Text(csv)
+    }
+}

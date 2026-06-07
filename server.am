@@ -1,0 +1,47 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Net.Http
+import Amalgame.Json
+import Amalgame.Service
+
+// Point d'entrée FF-TAROT (Amalgame/Mosaic). Ouvre la DB, monte les
+// routes, sert. amalgame-service installe SIGINT/SIGTERM (Ctrl+C) et
+// bootstrappe le dispatcher SCM Windows (service natif, sans NSSM).
+public class Program {
+    public static void Main(string[] args) {
+        // Handlers de signaux + (Windows) dispatcher de service. En tête de Main.
+        Service.RunAsService("ff-tarot-api")
+
+        let db: Db = new Db()
+        let io: SocketIO = new SocketIO()
+        db.Io = io
+        let ok: bool = db.Open()
+        if (!ok) {
+            Console.WriteError("DB: connexion impossible — " + db.LastError())
+        } else {
+            Console.WriteLine("DB: connecté")
+        }
+
+        // Serveur Socket.IO (classement live) sur un port dédié.
+        var sioPort: int = 3001
+        let sioS: string = Env.Get("SOCKET_PORT")
+        if (String.Length(sioS) > 0) { sioPort = String.ToInt(sioS) }
+        io.ServeBackground(sioPort)
+        Console.WriteLine("Socket.IO : port " + String.FromInt(sioPort))
+
+        let app: WebApp = WebApp.New()
+        app.WithCors(Cors.AllowAll())
+        // Bundle Angular en statique (assets/js/css) ; index + routes client
+        // via le fallback SPA dans Routes.Register. Inoffensif si non buildé.
+        app.WithStatic(Static.New("/", Front.DIR()))
+        Routes.Register(app, db)
+
+        var port: int = 3000
+        let portS: string = Env.Get("PORT")
+        if (String.Length(portS) > 0) { port = String.ToInt(portS) }
+
+        Console.WriteLine("FFT TAROT API — port " + String.FromInt(port))
+        app.Serve(port)
+    }
+}

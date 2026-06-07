@@ -1,0 +1,210 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module rounds — tours + génération du placement (Libre par 4).
+public class ModRounds {
+
+    static JsonValue RoundRow(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("sub_tournament_id", J.CellInt(r.Get(1)))
+        o.AppendEntry("round_number", J.CellInt(r.Get(2)))
+        o.AppendEntry("coef", J.CellFloat(r.Get(3)))
+        o.AppendEntry("started_at", J.CellStrN(r.Get(4)))
+        o.AppendEntry("closed_at", J.CellStrN(r.Get(5)))
+        return o
+    }
+
+    static string ROUND_COLS() { return "id, sub_tournament_id, round_number, coef, started_at, closed_at" }
+
+    // Round + sièges groupés par table (réutilisé par create/generate).
+    static HttpResponse RoundWithTables(Db db, string id) {
+        let rows: List<List<string>> = db.Rows("SELECT " + ModRounds.ROUND_COLS() + " FROM rounds WHERE id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        let o: JsonValue = ModRounds.RoundRow(r0)
+
+        let seatRows: List<List<string>> = db.Rows(
+            "SELECT s.table_number, s.seat, s.player_id, s.team_id, p.licence, p.name, p.firstname, t.team_number FROM seats s JOIN players p ON p.id = s.player_id LEFT JOIN teams t ON t.id = s.team_id WHERE s.round_id = ? ORDER BY s.table_number ASC, FIELD(s.seat, 'N','S','E','O')",
+            Db.P1(id))
+
+        // Groupement par table_number (les lignes sont déjà triées par table).
+        let tables: JsonValue = J.Arr()
+        var curTable: int = -1
+        var curSeats: JsonValue = J.Arr()
+        var curObj: JsonValue = J.Obj()
+        for i in 0..seatRows.Count() {
+            let sr: List<string> = seatRows.Get(i)
+            let tnum: int = Db.CellInt(sr.Get(0))
+            if (tnum != curTable) {
+                if (curTable != -1) {
+                    curObj.AppendEntry("seats", curSeats)
+                    tables.AppendItem(curObj)
+                }
+                curTable = tnum
+                curObj = J.Obj()
+                curObj.AppendEntry("table_number", J.Int(tnum))
+                curSeats = J.Arr()
+            }
+            let seat: JsonValue = J.Obj()
+            seat.AppendEntry("table_number", J.CellInt(sr.Get(0)))
+            seat.AppendEntry("seat", J.CellStr(sr.Get(1)))
+            seat.AppendEntry("player_id", J.CellInt(sr.Get(2)))
+            seat.AppendEntry("team_id", J.CellIntN(sr.Get(3)))
+            seat.AppendEntry("licence", J.CellStrN(sr.Get(4)))
+            seat.AppendEntry("name", J.CellStr(sr.Get(5)))
+            seat.AppendEntry("firstname", J.CellStr(sr.Get(6)))
+            seat.AppendEntry("team_number", J.CellIntN(sr.Get(7)))
+            curSeats.AppendItem(seat)
+        }
+        if (curTable != -1) {
+            curObj.AppendEntry("seats", curSeats)
+            tables.AppendItem(curObj)
+        }
+        o.AppendEntry("tables", tables)
+        return J.Ok(o)
+    }
+
+    // GET /api/sub-tournaments/:subTournamentId/rounds
+    public static HttpResponse ListBySubTournament(WebContext ctx, Db db) {
+        let subId: string = ctx.Param("subTournamentId")
+        let rows: List<List<string>> = db.Rows(
+            "SELECT " + ModRounds.ROUND_COLS() + " FROM rounds WHERE sub_tournament_id = ? ORDER BY round_number ASC", Db.P1(subId))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModRounds.RoundRow(r))
+        }
+        return J.Ok(arr)
+    }
+
+    // GET /api/rounds/:id
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        return ModRounds.RoundWithTables(db, id)
+    }
+
+    // POST /api/sub-tournaments/:subTournamentId/rounds (admin)
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let subId: string = ctx.Param("subTournamentId")
+        let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
+        if (subt.Count() == 0) { return HttpErr.NotFound() }
+
+        var coef: string = "1.0"
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (pr.Ok) {
+            let b: JsonValue = pr.Value
+            coef = Fld.NumOr(b, "coef", "1.0")
+        }
+
+        let numRows: List<List<string>> = db.Rows(
+            "SELECT COALESCE(MAX(round_number), 0) + 1 AS n FROM rounds WHERE sub_tournament_id = ?", Db.P1(subId))
+        let nr0: List<string> = numRows.Get(0)
+        let roundNumber: int = Db.CellInt(nr0.Get(0))
+
+        let ok: bool = db.Exec("INSERT INTO rounds (sub_tournament_id, round_number, coef) VALUES (?, ?, ?)", Db.P3(subId, String.FromInt(roundNumber), coef))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let resp: HttpResponse = ModRounds.RoundWithTables(db, String.FromInt(db.LastInsertId()))
+        return resp.Status(201)
+    }
+
+    // DELETE /api/rounds/:id (admin)
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM rounds WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+
+    // POST /api/rounds/:id/generate (admin) — (re)génère le placement.
+    public static HttpResponse Generate(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let rounds: List<List<string>> = db.Rows("SELECT id, sub_tournament_id, round_number FROM rounds WHERE id = ?", Db.P1(id))
+        if (rounds.Count() == 0) { return HttpErr.NotFound() }
+        let rr: List<string> = rounds.Get(0)
+        let subId: string = rr.Get(1)
+        let roundNumber: int = Db.CellInt(rr.Get(2))
+
+        var seats: List<SeatRow> = new List<SeatRow>()
+
+        if (roundNumber == 1) {
+            // Équipes + 4 joueurs chacune.
+            let teamRows: List<List<string>> = db.Rows("SELECT id FROM teams WHERE sub_tournament_id = ? ORDER BY team_number ASC", Db.P1(subId))
+            if (teamRows.Count() == 0) { return HttpErr.BadRequest("Aucune équipe inscrite dans ce sous-tournoi") }
+            let teams: List<TeamIn> = new List<TeamIn>()
+            for i in 0..teamRows.Count() {
+                let trow: List<string> = teamRows.Get(i)
+                let tidS: string = trow.Get(0)
+                let team: TeamIn = new TeamIn()
+                team.Id = Db.CellInt(tidS)
+                team.Players = new List<TeamPlayerIn>()
+                let prows: List<List<string>> = db.Rows("SELECT player_id, player_number FROM team_players WHERE team_id = ? ORDER BY player_number", Db.P1(tidS))
+                for k in 0..prows.Count() {
+                    let prow: List<string> = prows.Get(k)
+                    let tp: TeamPlayerIn = new TeamPlayerIn()
+                    tp.PlayerId = Db.CellInt(prow.Get(0))
+                    tp.PlayerNumber = Db.CellInt(prow.Get(1))
+                    team.Players.Add(tp)
+                }
+                if (team.Players.Count() != 4) { return HttpErr.BadRequest("Équipe incomplète : " + tidS) }
+                teams.Add(team)
+            }
+            seats = Placement.GenerateInitialSeats(teams)
+        } else {
+            let prevRows: List<List<string>> = db.Rows("SELECT id FROM rounds WHERE sub_tournament_id = ? AND round_number = ?", Db.P2(subId, String.FromInt(roundNumber - 1)))
+            if (prevRows.Count() == 0) { return HttpErr.BadRequest("Round précédent introuvable") }
+            let prow0: List<string> = prevRows.Get(0)
+            let prevId: string = prow0.Get(0)
+            let prevSeatRows: List<List<string>> = db.Rows("SELECT table_number, seat, player_id, team_id FROM seats WHERE round_id = ?", Db.P1(prevId))
+            if (prevSeatRows.Count() == 0) { return HttpErr.BadRequest("Le round précédent ne contient pas de mise en place") }
+            let prevSeats: List<SeatRow> = new List<SeatRow>()
+            for i in 0..prevSeatRows.Count() {
+                let sr: List<string> = prevSeatRows.Get(i)
+                let row: SeatRow = new SeatRow()
+                row.TableNumber = Db.CellInt(sr.Get(0))
+                row.Seat = sr.Get(1)
+                row.PlayerId = Db.CellInt(sr.Get(2))
+                row.TeamId = Db.CellInt(sr.Get(3))
+                prevSeats.Add(row)
+            }
+            var nbTables: int = 0
+            for s in prevSeats { if (s.TableNumber > nbTables) { nbTables = s.TableNumber } }
+            let offs: List<int> = ModMovementPatterns.OffsetsForTableCount(db, nbTables)
+            seats = Placement.GenerateNextSeats(prevSeats, offs.Get(0), offs.Get(1), offs.Get(2), offs.Get(3))
+        }
+
+        // Persistance transactionnelle.
+        db.Begin()
+        let delOk: bool = db.Exec("DELETE FROM seats WHERE round_id = ?", Db.P1(id))
+        if (!delOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        for i in 0..seats.Count() {
+            let s: SeatRow = seats.Get(i)
+            let ps: List<string> = new List<string>()
+            ps.Add(id)
+            ps.Add(String.FromInt(s.TableNumber))
+            ps.Add(s.Seat)
+            ps.Add(String.FromInt(s.PlayerId))
+            ps.Add(String.FromInt(s.TeamId))
+            let insOk: bool = db.Exec("INSERT INTO seats (round_id, table_number, seat, player_id, team_id) VALUES (?, ?, ?, ?, ?)", ps)
+            if (!insOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        }
+        db.Commit()
+
+        return ModRounds.RoundWithTables(db, id)
+    }
+}
