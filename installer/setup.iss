@@ -227,10 +227,10 @@ begin
   Log('[FFT] ' + Msg);
 end;
 
-{ Télécharge un MSI (vérif SHA256) vers {tmp} et l'installe en silencieux.
-  Renvoie True seulement si msiexec sort avec un code de succès (0 ou 3010 =
-  succès + reboot requis). ExtraProps = propriétés MSI publiques (ex :
-  "PASSWORD=xxx PORT=3306"). Toute exception réseau/hash est attrapée. }
+// Télécharge un MSI (vérif SHA256) dans le dossier temp et l'installe en
+// silencieux. Renvoie True seulement si msiexec sort avec un code de succès
+// (0 ou 3010 = succès + reboot requis). ExtraProps = propriétés MSI publiques
+// (ex : "PASSWORD=xxx PORT=3306"). Toute exception réseau/hash est attrapée.
 function DownloadAndRunMsi(const Url, FileName, Sha256, ExtraProps: String): Boolean;
 var
   MsiPath: String;
