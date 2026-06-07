@@ -213,7 +213,13 @@ end;
 function ExecCmdShell(const CmdLine, WorkDir: String;
                      var ExitCode: Integer): Boolean;
 begin
-  Result := Exec(ExpandConstant('{cmd}'), '/c ' + CmdLine, WorkDir,
+  // IMPORTANT : on entoure toute la commande d'une paire de guillemets externe.
+  // Quand CmdLine commence par un chemin d'exe entre guillemets (avec espaces,
+  // ex. "C:\Program Files\MariaDB 11.8\bin\mariadb.exe") ET contient des
+  // redirections (< > 2>&1), cmd.exe retire le 1er et le dernier guillemet de
+  // la ligne, ce qui casse le chemin de l'exe. Le wrap externe absorbe ce
+  // retrait et préserve les guillemets internes (cf. `cmd /?`).
+  Result := Exec(ExpandConstant('{cmd}'), '/c "' + CmdLine + '"', WorkDir,
                  SW_HIDE, ewWaitUntilTerminated, ExitCode);
 end;
 
