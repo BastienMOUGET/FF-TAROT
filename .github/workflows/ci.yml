@@ -73,7 +73,7 @@ jobs:
           tags: ff-tarot:ci
 
   build-installer:
-    name: Build installer Windows (.exe)
+    name: Build + vérifie l'installeur Windows (.exe)
     runs-on: windows-latest
 
     steps:
@@ -177,3 +177,123 @@ jobs:
           name: installer-ci
           path: installer/output/ff-tarot-*-setup.exe
           retention-days: 3
+
+      # ----------------------------------------------------------------
+      # Vérification runtime : on LANCE réellement l'installeur en silencieux.
+      # C'est ce qui détecte les erreurs runtime (MsgBox "Impossible d'installer
+      # MariaDB", échec de création de base, etc.) que la simple compilation
+      # ISCC laissait passer. Le runner installe vraiment MariaDB (MSI),
+      # configure la base, pose le service NSSM et démarre le serveur Node.
+      # ----------------------------------------------------------------
+      - name: Run installer silently (/VERYSILENT) and verify
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Get-ChildItem 'installer\output\ff-tarot-*-setup.exe' | Select-Object -First 1
+          if (-not $exe) { throw "Aucun .exe compilé trouvé" }
+          $log    = 'C:\fft-install.log'
+          $appDir = 'C:\FF-TAROT'
+
+          Write-Host "=== Lancement : $($exe.FullName) ==="
+          # /SUPPRESSMSGBOXES : auto-répond aux SuppressibleMsgBox (sinon l'install
+          # se bloquerait sur une boîte de dialogue d'erreur dans le runner headless).
+          $p = Start-Process -FilePath $exe.FullName -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+            "/LOG=$log", "/DIR=$appDir"
+          )
+          $code = $p.ExitCode
+          Write-Host "=== Installer exit code : $code ==="
+
+          # --- Log d'install (toujours affiché, c'est notre source de vérité) ---
+          if (Test-Path $log) {
+            Write-Host '--- INSTALL LOG ---'
+            Get-Content $log
+            Write-Host '--- END INSTALL LOG ---'
+          } else {
+            Write-Warning "Pas de log d'install à $log"
+          }
+
+          $errors = @()
+
+          if ($code -ne 0) { $errors += "exit code non nul : $code" }
+
+          # --- Marqueurs d'échec runtime dans le log ---
+          if (Test-Path $log) {
+            $bad = Select-String -Path $log -SimpleMatch -Pattern @(
+              "Impossible d'installer",
+              'Échec téléchargement',
+              'Échec de la création',
+              'introuvables après install',
+              'npm.cmd introuvable'
+            )
+            if ($bad) {
+              $errors += "marqueur(s) d'échec dans le log :`n" + ($bad.Line -join "`n")
+            }
+          }
+
+          # --- .env généré ? ---
+          $envFile = Join-Path $appDir '.env'
+          if (Test-Path $envFile) {
+            Write-Host "OK : $envFile présent"
+            if (-not (Select-String -Path $envFile -Pattern '^DB_PASSWORD=.+')) {
+              $errors += ".env présent mais DB_PASSWORD vide"
+            }
+          } else {
+            $errors += ".env manquant ($envFile) — ConfigureDatabase a échoué"
+          }
+
+          # --- Service Windows FF-TAROT enregistré ? ---
+          $svc = Get-Service -Name 'FF-TAROT' -ErrorAction SilentlyContinue
+          if ($svc) {
+            Write-Host "OK : service FF-TAROT présent (status=$($svc.Status))"
+          } else {
+            $errors += "service Windows FF-TAROT absent — InstallService a échoué"
+          }
+
+          # --- MariaDB réellement installé ? (le bug d'origine) ---
+          $mariaBin = Get-ChildItem 'C:\Program Files\MariaDB *\bin\mariadb.exe','C:\Program Files\MariaDB *\bin\mysql.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($mariaBin) {
+            Write-Host "OK : client MariaDB présent ($($mariaBin.FullName))"
+          } else {
+            $errors += "MariaDB introuvable sous C:\Program Files\MariaDB *\bin"
+          }
+
+          if ($errors.Count -gt 0) {
+            Write-Host '=== ÉCHEC VÉRIFICATION INSTALLEUR ==='
+            $errors | ForEach-Object { Write-Host " - $_" }
+            exit 1
+          }
+          Write-Host '=== Installeur vérifié avec succès ==='
+
+      - name: Smoke test HTTP (le serveur répond sur :3000)
+        shell: pwsh
+        run: |
+          $ok = $false
+          1..20 | ForEach-Object {
+            if ($ok) { return }
+            try {
+              $r = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:3000' -TimeoutSec 5
+              if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 500) {
+                Write-Host "OK : http://localhost:3000 répond (HTTP $($r.StatusCode))"
+                $ok = $true
+              }
+            } catch {
+              Write-Host "Tentative $_ : pas encore de réponse ($($_.Exception.Message))"
+              Start-Sleep -Seconds 3
+            }
+          }
+          if (-not $ok) {
+            Write-Warning 'Le serveur FF-TAROT ne répond pas sur :3000 — logs du service ci-dessous'
+            Get-Content 'C:\FF-TAROT\logs\server.log' -ErrorAction SilentlyContinue
+            throw 'Smoke test HTTP échoué'
+          }
+
+      - name: Dump install log on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Content 'C:\fft-install.log' -ErrorAction SilentlyContinue
+          Write-Host '--- db-setup.log (sortie client MariaDB) ---'
+          Get-Content 'C:\FF-TAROT\db-setup.log' -ErrorAction SilentlyContinue
+          Write-Host '--- server.log ---'
+          Get-Content 'C:\FF-TAROT\logs\server.log' -ErrorAction SilentlyContinue

@@ -7,8 +7,8 @@
 ;
 ; Le .exe résultant fait tout :
 ;   - extrait les fichiers dans C:\FF-TAROT (modifiable au wizard)
-;   - installe Node.js LTS via winget si absent
-;   - installe MariaDB Server via winget si absent
+;   - installe Node.js LTS (MSI officiel téléchargé) si absent
+;   - installe MariaDB Server (MSI officiel téléchargé) si absent
 ;   - génère un mot de passe DB et un secret JWT aléatoires
 ;   - crée la base + utilisateur fft_user
 ;   - npm install (back) + ng build (front si pas pré-buildé)
@@ -127,10 +127,29 @@ Type: filesandordirs; Name: "{app}\frontend\node_modules"
 const
   CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
+  // --- Packages externes : téléchargement direct des MSI officiels ---
+  // On NE passe PLUS par winget : l'alias winget.exe (WindowsApps) est un
+  // reparse-point par-utilisateur qui échoue quand l'installeur tourne élevé
+  // en admin (PrivilegesRequired=admin). On télécharge donc les MSI officiels
+  // et on les installe via msiexec en silencieux. Versions épinglées =
+  // installs déterministes et empreintes SHA256 vérifiables.
+  //
+  // Pour bumper une version : récupérer l'URL + le sha256 officiel
+  //   Node    : https://nodejs.org/dist/vX.Y.Z/SHASUMS256.txt (ligne x64.msi)
+  //   MariaDB : https://downloads.mariadb.org/rest-api/mariadb/X.Y.Z/
+  NODE_MSI_URL    = 'https://nodejs.org/dist/v20.20.2/node-v20.20.2-x64.msi';
+  NODE_MSI_SHA256 = '9a283dcdb771793d6492235e81f3fc80048db8a37497a0af87b0a9f450d10fa6';
+
+  MARIADB_VERSION    = '11.8';  // doit matcher un cas de FindMysqlExe()
+  MARIADB_MSI_URL    = 'https://archive.mariadb.org/mariadb-11.8.8/winx64-packages/mariadb-11.8.8-winx64.msi';
+  MARIADB_MSI_SHA256 = '42ee5ab1609031bed58bf19876000fd6c13aca4878126faabc1da490d1fe9ce2';
+
 var
   ProgressPage: TOutputProgressWizardPage;
   DbPassword: String;
   JwtSecret: String;
+  MariaRootPassword: String;  { mot de passe root fixé quand NOUS installons MariaDB }
+  MariaWeInstalled: Boolean;  { True si l'installeur a installé MariaDB (sinon préexistant) }
 
 { ----- Helpers ----- }
 
@@ -160,10 +179,14 @@ end;
 
 function CheckMariaDBVersion(const Version: String): String;
 var
-  Path: String;
+  Base: String;
 begin
-  Path := 'C:\Program Files\MariaDB ' + Version + '\bin\mysql.exe';
-  if FileExists(Path) then Result := Path else Result := '';
+  // MariaDB 11.x livre 'mariadb.exe' (et garde 'mysql.exe' en compat). On
+  // teste les deux pour ne dépendre d'aucune des deux conventions.
+  Base := 'C:\Program Files\MariaDB ' + Version + '\bin\';
+  if FileExists(Base + 'mariadb.exe') then Result := Base + 'mariadb.exe'
+  else if FileExists(Base + 'mysql.exe') then Result := Base + 'mysql.exe'
+  else Result := '';
 end;
 
 function FindMysqlExe(): String;
@@ -181,17 +204,6 @@ begin
   Result := '';
 end;
 
-function FindWingetExe(): String;
-var
-  WingetPath: String;
-begin
-  WingetPath := ExpandConstant('{userappdata}\..\Local\Microsoft\WindowsApps\winget.exe');
-  if FileExists(WingetPath) then
-    Result := WingetPath
-  else
-    Result := 'winget.exe';
-end;
-
 function ExecAndWait(const Cmd, Params, WorkDir: String;
                     var ExitCode: Integer): Boolean;
 begin
@@ -201,7 +213,13 @@ end;
 function ExecCmdShell(const CmdLine, WorkDir: String;
                      var ExitCode: Integer): Boolean;
 begin
-  Result := Exec(ExpandConstant('{cmd}'), '/c ' + CmdLine, WorkDir,
+  // IMPORTANT : on entoure toute la commande d'une paire de guillemets externe.
+  // Quand CmdLine commence par un chemin d'exe entre guillemets (avec espaces,
+  // ex. "C:\Program Files\MariaDB 11.8\bin\mariadb.exe") ET contient des
+  // redirections (< > 2>&1), cmd.exe retire le 1er et le dernier guillemet de
+  // la ligne, ce qui casse le chemin de l'exe. Le wrap externe absorbe ce
+  // retrait et préserve les guillemets internes (cf. `cmd /?`).
+  Result := Exec(ExpandConstant('{cmd}'), '/c "' + CmdLine + '"', WorkDir,
                  SW_HIDE, ewWaitUntilTerminated, ExitCode);
 end;
 
@@ -213,6 +231,37 @@ begin
     ProgressPage.Show;
   end;
   Log('[FFT] ' + Msg);
+end;
+
+// Télécharge un MSI (vérif SHA256) dans le dossier temp et l'installe en
+// silencieux. Renvoie True seulement si msiexec sort avec un code de succès
+// (0 ou 3010 = succès + reboot requis). ExtraProps = propriétés MSI publiques
+// (ex : "PASSWORD=xxx PORT=3306"). Toute exception réseau/hash est attrapée.
+function DownloadAndRunMsi(const Url, FileName, Sha256, ExtraProps: String): Boolean;
+var
+  MsiPath: String;
+  ExitCode: Integer;
+begin
+  Result := False;
+  MsiPath := ExpandConstant('{tmp}\') + FileName;
+  try
+    SetProgress('Téléchargement de ' + FileName + ' (peut prendre 1-3 min)...');
+    DownloadTemporaryFile(Url, FileName, Sha256, nil);
+  except
+    Log('[FFT] Échec téléchargement ' + Url + ' : ' + GetExceptionMessage);
+    Exit;
+  end;
+
+  SetProgress('Installation de ' + FileName + '...');
+  if not ExecAndWait('msiexec.exe',
+       '/i "' + MsiPath + '" /qn /norestart ' + ExtraProps, '', ExitCode) then
+  begin
+    Log('[FFT] msiexec n''a pas pu démarrer pour ' + FileName);
+    Exit;
+  end;
+  Log('[FFT] msiexec ' + FileName + ' exit code = ' + IntToStr(ExitCode));
+  // 0 = OK, 3010 = OK mais reboot requis (on ignore le reboot, services déjà up)
+  Result := (ExitCode = 0) or (ExitCode = 3010);
 end;
 
 procedure WaitForServiceRunning(const Name: String; TimeoutSec: Integer);
@@ -237,9 +286,6 @@ end;
 { ----- Étapes d'install ----- }
 
 function InstallNodejs(): Boolean;
-var
-  ExitCode: Integer;
-  Winget: String;
 begin
   if FindNodeExe() <> '' then
   begin
@@ -247,47 +293,90 @@ begin
     Result := True;
     Exit;
   end;
-  Winget := FindWingetExe();
-  if Winget = '' then
+  if not DownloadAndRunMsi(NODE_MSI_URL, 'node.msi', NODE_MSI_SHA256, '') then
   begin
-    MsgBox('winget introuvable. Installer "App Installer" depuis le Microsoft Store puis relancer l''install.',
-           mbCriticalError, MB_OK);
     Result := False;
     Exit;
   end;
-  SetProgress('Installation de Node.js LTS via winget (peut prendre 1-2 min)...');
-  ExecAndWait(Winget,
-    'install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements',
-    '', ExitCode);
   Result := FindNodeExe() <> '';
 end;
 
 function InstallMariaDB(): Boolean;
-var
-  ExitCode: Integer;
-  Winget: String;
 begin
   if FindMysqlExe() <> '' then
   begin
     SetProgress('MariaDB déjà présent');
+    MariaWeInstalled := False;  { préexistant : on ne connaît pas son mot de passe root }
     Result := True;
     Exit;
   end;
-  Winget := FindWingetExe();
-  SetProgress('Installation de MariaDB Server via winget (peut prendre 2-5 min)...');
-  ExecAndWait(Winget,
-    'install --id MariaDB.Server --silent --accept-package-agreements --accept-source-agreements',
-    '', ExitCode);
+  // Le MSI MariaDB installe le serveur comme service Windows et fixe le mot de
+  // passe root qu'on lui passe (PASSWORD=...). On évite ainsi l'hypothèse
+  // fragile "root accessible sans mot de passe" de l'ancienne version winget.
+  if not DownloadAndRunMsi(MARIADB_MSI_URL, 'mariadb.msi', MARIADB_MSI_SHA256,
+       'SERVICENAME=MariaDB PORT=3306 UTF8=1 PASSWORD="' + MariaRootPassword + '"') then
+  begin
+    Result := False;
+    Exit;
+  end;
+  MariaWeInstalled := True;
   WaitForServiceRunning('MariaDB', 60);
   Result := FindMysqlExe() <> '';
+end;
+
+// Teste une connexion root (auth donnée) via 'SELECT 1'. Pas de redirection
+// cmd ici : on appelle mariadb.exe directement, on ne veut que le code retour.
+function ProbeRoot(const MysqlExe, Auth: String): Boolean;
+var
+  ExitCode: Integer;
+begin
+  Result := ExecAndWait(MysqlExe, Auth + ' --connect-timeout=3 -e "SELECT 1"', '', ExitCode)
+            and (ExitCode = 0);
+end;
+
+// Attend que MariaDB accepte les connexions (mysqld met plusieurs secondes à
+// démarrer après l'install du service) ET résout l'auth root qui marche :
+// d'abord avec le mot de passe qu'on a fixé via le MSI, sinon en passwordless
+// (install MariaDB préexistante). Renvoie '' si rien ne marche après ~60s.
+function ResolveRootAuth(const MysqlExe: String): String;
+var
+  i: Integer;
+  WithPw: String;
+begin
+  WithPw := '--user=root --password=' + MariaRootPassword;
+  Result := '';
+  for i := 1 to 30 do
+  begin
+    if (MariaRootPassword <> '') and ProbeRoot(MysqlExe, WithPw) then
+    begin Result := WithPw; Exit; end;
+    if ProbeRoot(MysqlExe, '--user=root') then
+    begin Result := '--user=root'; Exit; end;
+    Sleep(2000);
+  end;
 end;
 
 function ConfigureDatabase(const MysqlExe: String): Boolean;
 var
   ExitCode: Integer;
-  SqlInit, EnvFile, EnvContent: String;
+  SqlInit, EnvFile, EnvContent, RootAuth, DbLog: String;
 begin
+  SetProgress('Attente du démarrage de MariaDB...');
+
+  // mysqld n'accepte pas les connexions immédiatement après l'install du
+  // service : on attend activement et on récupère l'auth root opérante.
+  RootAuth := ResolveRootAuth(MysqlExe);
+  if RootAuth = '' then
+  begin
+    SuppressibleMsgBox('Impossible de se connecter à MariaDB en root après 60s.'#13#10 +
+           'Le service MariaDB n''a peut-être pas démarré. Voir db-setup.log.',
+           mbCriticalError, MB_OK, IDOK);
+    Result := False;
+    Exit;
+  end;
+
   SetProgress('Configuration de la base de données...');
+  DbLog := ExpandConstant('{app}\db-setup.log');  // dumpé par la CI en cas d'échec
+
   SqlInit := ExpandConstant('{tmp}\fft-init.sql');
   SaveStringToFile(SqlInit,
     'CREATE DATABASE IF NOT EXISTS `fft` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;' + #13#10 +
@@ -296,18 +385,19 @@ begin
     'GRANT ALL PRIVILEGES ON `fft`.* TO ''fft_user''@''localhost'';' + #13#10 +
     'FLUSH PRIVILEGES;' + #13#10, False);
 
-  if not ExecCmdShell('"' + MysqlExe + '" --user=root < "' + SqlInit + '"', '', ExitCode)
+  if not ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' < "' + SqlInit + '" >> "' + DbLog + '" 2>&1', '', ExitCode)
      or (ExitCode <> 0) then
   begin
-    MsgBox('Échec de la création de la base. Le compte root MariaDB doit être accessible localement sans mot de passe (config par défaut de MariaDB Windows).',
-           mbCriticalError, MB_OK);
+    SuppressibleMsgBox('Échec de la création de la base de données (code ' + IntToStr(ExitCode) + ').'#13#10 +
+           'Voir db-setup.log pour le détail de l''erreur MariaDB.',
+           mbCriticalError, MB_OK, IDOK);
     Result := False;
     Exit;
   end;
 
-  ExecCmdShell('"' + MysqlExe + '" --user=root < "' + ExpandConstant('{app}\db.sql') + '"',
+  ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' < "' + ExpandConstant('{app}\db.sql') + '" >> "' + DbLog + '" 2>&1',
                '', ExitCode);
-  ExecCmdShell('"' + MysqlExe + '" --user=root fft < "' + ExpandConstant('{app}\seed.sql') + '"',
+  ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' fft < "' + ExpandConstant('{app}\seed.sql') + '" >> "' + DbLog + '" 2>&1',
                '', ExitCode);
 
   EnvFile := ExpandConstant('{app}\.env');
@@ -334,8 +424,8 @@ begin
   NpmCmd := ExtractFilePath(NodeExe) + 'npm.cmd';
   if not FileExists(NpmCmd) then
   begin
-    MsgBox('npm.cmd introuvable à côté de node.exe : ' + NpmCmd,
-           mbCriticalError, MB_OK);
+    SuppressibleMsgBox('npm.cmd introuvable à côté de node.exe : ' + NpmCmd,
+           mbCriticalError, MB_OK, IDOK);
     Result := False;
     Exit;
   end;
@@ -405,6 +495,8 @@ begin
   // pas, le générateur Random() est auto-seedé au démarrage du script).
   DbPassword := GenerateRandomPassword(24);
   JwtSecret  := GenerateRandomPassword(48);
+  MariaRootPassword := GenerateRandomPassword(24);
+  MariaWeInstalled := False;
   ProgressPage := CreateOutputProgressPage(
     'Configuration runtime',
     'Installation et démarrage de FF-TAROT en cours.');
@@ -421,13 +513,15 @@ begin
   try
     if not InstallNodejs() then
     begin
-      MsgBox('Impossible d''installer Node.js. Annulation.', mbCriticalError, MB_OK);
+      SuppressibleMsgBox('Impossible d''installer Node.js (téléchargement ou MSI en échec). Annulation.'#13#10 +
+             'Voir le log d''installation pour le détail.', mbCriticalError, MB_OK, IDOK);
       Abort;
     end;
 
     if not InstallMariaDB() then
     begin
-      MsgBox('Impossible d''installer MariaDB. Annulation.', mbCriticalError, MB_OK);
+      SuppressibleMsgBox('Impossible d''installer MariaDB (téléchargement ou MSI en échec). Annulation.'#13#10 +
+             'Voir le log d''installation pour le détail.', mbCriticalError, MB_OK, IDOK);
       Abort;
     end;
 
@@ -435,8 +529,8 @@ begin
     MysqlExe := FindMysqlExe();
     if (NodeExe = '') or (MysqlExe = '') then
     begin
-      MsgBox('Node ou MariaDB introuvables après install. Redémarrer la machine et relancer.',
-             mbCriticalError, MB_OK);
+      SuppressibleMsgBox('Node ou MariaDB introuvables après install. Redémarrer la machine et relancer.',
+             mbCriticalError, MB_OK, IDOK);
       Abort;
     end;
 
