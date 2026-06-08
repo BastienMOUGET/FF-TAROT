@@ -3,128 +3,39 @@ name: Release
 on:
   push:
     tags:
-      - 'v*' # déclenche sur tag v3.0.0, etc.
+      - 'v*'
 
 permissions:
-  contents: write    # créer la GitHub Release + uploader les assets
-
-# IMPORTANT — premier build de l'app sur le toolchain Amalgame :
-#   - Linux : amc + libmariadb-dev → build.sh → binaire `server`
-#   - Windows : amc (toolchain Windows) + MariaDB Connector/C → build.ps1 →
-#     `server.exe` → Inno Setup (service natif, sans NSSM ni Node).
-# Les URLs d'install amc / Connector-C peuvent demander un ajustement (à
-# itérer sur les premiers runs CI). Le back Node a été retiré.
+  contents: write
 
 env:
-  # Liste des packages amalgame à résoudre (cf. amalgame.toml)
+  AMC_VERSION: "0.8.75"
   AMC_PKGS: "web net-http crypto mysql threading service"
 
 jobs:
   # ====================================================================
-  # 1. Linux : binaire AM + front + archives
+  # Installeur Windows .exe (binaire AM auto-suffisant, sans Node/NSSM)
   # ====================================================================
-  package:
-    name: Build Linux + archives
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
+  windows-installer:
+    name: Build Windows installer (.exe)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get version from tag
+      - name: Version from tag
         id: version
+        shell: bash
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Node 20
+      - name: Setup Node 20 (build front uniquement)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Inject version into front environment.ts
-        run: |
-          sed -i "s/appVersion: '[^']*'/appVersion: '${{ steps.version.outputs.version }}'/" \
-              frontend/src/environments/environment.ts
-
-      - name: Build front (production)
-        working-directory: frontend
-        run: |
-          npm ci --no-fund --no-audit
-          npm run build
-
-      # ---- Toolchain Amalgame + libmariadb ----
-      - name: Install build deps (gcc, libmariadb-dev, libgc, openssl, zlib)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc libmariadb-dev libgc-dev libssl-dev zlib1g-dev
-
-      - name: Install amc (release tarball)
-        env:
-          AMC_VERSION: 0.8.75
-        run: |
-          curl -fsSL "https://github.com/amalgame-lang/Amalgame/releases/download/v${AMC_VERSION}/amc-${AMC_VERSION}-linux-x86_64.tar.gz" | tar -xz -C "$HOME"
-          echo "$HOME/amc-${AMC_VERSION}-linux-x86_64/bin" >> "$GITHUB_PATH"
-
-      - name: Resolve amalgame packages
-        run: |
-          for p in $AMC_PKGS; do amc package add "$p"; done
-
-      - name: Build AM binary (build.sh → server)
-        run: |
-          chmod +x build.sh
-          ./build.sh
-          file server
-
-      # ---- Bundle release (binaire + front + sql + installeurs) ----
-      - name: Prepare release tree
-        run: |
-          set -euo pipefail
-          STAGE=ff-tarot-${{ steps.version.outputs.version }}
-          mkdir -p "$STAGE/frontend"
-          cp server db.sql seed.sql build.sh run.sh .env.example "$STAGE/"
-          cp -r frontend/dist "$STAGE/frontend/"
-          cp -r frontend/public "$STAGE/frontend/"
-          cp install.sh install.ps1 "$STAGE/"
-          chmod +x "$STAGE/install.sh"
-          cp Dockerfile docker-compose.yml docker-entrypoint.sh .dockerignore "$STAGE/"
-          chmod +x "$STAGE/docker-entrypoint.sh" "$STAGE/server"
-          cp README.md INSTALL.md ROADMAP.md LICENSE "$STAGE/"
-
-      - name: Create archives
-        run: |
-          V=${{ steps.version.outputs.version }}
-          tar -czf ff-tarot-$V-linux-x86_64.tar.gz ff-tarot-$V/
-          zip -rq ff-tarot-$V-source.zip ff-tarot-$V/
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: archives
-          path: ff-tarot-*.tar.gz
-          retention-days: 1
-
-  # ====================================================================
-  # 2. Windows : binaire AM (server.exe) + installeur Inno Setup
-  # ====================================================================
-  inno-installer:
-    name: Inno Setup .exe (Windows)
-    runs-on: windows-latest
-    needs: package
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Inject version into front environment.ts (PowerShell)
         shell: pwsh
         run: |
-          $v = '${{ needs.package.outputs.version }}'
+          $v = '${{ steps.version.outputs.version }}'
           $f = 'frontend/src/environments/environment.ts'
           (Get-Content $f) -replace "appVersion: '[^']*'", "appVersion: '$v'" | Set-Content $f
 
@@ -138,41 +49,48 @@ jobs:
         shell: pwsh
         run: |
           choco install mariadb-connector-c -y --no-progress
-          # Met le bin du Connector/C (libmariadb.dll) sur le PATH pour que
-          # build.ps1 puisse le bundler (objdump). Chemin typique choco :
           $conn = Get-ChildItem 'C:\Program Files\MariaDB' -Directory -ErrorAction SilentlyContinue |
                   Where-Object { $_.Name -like '*Connector*C*' } | Select-Object -First 1
           if ($conn) {
-            $bin = Join-Path $conn.FullName 'lib'
-            echo "$bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+            echo "$($conn.FullName)\lib" | Out-File -FilePath $env:GITHUB_PATH -Append
             echo "$($conn.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          }
+            Write-Host "Connector/C : $($conn.FullName)"
+          } else { Write-Host "⚠️ Connector/C introuvable après choco" }
 
       - name: Install amc (MSI Windows, MinGW bundlé)
         shell: pwsh
-        env:
-          AMC_VERSION: 0.8.75
         run: |
           $v = $env:AMC_VERSION
           curl.exe -fsSL "https://github.com/amalgame-lang/Amalgame/releases/download/v$v/amalgame-$v.msi" -o amalgame.msi
           Start-Process msiexec.exe -ArgumentList '/i','amalgame.msi','/qn','/norestart' -Wait
-          # Le MSI installe sous %ProgramFiles%\Amalgame (+ MinGW bundlé) et
-          # modifie le PATH HKCU. On expose bin + gcc-bundle\bin au job.
           $base = "C:\Program Files\Amalgame"
           if (Test-Path "$base\bin")            { echo "$base\bin"            | Out-File $env:GITHUB_PATH -Append }
           if (Test-Path "$base\gcc-bundle\bin") { echo "$base\gcc-bundle\bin" | Out-File $env:GITHUB_PATH -Append }
-          Get-ChildItem $base -ErrorAction SilentlyContinue | Select-Object Name
+          Write-Host "=== Contenu $base ==="
+          Get-ChildItem $base -ErrorAction SilentlyContinue -Recurse -Depth 1 | Select-Object FullName
 
-      - name: Resolve amalgame packages
+      - name: Diagnostics toolchain
         shell: pwsh
         run: |
-          foreach ($p in "${{ env.AMC_PKGS }}".Split(' ')) { amc package add $p }
+          Write-Host "amc : $((Get-Command amc.exe -ErrorAction SilentlyContinue).Source)"
+          Write-Host "gcc : $((Get-Command gcc.exe -ErrorAction SilentlyContinue).Source)"
+          amc --version
 
-      - name: Build AM binary (build.ps1 → server.exe)
+      - name: Resolve amalgame packages (précompile les facades Windows)
+        shell: pwsh
+        run: |
+          foreach ($p in "$env:AMC_PKGS".Split(' ')) {
+            Write-Host "=== amc package add $p ==="
+            amc package add $p
+            if ($LASTEXITCODE -ne 0) { throw "amc package add $p a échoué" }
+          }
+
+      - name: Build server.exe (build.ps1) + bundle DLL
         shell: pwsh
         run: |
           .\build.ps1
           Get-Item server.exe
+          Write-Host "=== DLL bundlées ==="; Get-ChildItem windows-dll -Filter *.dll | Select Name
 
       - name: Install Inno Setup (si absent)
         shell: pwsh
@@ -180,63 +98,35 @@ jobs:
           $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
 
-      - name: Compile setup.iss
+      - name: Compile setup.iss → .exe
         shell: pwsh
         working-directory: installer
         run: |
           $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
-          $v = '${{ needs.package.outputs.version }}'
-          & $iscc "/DAppVersion=$v" setup.iss
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" setup.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem output
 
-      - name: Upload .exe artifact
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: inno-installer
+          name: windows-installer
           path: installer/output/ff-tarot-*-setup.exe
-          retention-days: 1
+          retention-days: 5
 
-  # ====================================================================
-  # 3. Publish GitHub Release
-  # ====================================================================
-  release:
-    name: Publish GitHub Release
-    runs-on: ubuntu-latest
-    needs: [package, inno-installer]
-    steps:
-      - name: Download archives
-        uses: actions/download-artifact@v4
-        with: { name: archives }
-      - name: Download installer
-        uses: actions/download-artifact@v4
-        with: { name: inno-installer }
-      - name: List files
-        run: ls -lh ff-tarot-*
+      # ---- Publication de la release ----
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: FF-TAROT v${{ needs.package.outputs.version }}
+          name: FF-TAROT v${{ steps.version.outputs.version }}
           body: |
-            ## FF-TAROT v${{ needs.package.outputs.version }} — back Amalgame/Mosaic
+            ## FF-TAROT v${{ steps.version.outputs.version }} — back Amalgame/Mosaic
 
-            Backend réécrit en **Amalgame** (plus de Node) : binaire natif,
-            front Angular servi par le binaire, classement live Socket.IO.
-
-            ### 🪟 Windows — installeur .exe
-            `ff-tarot-${{ needs.package.outputs.version }}-setup.exe` : installe
-            MariaDB, enregistre **server.exe comme service Windows NATIF**
-            (auto-start, restart on crash) — **sans NSSM ni Node**.
-
-            ### 🐧 Linux
-            `ff-tarot-*-linux-x86_64.tar.gz` : binaire `server` + front + `install.sh`
-            (service systemd). Nécessite `libmariadb3` au runtime.
-
-            ### 🐳 Docker
-            `docker compose up -d` (image debian-slim + binaire AM).
+            Backend réécrit en **Amalgame** (plus de Node). Installeur Windows
+            tout-en-un : installe MariaDB, enregistre **server.exe comme service
+            Windows natif** (sc create, **sans NSSM**), DLL embarquées (app
+            auto-suffisante), front Angular servi par le binaire, classement
+            live Socket.IO.
 
             Login par défaut : `admin` / `admin123`.
-          files: |
-            ff-tarot-*.tar.gz
-            ff-tarot-*-setup.exe
-          generate_release_notes: true
+          files: installer/output/ff-tarot-*-setup.exe
