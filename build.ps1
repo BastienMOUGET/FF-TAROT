@@ -61,14 +61,22 @@ $SysLibs  = @()
 Get-ChildItem -Recurse -Path $PkgRoot -Filter 'libamalgame-pkg-*.a' -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -match 'win' } | ForEach-Object { $Archives += $_.FullName }
 
-# MariaDB Connector/C : headers (mysql.h) + import lib (libmariadb) pour le link.
-$ConnRoots = Get-ChildItem 'C:\Program Files\MariaDB' -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like '*Connector*C*' }
+# MariaDB (serveur OU Connector/C) : headers (mysql.h) + lib (libmariadb).
+$ConnRoots = Get-ChildItem 'C:\Program Files' -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like 'MariaDB*' }
 foreach ($r in $ConnRoots) {
     $inc = Join-Path $r.FullName 'include'
     $lib = Join-Path $r.FullName 'lib'
-    if (Test-Path $inc) { $Includes += "-I$inc"; $Includes += "-I$(Join-Path $inc 'mariadb')" }
-    if (Test-Path $lib) { $Includes += "-L$lib" }
+    if (Test-Path $inc) {
+        $Includes += "-I$inc"
+        if (Test-Path (Join-Path $inc 'mysql'))   { $Includes += "-I$(Join-Path $inc 'mysql')" }
+        if (Test-Path (Join-Path $inc 'mariadb')) { $Includes += "-I$(Join-Path $inc 'mariadb')" }
+    }
+    if (Test-Path $lib) {
+        $Includes += "-L$lib"
+        # libmariadb.lib (import) parfois sous lib\mariadb\
+        if (Test-Path (Join-Path $lib 'mariadb')) { $Includes += "-L$(Join-Path $lib 'mariadb')" }
+    }
 }
 
 # Libs système : libmariadb (driver mysql) + bdwgc + openssl + zlib + threads.

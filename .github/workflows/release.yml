@@ -45,17 +45,21 @@ jobs:
           npm ci --no-fund --no-audit
           npm run build
 
-      - name: "Install MariaDB Connector/C (libmariadb: link + DLL à bundler)"
+      - name: "Install MariaDB (libmariadb: headers/lib pour link + DLL à bundler)"
         shell: pwsh
         run: |
-          choco install mariadb-connector-c -y --no-progress
-          $conn = Get-ChildItem 'C:\Program Files\MariaDB' -Directory -ErrorAction SilentlyContinue |
-                  Where-Object { $_.Name -like '*Connector*C*' } | Select-Object -First 1
-          if ($conn) {
-            echo "$($conn.FullName)\lib" | Out-File -FilePath $env:GITHUB_PATH -Append
-            echo "$($conn.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-            Write-Host "Connector/C : $($conn.FullName)"
-          } else { Write-Host "⚠️ Connector/C introuvable après choco" }
+          # Le paquet choco 'mariadb-connector-c' n'existe pas → on installe le
+          # serveur MariaDB, qui embarque le client libmariadb (include + lib + dll).
+          choco install mariadb -y --no-progress
+          $mdb = Get-ChildItem 'C:\Program Files' -Directory -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Name -like 'MariaDB*' } | Select-Object -First 1
+          if ($mdb) {
+            echo "$($mdb.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+            echo "$($mdb.FullName)\lib" | Out-File -FilePath $env:GITHUB_PATH -Append
+            Write-Host "MariaDB : $($mdb.FullName)"
+            Get-ChildItem "$($mdb.FullName)\lib" -Filter 'libmariadb*' -ErrorAction SilentlyContinue | Select Name
+            Get-ChildItem "$($mdb.FullName)\bin" -Filter 'libmariadb*.dll' -ErrorAction SilentlyContinue | Select Name
+          } else { Write-Host "⚠️ MariaDB introuvable après choco" }
 
       - name: Install amc (MSI Windows, MinGW bundlé)
         shell: pwsh
