@@ -3,108 +3,107 @@ name: Release
 on:
   push:
     tags:
-      - 'v*' # déclenche sur tag v1.0.0, v2.0.2, etc.
+      - 'v*' # déclenche sur tag v3.0.0, etc.
 
 permissions:
   contents: write    # créer la GitHub Release + uploader les assets
 
+# IMPORTANT — premier build de l'app sur le toolchain Amalgame :
+#   - Linux : amc + libmariadb-dev → build.sh → binaire `server`
+#   - Windows : amc (toolchain Windows) + MariaDB Connector/C → build.ps1 →
+#     `server.exe` → Inno Setup (service natif, sans NSSM ni Node).
+# Les URLs d'install amc / Connector-C peuvent demander un ajustement (à
+# itérer sur les premiers runs CI). Le back Node a été retiré.
+
+env:
+  # Liste des packages amalgame à résoudre (cf. amalgame.toml)
+  AMC_PKGS: "web net-http crypto mysql threading service"
+
 jobs:
   # ====================================================================
-  # 1. Package : archives source + front pré-buildé (Linux + Windows zip)
+  # 1. Linux : binaire AM + front + archives
   # ====================================================================
   package:
-    name: Archives Linux + Windows zip
+    name: Build Linux + archives
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Get version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      # ---- Inject version into front environment (source unique = tag git) ----
       - name: Inject version into front environment.ts
         run: |
           sed -i "s/appVersion: '[^']*'/appVersion: '${{ steps.version.outputs.version }}'/" \
               frontend/src/environments/environment.ts
-          grep appVersion frontend/src/environments/environment.ts
 
-      - name: Sync version in package.json files
+      - name: Build front (production)
+        working-directory: frontend
         run: |
-          npm pkg set version=${{ steps.version.outputs.version }}
-          cd frontend && npm pkg set version=${{ steps.version.outputs.version }}
+          npm ci --no-fund --no-audit
+          npm run build
 
-      # ---- Build front (production) ----
-      - name: Install front deps
-        working-directory: frontend
-        run: npm ci --no-fund --no-audit
+      # ---- Toolchain Amalgame + libmariadb ----
+      - name: Install build deps (gcc, libmariadb-dev, libgc, openssl, zlib)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libmariadb-dev libgc-dev libssl-dev zlib1g-dev
 
-      - name: Build front
-        working-directory: frontend
-        run: npm run build
+      - name: Install amc (toolchain Amalgame)
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/amalgame-lang/Amalgame/main/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      # ---- Préparer le contenu ----
+      - name: Resolve amalgame packages
+        run: |
+          for p in $AMC_PKGS; do amc package add "$p"; done
+
+      - name: Build AM binary (build.sh → server)
+        run: |
+          chmod +x build.sh
+          ./build.sh
+          file server
+
+      # ---- Bundle release (binaire + front + sql + installeurs) ----
       - name: Prepare release tree
         run: |
           set -euo pipefail
           STAGE=ff-tarot-${{ steps.version.outputs.version }}
-          mkdir -p "$STAGE"
-
-          cp -r src "$STAGE/"
-          cp package.json package-lock.json db.sql seed.sql "$STAGE/"
-
           mkdir -p "$STAGE/frontend"
-          cp -r frontend/src "$STAGE/frontend/"
-          cp -r frontend/public "$STAGE/frontend/"
+          cp server db.sql seed.sql build.sh run.sh .env.example "$STAGE/"
           cp -r frontend/dist "$STAGE/frontend/"
-          cp frontend/package.json frontend/package-lock.json "$STAGE/frontend/"
-          cp frontend/angular.json frontend/proxy.conf.json "$STAGE/frontend/"
-          cp frontend/tsconfig*.json "$STAGE/frontend/"
-
+          cp -r frontend/public "$STAGE/frontend/"
           cp install.sh install.ps1 "$STAGE/"
           chmod +x "$STAGE/install.sh"
-
           cp Dockerfile docker-compose.yml docker-entrypoint.sh .dockerignore "$STAGE/"
-          chmod +x "$STAGE/docker-entrypoint.sh"
-
+          chmod +x "$STAGE/docker-entrypoint.sh" "$STAGE/server"
           cp README.md INSTALL.md ROADMAP.md LICENSE "$STAGE/"
 
-      - name: Create Linux tarball
+      - name: Create archives
         run: |
-          tar -czf ff-tarot-${{ steps.version.outputs.version }}-linux.tar.gz \
-              ff-tarot-${{ steps.version.outputs.version }}/
-
-      - name: Create Windows zip
-        run: |
-          zip -rq ff-tarot-${{ steps.version.outputs.version }}-windows.zip \
-              ff-tarot-${{ steps.version.outputs.version }}/
-
-      - name: Show archive sizes
-        run: ls -lh ff-tarot-*.tar.gz ff-tarot-*.zip
+          V=${{ steps.version.outputs.version }}
+          tar -czf ff-tarot-$V-linux-x86_64.tar.gz ff-tarot-$V/
+          zip -rq ff-tarot-$V-source.zip ff-tarot-$V/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: archives-zip-tar
-          path: |
-            ff-tarot-*.tar.gz
-            ff-tarot-*.zip
+          name: archives
+          path: ff-tarot-*.tar.gz
           retention-days: 1
 
   # ====================================================================
-  # 2. Inno Setup : installeur .exe Windows tout-en-un
+  # 2. Windows : binaire AM (server.exe) + installeur Inno Setup
   # ====================================================================
   inno-installer:
     name: Inno Setup .exe (Windows)
@@ -118,18 +117,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: |
-            frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Inject version into front environment.ts (PowerShell)
         shell: pwsh
         run: |
-          $version = '${{ needs.package.outputs.version }}'
-          $file = 'frontend/src/environments/environment.ts'
-          (Get-Content $file) `
-            -replace "appVersion: '[^']*'", "appVersion: '$version'" `
-            | Set-Content $file
-          Get-Content $file | Select-String 'appVersion'
+          $v = '${{ needs.package.outputs.version }}'
+          $f = 'frontend/src/environments/environment.ts'
+          (Get-Content $f) -replace "appVersion: '[^']*'", "appVersion: '$v'" | Set-Content $f
 
       - name: Build front (production)
         working-directory: frontend
@@ -137,100 +132,43 @@ jobs:
           npm ci --no-fund --no-audit
           npm run build
 
-      - name: Get NSSM (via Chocolatey, fallback nssm.cc)
+      - name: Install MariaDB Connector/C (libmariadb pour le link)
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "installer\bin" -Force | Out-Null
-          $target = "installer\bin\nssm.exe"
+          choco install mariadb-connector-c -y --no-progress
+          # Expose les libs/headers au compilateur (chemin à ajuster selon le paquet choco)
 
-          # Source 1 : Chocolatey (préinstallé sur windows-latest, fiable)
-          try {
-            choco install nssm -y --no-progress --no-color | Out-Null
-            $candidates = @(
-              'C:\ProgramData\chocolatey\lib\nssm\tools\nssm.exe',
-              'C:\ProgramData\chocolatey\bin\nssm.exe'
-            )
-            foreach ($c in $candidates) {
-              if (Test-Path $c) {
-                Copy-Item $c $target -Force
-                Write-Host "NSSM installé via Chocolatey depuis : $c"
-                break
-              }
-            }
-          } catch {
-            Write-Host "Chocolatey KO : $_"
-          }
-
-          # Source 2 : nssm.cc avec retry (fallback si choco a échoué)
-          if (-not (Test-Path $target)) {
-            $url = 'https://nssm.cc/release/nssm-2.24.zip'
-            $zip = "$env:TEMP\nssm.zip"
-            $extract = "$env:TEMP\nssm-extract"
-            $ok = $false
-            1..3 | ForEach-Object {
-              if ($ok) { return }
-              try {
-                Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 30
-                $ok = $true
-              } catch {
-                Write-Host "Tentative $_ nssm.cc KO : $($_.Exception.Message)"
-                Start-Sleep -Seconds 5
-              }
-            }
-            if ($ok) {
-              Expand-Archive -Path $zip -DestinationPath $extract -Force
-              Copy-Item -Path "$extract\nssm-2.24\win64\nssm.exe" -Destination $target -Force
-            }
-          }
-
-          if (-not (Test-Path $target)) {
-            throw "Impossible d'obtenir nssm.exe (Chocolatey + nssm.cc échoués)"
-          }
-          Get-Item $target | Select-Object Name, Length, FullName
-
-      - name: Install Inno Setup
+      - name: Install amc (toolchain Amalgame Windows, MinGW bundlé)
         shell: pwsh
         run: |
-          # Inno Setup est pré-installé sur windows-latest sous
-          # 'C:\Program Files (x86)\Inno Setup 6'. On vérifie.
+          irm https://raw.githubusercontent.com/amalgame-lang/Amalgame/main/install/windows/install.ps1 | iex
+          echo "$env:LOCALAPPDATA\Amalgame\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Resolve amalgame packages
+        shell: pwsh
+        run: |
+          foreach ($p in "${{ env.AMC_PKGS }}".Split(' ')) { amc package add $p }
+
+      - name: Build AM binary (build.ps1 → server.exe)
+        shell: pwsh
+        run: |
+          .\build.ps1
+          Get-Item server.exe
+
+      - name: Install Inno Setup (si absent)
+        shell: pwsh
+        run: |
           $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $iscc)) {
-            choco install innosetup -y --no-progress
-          }
-          Get-Command iscc.exe -ErrorAction SilentlyContinue
-          Get-Item $iscc -ErrorAction SilentlyContinue
-
-      - name: Show context before compile
-        shell: pwsh
-        working-directory: installer
-        run: |
-          Write-Host "=== Working dir : $(Get-Location) ==="
-          Write-Host "=== installer/ contents ==="
-          Get-ChildItem -Recurse -Force | Where-Object { -not $_.PSIsContainer } |
-            Select-Object FullName, Length | Format-Table -AutoSize
-          Write-Host "=== Frontend dist ==="
-          Get-ChildItem -Path '..\frontend\dist' -ErrorAction SilentlyContinue
-          Write-Host "=== ISCC version ==="
-          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
-          if (Test-Path $iscc) { Get-Item $iscc | Select Name, VersionInfo }
-          else { Write-Host "ISCC NOT FOUND at $iscc" }
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
 
       - name: Compile setup.iss
         shell: pwsh
         working-directory: installer
         run: |
           $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
-          $version = '${{ needs.package.outputs.version }}'
-          Write-Host "Compiling with /DAppVersion=$version"
-          # Capture stdout + stderr ensemble pour avoir l'erreur ISCC complète
-          $output = & $iscc "/DAppVersion=$version" setup.iss 2>&1 | Out-String
-          Write-Host '--- ISCC OUTPUT ---'
-          Write-Host $output
-          Write-Host '--- END ISCC OUTPUT ---'
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "ISCC failed with exit code $LASTEXITCODE"
-            exit $LASTEXITCODE
-          }
+          $v = '${{ needs.package.outputs.version }}'
+          & $iscc "/DAppVersion=$v" setup.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem output
 
       - name: Upload .exe artifact
@@ -241,66 +179,45 @@ jobs:
           retention-days: 1
 
   # ====================================================================
-  # 3. Release : crée la GitHub Release et y attache toutes les archives
+  # 3. Publish GitHub Release
   # ====================================================================
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs: [package, inno-installer]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download zip/tar.gz archives
+      - name: Download archives
         uses: actions/download-artifact@v4
-        with:
-          name: archives-zip-tar
-
-      - name: Download Inno Setup .exe
+        with: { name: archives }
+      - name: Download installer
         uses: actions/download-artifact@v4
-        with:
-          name: inno-installer
-
-      - name: List release files
+        with: { name: inno-installer }
+      - name: List files
         run: ls -lh ff-tarot-*
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: FF-TAROT v${{ needs.package.outputs.version }}
           body: |
-            ## FF-TAROT v${{ needs.package.outputs.version }}
+            ## FF-TAROT v${{ needs.package.outputs.version }} — back Amalgame/Mosaic
 
-            ### 📦 Téléchargement (3 méthodes au choix)
+            Backend réécrit en **Amalgame** (plus de Node) : binaire natif,
+            front Angular servi par le binaire, classement live Socket.IO.
 
-            **🪟 Windows — installeur .exe (recommandé, le plus simple)**
-            - `ff-tarot-${{ needs.package.outputs.version }}-setup.exe`
-            - Double-clic, suivre l'assistant. Installe Node + MariaDB
-              automatiquement (winget), enregistre FF-TAROT comme service
-              Windows (auto-start au boot, restart on crash via NSSM).
+            ### 🪟 Windows — installeur .exe
+            `ff-tarot-${{ needs.package.outputs.version }}-setup.exe` : installe
+            MariaDB, enregistre **server.exe comme service Windows NATIF**
+            (auto-start, restart on crash) — **sans NSSM ni Node**.
 
-            **🪟 Windows — archive zip + script PowerShell (alternative)**
-            - `ff-tarot-${{ needs.package.outputs.version }}-windows.zip`
-            - Dézipper, ouvrir PowerShell admin dans le dossier, `.\install.ps1`.
+            ### 🐧 Linux
+            `ff-tarot-*-linux-x86_64.tar.gz` : binaire `server` + front + `install.sh`
+            (service systemd). Nécessite `libmariadb3` au runtime.
 
-            **🐧 Linux — archive tar.gz + script bash**
-            - `ff-tarot-${{ needs.package.outputs.version }}-linux.tar.gz`
-            - Décompresser, `cd ff-tarot-${{ needs.package.outputs.version }}`,
-              `sudo ./install.sh`. Service systemd installé pour auto-start au boot.
+            ### 🐳 Docker
+            `docker compose up -d` (image debian-slim + binaire AM).
 
-            ---
-
-            Voir [INSTALL.md](https://github.com/${{ github.repository }}/blob/v${{ needs.package.outputs.version }}/INSTALL.md)
-            pour les détails complets.
-
-            URL après install : http://localhost:3000
-            (admin / admin123 par défaut — **à changer immédiatement** via la page Admin).
-
-            ### 🗒 Changelog
-
-            Voir l'historique git ou [ROADMAP.md](https://github.com/${{ github.repository }}/blob/v${{ needs.package.outputs.version }}/ROADMAP.md).
+            Login par défaut : `admin` / `admin123`.
           files: |
             ff-tarot-*.tar.gz
-            ff-tarot-*.zip
             ff-tarot-*-setup.exe
-          draft: false
-          prerelease: false
+          generate_release_notes: true
