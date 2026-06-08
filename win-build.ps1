@@ -13,7 +13,21 @@ $ErrorActionPreference = 'Stop'
 # (amc >= 0.8.84 gère ce fallback nativement.)
 $env:HOME = $env:USERPROFILE
 
-Write-Host "=== amc version (attendu 0.8.83) ===" -ForegroundColor Cyan
+# Shim `uname` : amc s'en sert pour nommer le dossier de précompilation des
+# façades (build/<plateforme>/). Sur Windows, uname n'existe pas → amc tombe
+# sur "unknown-unknown" et build.ps1 (qui filtre sur "win") ne trouve pas les
+# archives libamalgame-pkg-*.a → symboles non résolus au link. On fournit un
+# uname.cmd minimal sur le PATH. (amc >= 0.8.85 détecte la plateforme nativement.)
+$shimDir = "$env:TEMP\amc-shim"
+New-Item -ItemType Directory -Force -Path $shimDir | Out-Null
+@'
+@echo off
+if "%~1"=="-s" echo MINGW64_NT
+if "%~1"=="-m" echo x86_64
+'@ | Set-Content -Encoding ascii "$shimDir\uname.cmd"
+$env:PATH = "$shimDir;$env:PATH"
+
+Write-Host "=== amc version ===" -ForegroundColor Cyan
 amc --version
 
 # Cache propre. On utilise Remove-Item -Force (et PAS `amc package cache

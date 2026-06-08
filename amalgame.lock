@@ -15,8 +15,8 @@ rev  = "70a7f8f3"
 [[package]]
 name = "async"
 git  = "github.com/amalgame-lang/amalgame-async"
-tag  = "v0.3.0"
-rev  = "9e2c2e3e"
+tag  = "v0.4.0"
+rev  = "1f44b8f7"
 
 [[package]]
 name = "http"
