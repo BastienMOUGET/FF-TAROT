@@ -11,8 +11,8 @@
 ;   - installe MariaDB Server (MSI officiel téléchargé) si absent
 ;   - génère un mot de passe DB et un secret JWT aléatoires
 ;   - crée la base + utilisateur fft_user
-;   - npm install (back) + ng build (front si pas pré-buildé)
-;   - installe NSSM comme service Windows "FF-TAROT" (auto-start au boot)
+;   - sert le binaire back AM + le front Angular pré-buildé (plus de Node back)
+;   - enregistre server.exe comme service Windows NATIF (sc create, sans NSSM)
 ;   - démarre le service immédiatement
 ;   - crée les raccourcis Menu Démarrer + Bureau
 ;   - propose d'ouvrir le navigateur à la fin
@@ -61,25 +61,16 @@ Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; \
   GroupDescription: "Raccourcis :"; Flags: checkedonce
 
 [Files]
-; Source code back
-Source: "..\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\package.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\package-lock.json"; DestDir: "{app}"; Flags: ignoreversion
+; Binaire back Amalgame (la CI le build sur Windows — server.exe — et le place
+; à la racine du repo AVANT `iscc`). C'est un vrai service Windows grâce au
+; dispatcher SCM d'amalgame-service : plus besoin de NSSM ni de Node back.
+Source: "..\server.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\db.sql"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\seed.sql"; DestDir: "{app}"; Flags: ignoreversion
 
-; Front : sources + bundle pré-buildé
-Source: "..\frontend\src\*"; DestDir: "{app}\frontend\src"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Front : bundle Angular pré-buildé (servi par le binaire ; plus de npm build)
 Source: "..\frontend\public\*"; DestDir: "{app}\frontend\public"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\frontend\dist\*"; DestDir: "{app}\frontend\dist"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\frontend\package.json"; DestDir: "{app}\frontend"; Flags: ignoreversion
-Source: "..\frontend\package-lock.json"; DestDir: "{app}\frontend"; Flags: ignoreversion
-Source: "..\frontend\angular.json"; DestDir: "{app}\frontend"; Flags: ignoreversion
-Source: "..\frontend\proxy.conf.json"; DestDir: "{app}\frontend"; Flags: ignoreversion
-Source: "..\frontend\tsconfig*.json"; DestDir: "{app}\frontend"; Flags: ignoreversion
-
-; NSSM (la CI place le binaire ici avant de compiler le .iss)
-Source: "bin\nssm.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
 
 ; Doc
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -107,17 +98,14 @@ Filename: "http://localhost:3000"; \
   Flags: shellexec postinstall skipifsilent
 
 [UninstallRun]
-; Stopper et supprimer le service avant désinstallation des fichiers
-Filename: "{app}\bin\nssm.exe"; Parameters: "stop FF-TAROT"; \
+; Stopper et supprimer le service natif avant désinstallation des fichiers
+Filename: "{sys}\sc.exe"; Parameters: "stop FF-TAROT"; \
   Flags: runhidden; RunOnceId: "StopFftService"
-Filename: "{app}\bin\nssm.exe"; Parameters: "remove FF-TAROT confirm"; \
+Filename: "{sys}\sc.exe"; Parameters: "delete FF-TAROT"; \
   Flags: runhidden; RunOnceId: "RemoveFftService"
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}\logs"
 Type: files; Name: "{app}\.env"
-Type: filesandordirs; Name: "{app}\node_modules"
-Type: filesandordirs; Name: "{app}\frontend\node_modules"
 
 ; ====================================================================
 ; CODE PASCAL — toute la logique d'install runtime
@@ -441,49 +429,48 @@ begin
   Result := True;
 end;
 
-function InstallService(const NodeExe: String): Boolean;
+// Service Windows NATIF (plus de NSSM) : server.exe embarque le dispatcher
+// SCM via amalgame-service, donc sc.exe suffit. La config passe par la clé
+// registre Environment du service (un service tourne avec CWD=system32, pas
+// {app}) — le binaire la lit via Config.Get qui priorise l'env process.
+function InstallService(): Boolean;
 var
   ExitCode: Integer;
-  NssmExe, AppDir, ServerJs, LogsDir: String;
+  AppDir, ExePath, Sc: String;
+  EnvLines: TArrayOfString;
 begin
-  SetProgress('Installation du service Windows FF-TAROT (auto-start au boot)...');
-  NssmExe  := ExpandConstant('{app}\bin\nssm.exe');
-  AppDir   := ExpandConstant('{app}');
-  ServerJs := ExpandConstant('{app}\src\server.js');
-  LogsDir  := ExpandConstant('{app}\logs');
+  SetProgress('Installation du service Windows natif FF-TAROT (auto-start)...');
+  AppDir  := ExpandConstant('{app}');
+  ExePath := ExpandConstant('{app}\server.exe');
+  Sc      := ExpandConstant('{sys}\sc.exe');
 
-  if not DirExists(LogsDir) then CreateDir(LogsDir);
+  Exec(Sc, 'stop FF-TAROT',   '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  Exec(Sc, 'delete FF-TAROT', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  Sleep(1000);
 
-  Exec(NssmExe, 'stop FF-TAROT',           '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'remove FF-TAROT confirm', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-
-  Exec(NssmExe, 'install FF-TAROT "' + NodeExe + '" "' + ServerJs + '"',
+  Exec(Sc, 'create FF-TAROT binPath= "' + ExePath + '" start= auto DisplayName= "FF-TAROT"',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'set FF-TAROT AppDirectory "' + AppDir + '"',
+  Exec(Sc, 'description FF-TAROT "FF-TAROT - Gestion de tournois FFT"',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'set FF-TAROT AppStdout "' + LogsDir + '\server.log"',
-       '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'set FF-TAROT AppStderr "' + LogsDir + '\server.log"',
-       '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'set FF-TAROT AppRotateFiles 1',
-       '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'set FF-TAROT AppRotateBytes 10485760',
-       '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'set FF-TAROT Start SERVICE_AUTO_START',
-       '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'set FF-TAROT Description "FF-TAROT - Gestion de tournois FFT"',
-       '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(NssmExe, 'set FF-TAROT DisplayName "FF-TAROT"',
-       '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-
   // Restart automatique en cas de crash (3 essais : 5s, 5s, 15s)
-  Exec('sc.exe',
-       'failure FF-TAROT reset= 60 actions= restart/5000/restart/5000/restart/15000',
+  Exec(Sc, 'failure FF-TAROT reset= 60 actions= restart/5000/restart/5000/restart/15000',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
 
-  Exec(NssmExe, 'start FF-TAROT', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Sleep(2000);
+  // Environnement du service (REG_MULTI_SZ). FRONT_DIR en absolu pour servir
+  // le bundle Angular malgré le CWD=system32.
+  SetArrayLength(EnvLines, 8);
+  EnvLines[0] := 'PORT=3000';
+  EnvLines[1] := 'SOCKET_PORT=3001';
+  EnvLines[2] := 'DB_HOST=localhost';
+  EnvLines[3] := 'DB_USER=fft_user';
+  EnvLines[4] := 'DB_PASSWORD=' + DbPassword;
+  EnvLines[5] := 'DB_NAME=fft';
+  EnvLines[6] := 'JWT_SECRET=' + JwtSecret;
+  EnvLines[7] := 'FRONT_DIR=' + AppDir + '\frontend\dist\frontend\browser';
+  RegWriteMultiStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\FF-TAROT', 'Environment', EnvLines);
 
+  Exec(Sc, 'start FF-TAROT', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  Sleep(2000);
   Result := True;
 end;
 
@@ -504,20 +491,15 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  NodeExe, MysqlExe: String;
+  MysqlExe: String;
 begin
   if CurStep <> ssPostInstall then Exit;
 
   ProgressPage.SetText('Préparation...', '');
   ProgressPage.Show;
   try
-    if not InstallNodejs() then
-    begin
-      SuppressibleMsgBox('Impossible d''installer Node.js (téléchargement ou MSI en échec). Annulation.'#13#10 +
-             'Voir le log d''installation pour le détail.', mbCriticalError, MB_OK, IDOK);
-      Abort;
-    end;
-
+    // Plus de Node : le back est un binaire AM (server.exe) et le front est
+    // pré-buildé/bundlé. On installe juste MariaDB + le service natif.
     if not InstallMariaDB() then
     begin
       SuppressibleMsgBox('Impossible d''installer MariaDB (téléchargement ou MSI en échec). Annulation.'#13#10 +
@@ -525,18 +507,16 @@ begin
       Abort;
     end;
 
-    NodeExe  := FindNodeExe();
     MysqlExe := FindMysqlExe();
-    if (NodeExe = '') or (MysqlExe = '') then
+    if MysqlExe = '' then
     begin
-      SuppressibleMsgBox('Node ou MariaDB introuvables après install. Redémarrer la machine et relancer.',
+      SuppressibleMsgBox('MariaDB introuvable après install. Redémarrer la machine et relancer.',
              mbCriticalError, MB_OK, IDOK);
       Abort;
     end;
 
     if not ConfigureDatabase(MysqlExe) then Abort;
-    if not InstallNpmDeps(NodeExe) then Abort;
-    if not InstallService(NodeExe) then Abort;
+    if not InstallService() then Abort;
 
     SetProgress('Installation terminée avec succès !');
     Sleep(1500);

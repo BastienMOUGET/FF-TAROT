@@ -1,0 +1,93 @@
+namespace App
+
+import Amalgame.Database.MySQL
+
+// Couche d'accès MariaDB. amc n'a PAS de champ statique mutable, donc le
+// handle vit dans une INSTANCE Db créée dans Main et capturée par les
+// closures de route (passée à chaque handler en paramètre).
+// Le driver est mono-owner → serveur mono-thread (WebApp.Serve).
+// Toutes les cellules SQL sont des `string` ; NULL → "".
+public class Db {
+
+    public Conn: AmalgameMySQL
+    public Io:   SocketIO       // injecté dans Main ; sert au broadcast classement
+    public Db() {}
+
+    // Ouvre la connexion depuis l'environnement. true si OK.
+    public bool Open() {
+        let host: string = Config.Get("DB_HOST", "127.0.0.1")
+        let portS: string = Config.Get("DB_PORT", "3306")
+        let user: string = Config.Get("DB_USER", "fft_user")
+        let pass: string = Config.Get("DB_PASSWORD", "")
+        let name: string = Config.Get("DB_NAME", "fft")
+        var port: int = 3306
+        if (String.Length(portS) > 0) { port = String.ToInt(portS) }
+
+        this.Conn = MySQL.Open(host, port, user, pass, name)
+        return MySQL.IsOpen(this.Conn)
+    }
+
+    public string LastError() { return MySQL.LastError(this.Conn) }
+    public int LastInsertId() { return MySQL.LastInsertId(this.Conn) }
+    public int Changes() { return MySQL.Changes(this.Conn) }
+
+    // SELECT paramétré → lignes (List<List<string>>).
+    public List<List<string>> Rows(string sql, List<string> params) {
+        return MySQL.QueryBindAll(this.Conn, sql, params)
+    }
+
+    // INSERT/UPDATE/DELETE paramétré → true si OK.
+    public bool Exec(string sql, List<string> params) {
+        return MySQL.ExecBind(this.Conn, sql, params)
+    }
+
+    // DDL / commandes sans paramètres.
+    public bool ExecRaw(string sql) {
+        return MySQL.Exec(this.Conn, sql)
+    }
+
+    // ── Transactions ─────────────────────────────────────
+    public bool Begin() { return MySQL.Begin(this.Conn) }
+    public bool Commit() { return MySQL.Commit(this.Conn) }
+    public bool Rollback() { return MySQL.Rollback(this.Conn) }
+
+    // ── Coercions de cellules (NULL = "") — statiques ────
+    public static bool IsNull(string cell) { return String.Length(cell) == 0 }
+
+    public static int CellInt(string cell) {
+        if (String.Length(cell) == 0) { return 0 }
+        return String.ToInt(cell)
+    }
+
+    public static float CellFloat(string cell) {
+        if (String.Length(cell) == 0) { return 0.0 }
+        return String.ToFloat(cell)
+    }
+
+    // MariaDB rend les booléens en "0"/"1".
+    public static bool CellBool(string cell) { return cell == "1" }
+
+    // ── Construction de listes de paramètres ─────────────
+    public static List<string> NoParams() { return new List<string>() }
+
+    public static List<string> P1(string a) {
+        let l: List<string> = new List<string>()
+        l.Add(a)
+        return l
+    }
+
+    public static List<string> P2(string a, string b) {
+        let l: List<string> = new List<string>()
+        l.Add(a)
+        l.Add(b)
+        return l
+    }
+
+    public static List<string> P3(string a, string b, string c) {
+        let l: List<string> = new List<string>()
+        l.Add(a)
+        l.Add(b)
+        l.Add(c)
+        return l
+    }
+}

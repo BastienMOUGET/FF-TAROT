@@ -1,0 +1,328 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module scoring — saisie des scores : table_results + hand_results.
+// Mutations = authentifié (guard global app.js). Recompute des totaux
+// après chaque modif de donne. Refresh classement en TODO (ranking+socketio).
+public class ModScoring {
+
+    static string TR_COLS() {
+        return "id, round_id, table_number, score_n, score_s, score_e, score_o, codif_n, codif_s, codif_e, codif_o, validated, validated_at"
+    }
+
+    static JsonValue HandJson(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("hand_number", J.CellInt(r.Get(1)))
+        o.AppendEntry("taker_seat", J.CellStrN(r.Get(2)))
+        o.AppendEntry("score_n", J.CellInt(r.Get(3)))
+        o.AppendEntry("score_s", J.CellInt(r.Get(4)))
+        o.AppendEntry("score_e", J.CellInt(r.Get(5)))
+        o.AppendEntry("score_o", J.CellInt(r.Get(6)))
+        return o
+    }
+
+    static JsonValue HandsJson(Db db, string trId) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, hand_number, taker_seat, score_n, score_s, score_e, score_o FROM hand_results WHERE table_result_id = ? ORDER BY hand_number ASC", Db.P1(trId))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModScoring.HandJson(r))
+        }
+        return arr
+    }
+
+    static JsonValue TableResultJson(Db db, List<string> r) {
+        let o: JsonValue = J.Obj()
+        let id: string = r.Get(0)
+        o.AppendEntry("id", J.CellInt(id))
+        o.AppendEntry("round_id", J.CellInt(r.Get(1)))
+        o.AppendEntry("table_number", J.CellInt(r.Get(2)))
+        o.AppendEntry("score_n", J.CellInt(r.Get(3)))
+        o.AppendEntry("score_s", J.CellInt(r.Get(4)))
+        o.AppendEntry("score_e", J.CellInt(r.Get(5)))
+        o.AppendEntry("score_o", J.CellInt(r.Get(6)))
+        o.AppendEntry("codif_n", J.CellStrN(r.Get(7)))
+        o.AppendEntry("codif_s", J.CellStrN(r.Get(8)))
+        o.AppendEntry("codif_e", J.CellStrN(r.Get(9)))
+        o.AppendEntry("codif_o", J.CellStrN(r.Get(10)))
+        o.AppendEntry("validated", J.CellBool(r.Get(11)))
+        o.AppendEntry("validated_at", J.CellStrN(r.Get(12)))
+        o.AppendEntry("hands", ModScoring.HandsJson(db, id))
+        return o
+    }
+
+    static bool RoundExists(Db db, string roundId) {
+        let rows: List<List<string>> = db.Rows("SELECT id FROM rounds WHERE id = ?", Db.P1(roundId))
+        return rows.Count() > 0
+    }
+
+    // Trouve l'id du table_result, ou "" si absent.
+    static string FindTrId(Db db, string roundId, string tableNumber) {
+        let rows: List<List<string>> = db.Rows("SELECT id FROM table_results WHERE round_id = ? AND table_number = ?", Db.P2(roundId, tableNumber))
+        if (rows.Count() == 0) { return "" }
+        let r0: List<string> = rows.Get(0)
+        return r0.Get(0)
+    }
+
+    // Trouve ou crée le table_result. Renvoie l'id, ou "" si pas de mise en place.
+    static string EnsureTrId(Db db, string roundId, string tableNumber) {
+        let existing: string = ModScoring.FindTrId(db, roundId, tableNumber)
+        if (String.Length(existing) > 0) { return existing }
+        let seats: List<List<string>> = db.Rows("SELECT 1 FROM seats WHERE round_id = ? AND table_number = ? LIMIT 1", Db.P2(roundId, tableNumber))
+        if (seats.Count() == 0) { return "" }
+        db.Exec("INSERT INTO table_results (round_id, table_number) VALUES (?, ?)", Db.P2(roundId, tableNumber))
+        return String.FromInt(db.LastInsertId())
+    }
+
+    static void RecomputeTotals(Db db, string trId) {
+        let sums: List<List<string>> = db.Rows("SELECT COALESCE(SUM(score_n),0), COALESCE(SUM(score_s),0), COALESCE(SUM(score_e),0), COALESCE(SUM(score_o),0) FROM hand_results WHERE table_result_id = ?", Db.P1(trId))
+        let s0: List<string> = sums.Get(0)
+        let ps: List<string> = new List<string>()
+        ps.Add(s0.Get(0))
+        ps.Add(s0.Get(1))
+        ps.Add(s0.Get(2))
+        ps.Add(s0.Get(3))
+        ps.Add(trId)
+        db.Exec("UPDATE table_results SET score_n = ?, score_s = ?, score_e = ?, score_o = ? WHERE id = ?", ps)
+    }
+
+    static HttpResponse TrResponse(Db db, string trId) {
+        let rows: List<List<string>> = db.Rows("SELECT " + ModScoring.TR_COLS() + " FROM table_results WHERE id = ?", Db.P1(trId))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModScoring.TableResultJson(db, r0))
+    }
+
+    // GET /api/rounds/:roundId/table-results
+    public static HttpResponse ListByRound(WebContext ctx, Db db) {
+        let roundId: string = ctx.Param("roundId")
+        if (!ModScoring.RoundExists(db, roundId)) { return HttpErr.NotFound() }
+        let rows: List<List<string>> = db.Rows("SELECT " + ModScoring.TR_COLS() + " FROM table_results WHERE round_id = ? ORDER BY table_number ASC", Db.P1(roundId))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModScoring.TableResultJson(db, r))
+        }
+        return J.Ok(arr)
+    }
+
+    // GET /api/rounds/:roundId/tables/:tableNumber
+    public static HttpResponse GetByRoundAndTable(WebContext ctx, Db db) {
+        let roundId: string = ctx.Param("roundId")
+        let table: string = ctx.Param("tableNumber")
+        if (!ModScoring.RoundExists(db, roundId)) { return HttpErr.NotFound() }
+        let trId: string = ModScoring.FindTrId(db, roundId, table)
+        if (String.Length(trId) == 0) { return HttpErr.NotFound() }
+        return ModScoring.TrResponse(db, trId)
+    }
+
+    // PUT /api/rounds/:roundId/tables/:tableNumber/codifs (auth)
+    public static HttpResponse SetCodifs(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckAuth(ctx)
+        if (rc != 0) { return HttpErr.Unauthorized() }
+        let roundId: string = ctx.Param("roundId")
+        let table: string = ctx.Param("tableNumber")
+        if (!ModScoring.RoundExists(db, roundId)) { return HttpErr.NotFound() }
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+
+        db.Begin()
+        let trId: string = ModScoring.EnsureTrId(db, roundId, table)
+        if (String.Length(trId) == 0) { db.Rollback() return HttpErr.BadRequest("Aucune mise en place pour cette table") }
+        let upd: SqlUpd = new SqlUpd()
+        ModScoring.CodifSet(upd, b, "codif_n")
+        ModScoring.CodifSet(upd, b, "codif_s")
+        ModScoring.CodifSet(upd, b, "codif_e")
+        ModScoring.CodifSet(upd, b, "codif_o")
+        let ok: bool = db.Exec(upd.Sql("table_results"), upd.ParamsWithId(trId))
+        if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        db.Commit()
+        ModRanking.RefreshForRound(db, roundId)
+        return ModScoring.TrResponse(db, trId)
+    }
+
+    static void CodifSet(SqlUpd upd, JsonValue b, string key) {
+        if (Fld.HasStr(b, key)) { upd.Set(key, Fld.Str(b, key)) } else { upd.SetNull(key) }
+    }
+
+    // POST /api/rounds/:roundId/tables/:tableNumber/validate (auth)
+    public static HttpResponse Validate(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckAuth(ctx)
+        if (rc != 0) { return HttpErr.Unauthorized() }
+        let roundId: string = ctx.Param("roundId")
+        let table: string = ctx.Param("tableNumber")
+        if (!ModScoring.RoundExists(db, roundId)) { return HttpErr.NotFound() }
+        db.Begin()
+        let trId: string = ModScoring.EnsureTrId(db, roundId, table)
+        if (String.Length(trId) == 0) { db.Rollback() return HttpErr.BadRequest("Aucune mise en place pour cette table") }
+        let ok: bool = db.Exec("UPDATE table_results SET validated = TRUE, validated_at = CURRENT_TIMESTAMP WHERE id = ?", Db.P1(trId))
+        if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        db.Commit()
+        ModRanking.RefreshForRound(db, roundId)
+        return ModScoring.TrResponse(db, trId)
+    }
+
+    // POST /api/rounds/:roundId/tables/:tableNumber/unvalidate (auth)
+    public static HttpResponse Unvalidate(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckAuth(ctx)
+        if (rc != 0) { return HttpErr.Unauthorized() }
+        let roundId: string = ctx.Param("roundId")
+        let table: string = ctx.Param("tableNumber")
+        if (!ModScoring.RoundExists(db, roundId)) { return HttpErr.NotFound() }
+        let trId: string = ModScoring.FindTrId(db, roundId, table)
+        if (String.Length(trId) == 0) { return HttpErr.NotFound() }
+        let ok: bool = db.Exec("UPDATE table_results SET validated = FALSE, validated_at = NULL WHERE id = ?", Db.P1(trId))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        ModRanking.RefreshForRound(db, roundId)
+        return ModScoring.TrResponse(db, trId)
+    }
+
+    // DELETE /api/rounds/:roundId/tables/:tableNumber (auth)
+    public static HttpResponse RemoveTable(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckAuth(ctx)
+        if (rc != 0) { return HttpErr.Unauthorized() }
+        let roundId: string = ctx.Param("roundId")
+        let table: string = ctx.Param("tableNumber")
+        if (!ModScoring.RoundExists(db, roundId)) { return HttpErr.NotFound() }
+        let trId: string = ModScoring.FindTrId(db, roundId, table)
+        if (String.Length(trId) == 0) { return HttpErr.NotFound() }
+        let ok: bool = db.Exec("DELETE FROM table_results WHERE id = ?", Db.P1(trId))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        ModRanking.RefreshForRound(db, roundId)
+        return J.NoContent()
+    }
+
+    static bool ValidSeat(string s) {
+        if (s == "N") { return true }
+        if (s == "S") { return true }
+        if (s == "E") { return true }
+        if (s == "O") { return true }
+        return false
+    }
+
+    // POST /api/rounds/:roundId/tables/:tableNumber/hands (auth)
+    public static HttpResponse AddHand(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckAuth(ctx)
+        if (rc != 0) { return HttpErr.Unauthorized() }
+        let roundId: string = ctx.Param("roundId")
+        let table: string = ctx.Param("tableNumber")
+        if (!ModScoring.RoundExists(db, roundId)) { return HttpErr.NotFound() }
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasInt(b, "hand_number")) { return HttpErr.BadRequest("hand_number requis (entier >= 1)") }
+        let hv: JsonValue = b.Get("hand_number")
+        if (hv.AsInt() < 1) { return HttpErr.BadRequest("hand_number doit être >= 1") }
+        var takerSet: bool = false
+        var taker: string = ""
+        if (Fld.HasStr(b, "taker_seat")) {
+            taker = Fld.Str(b, "taker_seat")
+            if (!ModScoring.ValidSeat(taker)) { return HttpErr.BadRequest("taker_seat doit être N, S, E ou O") }
+            takerSet = true
+        }
+
+        db.Begin()
+        let trId: string = ModScoring.EnsureTrId(db, roundId, table)
+        if (String.Length(trId) == 0) { db.Rollback() return HttpErr.BadRequest("Aucune mise en place pour cette table") }
+        let ins: SqlIns = new SqlIns()
+        ins.Set("table_result_id", trId)
+        ins.Set("hand_number", String.FromInt(hv.AsInt()))
+        if (takerSet) { ins.Set("taker_seat", taker) } else { ins.SetNull("taker_seat") }
+        ins.Set("score_n", Fld.IntOr(b, "score_n", "0"))
+        ins.Set("score_s", Fld.IntOr(b, "score_s", "0"))
+        ins.Set("score_e", Fld.IntOr(b, "score_e", "0"))
+        ins.Set("score_o", Fld.IntOr(b, "score_o", "0"))
+        let ok: bool = db.Exec(ins.Sql("hand_results"), ins.Params())
+        if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        let handId: int = db.LastInsertId()
+        ModScoring.RecomputeTotals(db, trId)
+        db.Commit()
+        ModRanking.RefreshForRound(db, roundId)
+        let resp: HttpResponse = ModScoring.HandResponse(db, String.FromInt(handId))
+        return resp.Status(201)
+    }
+
+    static HttpResponse HandResponse(Db db, string id) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT h.id, h.table_result_id, h.hand_number, h.taker_seat, h.score_n, h.score_s, h.score_e, h.score_o, tr.round_id, tr.table_number FROM hand_results h JOIN table_results tr ON tr.id = h.table_result_id WHERE h.id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r: List<string> = rows.Get(0)
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("table_result_id", J.CellInt(r.Get(1)))
+        o.AppendEntry("hand_number", J.CellInt(r.Get(2)))
+        o.AppendEntry("taker_seat", J.CellStrN(r.Get(3)))
+        o.AppendEntry("score_n", J.CellInt(r.Get(4)))
+        o.AppendEntry("score_s", J.CellInt(r.Get(5)))
+        o.AppendEntry("score_e", J.CellInt(r.Get(6)))
+        o.AppendEntry("score_o", J.CellInt(r.Get(7)))
+        o.AppendEntry("round_id", J.CellInt(r.Get(8)))
+        o.AppendEntry("table_number", J.CellInt(r.Get(9)))
+        return J.Ok(o)
+    }
+
+    // PUT /api/hands/:id (auth) — patch partiel + recompute.
+    public static HttpResponse UpdateHand(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckAuth(ctx)
+        if (rc != 0) { return HttpErr.Unauthorized() }
+        let id: string = ctx.Param("id")
+        let existing: List<List<string>> = db.Rows("SELECT id, table_result_id FROM hand_results WHERE id = ?", Db.P1(id))
+        if (existing.Count() == 0) { return HttpErr.NotFound() }
+        let e0: List<string> = existing.Get(0)
+        let trId: string = e0.Get(1)
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+
+        let upd: SqlUpd = new SqlUpd()
+        if (Fld.HasInt(b, "hand_number")) {
+            let hv: JsonValue = b.Get("hand_number")
+            if (hv.AsInt() < 1) { return HttpErr.BadRequest("hand_number doit être >= 1") }
+            upd.Set("hand_number", String.FromInt(hv.AsInt()))
+        }
+        if (Fld.HasStr(b, "taker_seat")) {
+            let tk: string = Fld.Str(b, "taker_seat")
+            if (!ModScoring.ValidSeat(tk)) { return HttpErr.BadRequest("taker_seat invalide") }
+            upd.Set("taker_seat", tk)
+        }
+        if (Fld.HasInt(b, "score_n")) { upd.Set("score_n", Fld.IntStr(b, "score_n")) }
+        if (Fld.HasInt(b, "score_s")) { upd.Set("score_s", Fld.IntStr(b, "score_s")) }
+        if (Fld.HasInt(b, "score_e")) { upd.Set("score_e", Fld.IntStr(b, "score_e")) }
+        if (Fld.HasInt(b, "score_o")) { upd.Set("score_o", Fld.IntStr(b, "score_o")) }
+
+        if (upd.Sets.Count() == 0) { return ModScoring.HandResponse(db, id) }
+
+        db.Begin()
+        let ok: bool = db.Exec(upd.Sql("hand_results"), upd.ParamsWithId(id))
+        if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        ModScoring.RecomputeTotals(db, trId)
+        db.Commit()
+        ModRanking.RefreshForTr(db, trId)
+        return ModScoring.HandResponse(db, id)
+    }
+
+    // DELETE /api/hands/:id (auth)
+    public static HttpResponse RemoveHand(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckAuth(ctx)
+        if (rc != 0) { return HttpErr.Unauthorized() }
+        let id: string = ctx.Param("id")
+        let existing: List<List<string>> = db.Rows("SELECT id, table_result_id FROM hand_results WHERE id = ?", Db.P1(id))
+        if (existing.Count() == 0) { return HttpErr.NotFound() }
+        let e0: List<string> = existing.Get(0)
+        let trId: string = e0.Get(1)
+
+        db.Begin()
+        let ok: bool = db.Exec("DELETE FROM hand_results WHERE id = ?", Db.P1(id))
+        if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        ModScoring.RecomputeTotals(db, trId)
+        db.Commit()
+        ModRanking.RefreshForTr(db, trId)
+        return J.NoContent()
+    }
+}

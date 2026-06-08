@@ -1,45 +1,48 @@
 # =====================================================
-# FF-TAROT — Image Node back + front statique
+# FF-TAROT — Image binaire Amalgame + front statique
 # =====================================================
-# Build multi-stage : on compile le front Angular dans une image jetable,
-# puis on monte l'image finale Node Alpine avec le bundle.
+# IMPORTANT : le binaire back AM (`./server`) doit être buildé sur l'hôte
+# (ou en CI) AVANT `docker build` :
+#
+#     ./build.sh            # produit ./server (linké à libmariadb)
+#     docker build -t ff-tarot .
+#
+# On bâtit ici sur debian:12-slim pour une ABI glibc/libmariadb compatible
+# avec un binaire produit sur Debian 12. (Construire l'AM dans Docker
+# nécessiterait la toolchain amc + libmariadb-dev ; on préfère copier le
+# binaire pré-buildé, plus simple et déterministe.)
 
 # ---------- Étape 1 : build du front Angular ----------
 FROM node:20-alpine AS front-builder
-
 WORKDIR /app/frontend
-
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-fund --no-audit
-
 COPY frontend/ ./
 RUN npm run build
 
-# ---------- Étape 2 : image finale ----------
-FROM node:20-alpine
+# ---------- Étape 2 : image finale (runtime AM) ----------
+FROM debian:12-slim
 
-# mariadb-client : utilisé au boot pour appliquer db.sql/seed.sql
-# (entrypoint script). Si la DB est déjà schémée, c'est instantané.
-RUN apk add --no-cache mariadb-client bash
+# Libs runtime du binaire AM : libmariadb (DB), libgc (bdwgc), openssl,
+# zlib. mariadb-client : appliquer db.sql/seed.sql au premier boot.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libmariadb3 libgc1 libssl3 zlib1g mariadb-client ca-certificates bash \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Dépendances back uniquement
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-fund --no-audit
-
-# Code back
-COPY src/ ./src/
+# Binaire back AM pré-buildé (./build.sh) + schéma SQL
+COPY server ./server
 COPY db.sql seed.sql ./
 
 # Front buildé depuis l'étape précédente
 COPY --from=front-builder /app/frontend/dist /app/frontend/dist
 
-# Entrypoint qui attend la DB et applique le schéma au premier démarrage
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /app/server
 
-EXPOSE 3000
+# 3000 = API + front ; 3001 = Socket.IO (classement live)
+EXPOSE 3000 3001
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["node", "src/server.js"]
+CMD ["/app/server"]

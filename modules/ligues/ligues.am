@@ -1,0 +1,108 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module ligues — CRUD référentiel. GET public ; POST/PUT/DELETE admin.
+// Sert de template pour les autres modules CRUD simples.
+public class ModLigues {
+
+    // Ligne SQL (id, code, name, created_at) → objet JSON.
+    public static JsonValue Row(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("code", J.CellStr(r.Get(1)))
+        o.AppendEntry("name", J.CellStr(r.Get(2)))
+        o.AppendEntry("created_at", J.CellStrN(r.Get(3)))
+        return o
+    }
+
+    static string SELECT_COLS() { return "id, code, name, created_at" }
+
+    public static HttpResponse List(WebContext ctx, Db db) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, code, name, created_at FROM ligues ORDER BY name ASC",
+            Db.NoParams())
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModLigues.Row(r))
+        }
+        return J.Ok(arr)
+    }
+
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, code, name, created_at FROM ligues WHERE id = ?",
+            Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModLigues.Row(r0))
+    }
+
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let codeV: JsonValue = b.Get("code")
+        let nameV: JsonValue = b.Get("name")
+        if (!codeV.IsString()) { return HttpErr.BadRequest("code requis") }
+        if (!nameV.IsString()) { return HttpErr.BadRequest("name requis") }
+        let code: string = codeV.AsString()
+        let name: string = nameV.AsString()
+
+        let ok: bool = db.Exec("INSERT INTO ligues (code, name) VALUES (?, ?)", Db.P2(code, name))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+
+        let id: int = db.LastInsertId()
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, code, name, created_at FROM ligues WHERE id = ?",
+            Db.P1(String.FromInt(id)))
+        let r0: List<string> = rows.Get(0)
+        return J.Created(ModLigues.Row(r0))
+    }
+
+    public static HttpResponse Update(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let codeV: JsonValue = b.Get("code")
+        let nameV: JsonValue = b.Get("name")
+        if (!codeV.IsString()) { return HttpErr.BadRequest("code requis") }
+        if (!nameV.IsString()) { return HttpErr.BadRequest("name requis") }
+        let code: string = codeV.AsString()
+        let name: string = nameV.AsString()
+
+        let ok: bool = db.Exec("UPDATE ligues SET code = ?, name = ? WHERE id = ?", Db.P3(code, name, id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, code, name, created_at FROM ligues WHERE id = ?",
+            Db.P1(id))
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModLigues.Row(r0))
+    }
+
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM ligues WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+}

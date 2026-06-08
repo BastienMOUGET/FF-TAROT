@@ -148,3 +148,7 @@ old/
 # Claude Code local permissions (peut contenir des credentials)
 .claude/settings.local.json
 
+
+# Amalgame build artifacts
+/server
+/server.c

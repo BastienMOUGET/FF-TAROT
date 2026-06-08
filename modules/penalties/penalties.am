@@ -1,0 +1,149 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module penalties — pénalités au niveau tournoi (impactent le classement).
+public class ModPenalties {
+
+    static string SELECT_BASE() {
+        return "SELECT pe.id, pe.tournament_id, pe.player_id, pe.type_id, pe.points, pe.reason, pe.applied_round_id, pe.created_at, pl.name AS player_name, pl.firstname AS player_firstname, pt.code AS type_code, pt.label AS type_label FROM penalties pe JOIN players pl ON pl.id = pe.player_id LEFT JOIN penalty_types pt ON pt.id = pe.type_id"
+    }
+
+    public static JsonValue Row(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("tournament_id", J.CellInt(r.Get(1)))
+        o.AppendEntry("player_id", J.CellInt(r.Get(2)))
+        o.AppendEntry("type_id", J.CellIntN(r.Get(3)))
+        o.AppendEntry("points", J.CellFloat(r.Get(4)))
+        o.AppendEntry("reason", J.CellStrN(r.Get(5)))
+        o.AppendEntry("applied_round_id", J.CellIntN(r.Get(6)))
+        o.AppendEntry("created_at", J.CellStrN(r.Get(7)))
+        o.AppendEntry("player_name", J.CellStr(r.Get(8)))
+        o.AppendEntry("player_firstname", J.CellStr(r.Get(9)))
+        o.AppendEntry("type_code", J.CellStrN(r.Get(10)))
+        o.AppendEntry("type_label", J.CellStrN(r.Get(11)))
+        return o
+    }
+
+    static HttpResponse Refetch(Db db, int id) {
+        let rows: List<List<string>> = db.Rows(ModPenalties.SELECT_BASE() + " WHERE pe.id = ?", Db.P1(String.FromInt(id)))
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModPenalties.Row(r0))
+    }
+
+    // GET /api/tournaments/:tournamentId/penalties
+    public static HttpResponse ListByTournament(WebContext ctx, Db db) {
+        let tid: string = ctx.Param("tournamentId")
+        let rows: List<List<string>> = db.Rows(
+            ModPenalties.SELECT_BASE() + " WHERE pe.tournament_id = ? ORDER BY pe.created_at DESC", Db.P1(tid))
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModPenalties.Row(r))
+        }
+        return J.Ok(arr)
+    }
+
+    // GET /api/penalties/:id
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows(ModPenalties.SELECT_BASE() + " WHERE pe.id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModPenalties.Row(r0))
+    }
+
+    // points fournis → utilisés ; sinon default_points du type ; sinon "0".
+    static string ResolvePoints(Db db, JsonValue b) {
+        let pv: JsonValue = b.Get("points")
+        if (pv.IsInt()) { return String.FromInt(pv.AsInt()) }
+        if (pv.IsFloat()) { return String.FromFloat(pv.AsFloat()) }
+        let tv: JsonValue = b.Get("type_id")
+        if (tv.IsInt()) {
+            let rows: List<List<string>> = db.Rows("SELECT default_points FROM penalty_types WHERE id = ?", Db.P1(String.FromInt(tv.AsInt())))
+            if (rows.Count() > 0) {
+                let r0: List<string> = rows.Get(0)
+                return String.FromFloat(Db.CellFloat(r0.Get(0)))
+            }
+        }
+        return "0"
+    }
+
+    // POST /api/tournaments/:tournamentId/penalties (admin)
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let tid: string = ctx.Param("tournamentId")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasInt(b, "player_id")) { return HttpErr.BadRequest("player_id requis") }
+        let points: string = ModPenalties.ResolvePoints(db, b)
+
+        let ins: SqlIns = new SqlIns()
+        ins.Set("tournament_id", tid)
+        ins.Set("player_id", Fld.IntStr(b, "player_id"))
+        if (Fld.HasInt(b, "type_id")) { ins.Set("type_id", Fld.IntStr(b, "type_id")) } else { ins.SetNull("type_id") }
+        ins.Set("points", points)
+        if (Fld.HasStr(b, "reason")) { ins.Set("reason", Fld.Str(b, "reason")) } else { ins.SetNull("reason") }
+        if (Fld.HasInt(b, "applied_round_id")) { ins.Set("applied_round_id", Fld.IntStr(b, "applied_round_id")) } else { ins.SetNull("applied_round_id") }
+
+        let ok: bool = db.Exec(ins.Sql("penalties"), ins.Params())
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let newId: int = db.LastInsertId()
+        ModRanking.RefreshForTournament(db, tid)
+        let resp: HttpResponse = ModPenalties.Refetch(db, newId)
+        return resp.Status(201)
+    }
+
+    // PUT /api/penalties/:id (admin)
+    public static HttpResponse Update(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let existing: List<List<string>> = db.Rows("SELECT id, tournament_id FROM penalties WHERE id = ?", Db.P1(id))
+        if (existing.Count() == 0) { return HttpErr.NotFound() }
+        let ex0: List<string> = existing.Get(0)
+        let tid: string = ex0.Get(1)
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasInt(b, "player_id")) { return HttpErr.BadRequest("player_id requis") }
+
+        let upd: SqlUpd = new SqlUpd()
+        upd.Set("player_id", Fld.IntStr(b, "player_id"))
+        if (Fld.HasInt(b, "type_id")) { upd.Set("type_id", Fld.IntStr(b, "type_id")) } else { upd.SetNull("type_id") }
+        upd.Set("points", ModPenalties.ResolvePoints(db, b))
+        if (Fld.HasStr(b, "reason")) { upd.Set("reason", Fld.Str(b, "reason")) } else { upd.SetNull("reason") }
+        if (Fld.HasInt(b, "applied_round_id")) { upd.Set("applied_round_id", Fld.IntStr(b, "applied_round_id")) } else { upd.SetNull("applied_round_id") }
+
+        let ok: bool = db.Exec(upd.Sql("penalties"), upd.ParamsWithId(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        ModRanking.RefreshForTournament(db, tid)
+        return ModPenalties.Refetch(db, String.ToInt(id))
+    }
+
+    // DELETE /api/penalties/:id (admin)
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let existing: List<List<string>> = db.Rows("SELECT tournament_id FROM penalties WHERE id = ?", Db.P1(id))
+        if (existing.Count() == 0) { return HttpErr.NotFound() }
+        let ex0: List<string> = existing.Get(0)
+        let tid: string = ex0.Get(0)
+        let ok: bool = db.Exec("DELETE FROM penalties WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        ModRanking.RefreshForTournament(db, tid)
+        return J.NoContent()
+    }
+}

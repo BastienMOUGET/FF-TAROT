@@ -1,0 +1,38 @@
+namespace App
+
+import Amalgame.IO
+
+// Config : variable d'environnement avec repli sur un fichier .env du
+// répertoire courant. Priorité : env process (export / systemd / registre
+// service Windows) > .env > défaut. Rend le binaire autonome (pas besoin
+// d'exporter le .env via un script) et permet un service natif qui lit son
+// .env sans passer par NSSM.
+public class Config {
+
+    public static string Get(string key, string def) {
+        // 1) env process (le plus prioritaire)
+        let fromEnv: string = Env.Get(key)
+        if (String.Length(fromEnv) > 0) { return fromEnv }
+        // 2) fichier .env
+        let fromFile: string = Config.FromDotEnv(key)
+        if (String.Length(fromFile) > 0) { return fromFile }
+        // 3) défaut
+        return def
+    }
+
+    static string FromDotEnv(string key) {
+        if (!File.Exists(".env")) { return "" }
+        let content: string = File.ReadAll(".env")
+        let lines: List<string> = String.Split(content, "\n")
+        let prefix: string = key + "="
+        for i in 0..lines.Count() {
+            var line: string = String.Trim(lines.Get(i))
+            if (String.StartsWith(line, "#")) { continue }
+            if (String.StartsWith(line, prefix)) {
+                let val: string = String.Substring(line, String.Length(prefix), String.Length(line) - String.Length(prefix))
+                return String.Trim(val)
+            }
+        }
+        return ""
+    }
+}

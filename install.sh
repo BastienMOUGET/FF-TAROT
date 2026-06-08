@@ -165,10 +165,22 @@ chmod 640 "$INSTALL_DIR/.env"
 chown "$APP_USER":"$APP_USER" "$INSTALL_DIR/.env"
 ok ".env généré (permissions 640)"
 
-# ---------------------------- npm install + build ----------------------------
+# ---------------------------- back AM + build front ----------------------------
 
-log "Installation des dépendances back (npm install)..."
-sudo -u "$APP_USER" -H bash -c "cd '$INSTALL_DIR' && npm install --omit=dev --no-fund --no-audit"
+# Le back est un binaire Amalgame (server). Soit il est livré dans le package
+# (release), soit on le build via build.sh (nécessite la toolchain amc +
+# libmariadb-dev). Plus de npm install côté back.
+if [[ -x "$INSTALL_DIR/server" ]]; then
+  ok "Binaire back 'server' présent (release package)"
+elif command -v amc >/dev/null 2>&1; then
+  log "Build du back Amalgame (amc)..."
+  sudo -u "$APP_USER" -H bash -c "cd '$INSTALL_DIR' && ./build.sh"
+  ok "Back AM buildé ($INSTALL_DIR/server)"
+else
+  err "Binaire 'server' absent et amc introuvable. Lancez ./build.sh sur une"
+  err "machine avec la toolchain amc + libmariadb-dev, ou utilisez le package release."
+  exit 1
+fi
 
 FRONT_INDEX="$INSTALL_DIR/frontend/dist/frontend/browser/index.html"
 if [[ -f "$FRONT_INDEX" ]]; then
@@ -184,14 +196,15 @@ fi
 
 cat > "$INSTALL_DIR/start.sh" <<'STARTSH'
 #!/usr/bin/env bash
-# Lance le serveur FF-TAROT en arrière-plan, log dans logs/server.log
+# Lance le back AM (binaire ./server) en arrière-plan, log dans logs/server.log.
+# Le binaire lit son .env du dossier courant (DB, ports, JWT).
 cd "$(dirname "$(readlink -f "$0")")"
 mkdir -p logs
-if pgrep -f "node src/server.js" > /dev/null; then
+if pgrep -x server > /dev/null; then
   echo "[FFT] déjà démarré. http://localhost:3000"
   exit 0
 fi
-nohup node src/server.js > logs/server.log 2>&1 &
+nohup ./server > logs/server.log 2>&1 &
 echo $! > logs/server.pid
 sleep 0.5
 echo "[FFT] démarré (pid $(cat logs/server.pid)). http://localhost:3000"
@@ -209,7 +222,7 @@ if [[ -f logs/server.pid ]]; then
   fi
   rm -f logs/server.pid
 else
-  pkill -f "node src/server.js" && echo "[FFT] arrêté" || echo "[FFT] pas en cours"
+  pkill -x server && echo "[FFT] arrêté" || echo "[FFT] pas en cours"
 fi
 STOPSH
 
@@ -231,7 +244,7 @@ Wants=mariadb.service
 Type=simple
 User=$APP_USER
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/node $INSTALL_DIR/src/server.js
+ExecStart=$INSTALL_DIR/server
 Restart=on-failure
 RestartSec=5
 StandardOutput=append:$INSTALL_DIR/logs/server.log

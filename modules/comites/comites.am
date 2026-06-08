@@ -1,0 +1,126 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module comites — CRUD, LEFT JOIN ligues, filtre ?ligue_id, FK nullable.
+public class ModComites {
+
+    static string SELECT_BASE() {
+        return "SELECT c.id, c.code, c.name, c.ligue_id, c.created_at, l.code AS ligue_code, l.name AS ligue_name FROM comites c LEFT JOIN ligues l ON l.id = c.ligue_id"
+    }
+
+    public static JsonValue Row(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("code", J.CellStr(r.Get(1)))
+        o.AppendEntry("name", J.CellStr(r.Get(2)))
+        o.AppendEntry("ligue_id", J.CellIntN(r.Get(3)))
+        o.AppendEntry("created_at", J.CellStrN(r.Get(4)))
+        o.AppendEntry("ligue_code", J.CellStrN(r.Get(5)))
+        o.AppendEntry("ligue_name", J.CellStrN(r.Get(6)))
+        return o
+    }
+
+    public static HttpResponse List(WebContext ctx, Db db) {
+        let ligueId: string = ctx.QueryParam("ligue_id")
+        var rows: List<List<string>> = new List<List<string>>()
+        if (String.Length(ligueId) > 0) {
+            rows = db.Rows(ModComites.SELECT_BASE() + " WHERE c.ligue_id = ? ORDER BY c.name ASC", Db.P1(ligueId))
+        } else {
+            rows = db.Rows(ModComites.SELECT_BASE() + " ORDER BY c.name ASC", Db.NoParams())
+        }
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModComites.Row(r))
+        }
+        return J.Ok(arr)
+    }
+
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows(ModComites.SELECT_BASE() + " WHERE c.id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModComites.Row(r0))
+    }
+
+    static HttpResponse Refetch(Db db, int id) {
+        let rows: List<List<string>> = db.Rows(ModComites.SELECT_BASE() + " WHERE c.id = ?", Db.P1(String.FromInt(id)))
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModComites.Row(r0))
+    }
+
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let codeV: JsonValue = b.Get("code")
+        let nameV: JsonValue = b.Get("name")
+        if (!codeV.IsString()) { return HttpErr.BadRequest("code requis") }
+        if (!nameV.IsString()) { return HttpErr.BadRequest("name requis") }
+        let code: string = codeV.AsString()
+        let name: string = nameV.AsString()
+        let ligueV: JsonValue = b.Get("ligue_id")
+
+        var ok: bool = false
+        if (ligueV.IsInt()) {
+            ok = db.Exec("INSERT INTO comites (code, name, ligue_id) VALUES (?, ?, ?)", Db.P3(code, name, String.FromInt(ligueV.AsInt())))
+        } else {
+            ok = db.Exec("INSERT INTO comites (code, name, ligue_id) VALUES (?, ?, NULL)", Db.P2(code, name))
+        }
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let resp: HttpResponse = ModComites.Refetch(db, db.LastInsertId())
+        return resp.Status(201)
+    }
+
+    public static HttpResponse Update(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let codeV: JsonValue = b.Get("code")
+        let nameV: JsonValue = b.Get("name")
+        if (!codeV.IsString()) { return HttpErr.BadRequest("code requis") }
+        if (!nameV.IsString()) { return HttpErr.BadRequest("name requis") }
+        let code: string = codeV.AsString()
+        let name: string = nameV.AsString()
+        let ligueV: JsonValue = b.Get("ligue_id")
+
+        var ok: bool = false
+        if (ligueV.IsInt()) {
+            let ps: List<string> = new List<string>()
+            ps.Add(code)
+            ps.Add(name)
+            ps.Add(String.FromInt(ligueV.AsInt()))
+            ps.Add(id)
+            ok = db.Exec("UPDATE comites SET code = ?, name = ?, ligue_id = ? WHERE id = ?", ps)
+        } else {
+            ok = db.Exec("UPDATE comites SET code = ?, name = ?, ligue_id = NULL WHERE id = ?", Db.P3(code, name, id))
+        }
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return ModComites.Refetch(db, String.ToInt(id))
+    }
+
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM comites WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+}

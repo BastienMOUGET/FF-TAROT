@@ -1,0 +1,30 @@
+namespace App
+
+import Amalgame.Web
+
+// Mapping erreur DB (chaîne renvoyée par Db.LastError) → réponse HTTP,
+// équivalent du middleware errorHandler.js (codes MariaDB).
+public class HttpErr {
+
+    public static HttpResponse FromDb(string dbErr) {
+        if (String.Contains(dbErr, "Duplicate entry")) {
+            return J.Err(409, "Doublon")
+        }
+        if (String.Contains(dbErr, "foreign key constraint fails")) {
+            // INSERT/UPDATE sur FK absente → child row ; DELETE référencé → parent row
+            if (String.Contains(dbErr, "child row")) {
+                return J.Err(400, "Référence invalide")
+            }
+            if (String.Contains(dbErr, "parent row")) {
+                return J.Err(409, "Suppression impossible (référencé)")
+            }
+            return J.Err(400, "Référence invalide")
+        }
+        return J.Err(500, "Erreur serveur")
+    }
+
+    public static HttpResponse NotFound() { return J.Err(404, "Introuvable") }
+    public static HttpResponse BadRequest(string msg) { return J.Err(400, msg) }
+    public static HttpResponse Unauthorized() { return J.Err(401, "Authentification requise") }
+    public static HttpResponse Forbidden() { return J.Err(403, "Accès refusé") }
+}

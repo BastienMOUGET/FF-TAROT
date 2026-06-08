@@ -1,0 +1,143 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module tournaments — CRUD + filtres (status/type/club_id/comite_id).
+public class ModTournaments {
+
+    static string SELECT_BASE() {
+        return "SELECT t.id, t.code, t.name, t.date, t.type, t.status, t.current_round, t.coef_default, t.club_id, t.comite_id, t.created_at, cl.code AS club_code, cl.name AS club_name, co.code AS comite_code, co.name AS comite_name FROM tournaments t LEFT JOIN clubs cl ON cl.id = t.club_id LEFT JOIN comites co ON co.id = t.comite_id"
+    }
+
+    public static JsonValue Row(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("code", J.CellStr(r.Get(1)))
+        o.AppendEntry("name", J.CellStr(r.Get(2)))
+        o.AppendEntry("date", J.CellStrN(r.Get(3)))
+        o.AppendEntry("type", J.CellStr(r.Get(4)))
+        o.AppendEntry("status", J.CellStr(r.Get(5)))
+        o.AppendEntry("current_round", J.CellInt(r.Get(6)))
+        o.AppendEntry("coef_default", J.CellFloat(r.Get(7)))
+        o.AppendEntry("club_id", J.CellIntN(r.Get(8)))
+        o.AppendEntry("comite_id", J.CellIntN(r.Get(9)))
+        o.AppendEntry("created_at", J.CellStrN(r.Get(10)))
+        o.AppendEntry("club_code", J.CellStrN(r.Get(11)))
+        o.AppendEntry("club_name", J.CellStrN(r.Get(12)))
+        o.AppendEntry("comite_code", J.CellStrN(r.Get(13)))
+        o.AppendEntry("comite_name", J.CellStrN(r.Get(14)))
+        return o
+    }
+
+    public static HttpResponse List(WebContext ctx, Db db) {
+        let conds: List<string> = new List<string>()
+        let params: List<string> = new List<string>()
+        let st: string = ctx.QueryParam("status")
+        let ty: string = ctx.QueryParam("type")
+        let cl: string = ctx.QueryParam("club_id")
+        let co: string = ctx.QueryParam("comite_id")
+        if (String.Length(st) > 0) { conds.Add("t.status = ?") params.Add(st) }
+        if (String.Length(ty) > 0) { conds.Add("t.type = ?") params.Add(ty) }
+        if (String.Length(cl) > 0) { conds.Add("t.club_id = ?") params.Add(cl) }
+        if (String.Length(co) > 0) { conds.Add("t.comite_id = ?") params.Add(co) }
+
+        var sql: string = ModTournaments.SELECT_BASE()
+        if (conds.Count() > 0) { sql = sql + " WHERE " + String.Join(conds, " AND ") }
+        sql = sql + " ORDER BY t.date DESC, t.id DESC"
+
+        let rows: List<List<string>> = db.Rows(sql, params)
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModTournaments.Row(r))
+        }
+        return J.Ok(arr)
+    }
+
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows(ModTournaments.SELECT_BASE() + " WHERE t.id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModTournaments.Row(r0))
+    }
+
+    static HttpResponse Refetch(Db db, int id) {
+        let rows: List<List<string>> = db.Rows(ModTournaments.SELECT_BASE() + " WHERE t.id = ?", Db.P1(String.FromInt(id)))
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModTournaments.Row(r0))
+    }
+
+    static void FillFromBody(SqlIns ins, JsonValue b) {
+        ins.Set("code", Fld.Str(b, "code"))
+        ins.Set("name", Fld.Str(b, "name"))
+        if (Fld.HasStr(b, "date")) { ins.Set("date", Fld.Str(b, "date")) } else { ins.SetNull("date") }
+        if (Fld.HasStr(b, "type")) { ins.Set("type", Fld.Str(b, "type")) } else { ins.Set("type", "libre") }
+        if (Fld.HasStr(b, "status")) { ins.Set("status", Fld.Str(b, "status")) } else { ins.Set("status", "draft") }
+        ins.Set("current_round", Fld.IntOr(b, "current_round", "0"))
+        ins.Set("coef_default", Fld.NumOr(b, "coef_default", "1.0"))
+        if (Fld.HasInt(b, "club_id")) { ins.Set("club_id", Fld.IntStr(b, "club_id")) } else { ins.SetNull("club_id") }
+        if (Fld.HasInt(b, "comite_id")) { ins.Set("comite_id", Fld.IntStr(b, "comite_id")) } else { ins.SetNull("comite_id") }
+    }
+
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasStr(b, "code")) { return HttpErr.BadRequest("code requis") }
+        if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
+
+        let ins: SqlIns = new SqlIns()
+        ModTournaments.FillFromBody(ins, b)
+        let ok: bool = db.Exec(ins.Sql("tournaments"), ins.Params())
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let resp: HttpResponse = ModTournaments.Refetch(db, db.LastInsertId())
+        return resp.Status(201)
+    }
+
+    public static HttpResponse Update(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasStr(b, "code")) { return HttpErr.BadRequest("code requis") }
+        if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
+
+        let upd: SqlUpd = new SqlUpd()
+        upd.Set("code", Fld.Str(b, "code"))
+        upd.Set("name", Fld.Str(b, "name"))
+        if (Fld.HasStr(b, "date")) { upd.Set("date", Fld.Str(b, "date")) } else { upd.SetNull("date") }
+        if (Fld.HasStr(b, "type")) { upd.Set("type", Fld.Str(b, "type")) } else { upd.Set("type", "libre") }
+        if (Fld.HasStr(b, "status")) { upd.Set("status", Fld.Str(b, "status")) } else { upd.Set("status", "draft") }
+        upd.Set("current_round", Fld.IntOr(b, "current_round", "0"))
+        upd.Set("coef_default", Fld.NumOr(b, "coef_default", "1.0"))
+        if (Fld.HasInt(b, "club_id")) { upd.Set("club_id", Fld.IntStr(b, "club_id")) } else { upd.SetNull("club_id") }
+        if (Fld.HasInt(b, "comite_id")) { upd.Set("comite_id", Fld.IntStr(b, "comite_id")) } else { upd.SetNull("comite_id") }
+
+        let ok: bool = db.Exec(upd.Sql("tournaments"), upd.ParamsWithId(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return ModTournaments.Refetch(db, String.ToInt(id))
+    }
+
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM tournaments WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+}

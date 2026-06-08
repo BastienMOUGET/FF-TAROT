@@ -1,0 +1,115 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Net.Http
+import Amalgame.Json
+import Amalgame.Crypto
+import Amalgame.DateTime
+
+// JWT HS256 fait main (sign + verify) + extraction de rôle.
+// web/JwtAuth ne sait que vérifier ; la signature au login est ici.
+// En cas d'échec, Verify/ClaimsFromCtx renvoient un JsonValue de kind
+// Null (claims.IsNull()) — on évite le null langage sur un type objet.
+public class Auth {
+
+    // Secret JWT depuis l'environnement (défaut dev = celui du back Node).
+    public static string Secret() {
+        return Config.Get("JWT_SECRET", "dev-secret-change-me")
+    }
+
+    public static string B64Url(string s) {
+        return Bytes.ToBase64Url(Bytes.FromString(s))
+    }
+
+    // Émet un token signé. exp = now + 12h (comme JWT_EXPIRES_IN Node).
+    public static string Sign(int sub, string username, string role, string secret) {
+        let now: int = DateTime.NowNanos() / 1000000000
+        let exp: int = now + 43200
+
+        let p: JsonValue = J.Obj()
+        p.AppendEntry("sub", J.Int(sub))
+        p.AppendEntry("username", J.Str(username))
+        p.AppendEntry("role", J.Str(role))
+        p.AppendEntry("iat", J.Int(now))
+        p.AppendEntry("exp", J.Int(exp))
+
+        let header: string = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}"
+        let signingInput: string = Auth.B64Url(header) + "." + Auth.B64Url(Json.Encode(p))
+        let sig: List<int> = Hmac.Sha256(Bytes.FromString(secret), Bytes.FromString(signingInput))
+        return signingInput + "." + Bytes.ToBase64Url(sig)
+    }
+
+    // Vérifie signature + exp. Renvoie le payload, ou J.Null() si invalide.
+    public static JsonValue Verify(string token, string secret) {
+        let parts: List<string> = String.Split(token, ".")
+        if (parts.Count() != 3) { return J.Null() }
+        let p0: string = parts.Get(0)
+        let p1: string = parts.Get(1)
+        let p2: string = parts.Get(2)
+
+        let signingInput: string = p0 + "." + p1
+        let expect: string = Bytes.ToBase64Url(Hmac.Sha256(Bytes.FromString(secret), Bytes.FromString(signingInput)))
+        if (expect != p2) { return J.Null() }
+
+        let payloadBytes: List<int> = Bytes.FromBase64Url(p1)
+        let payloadStr: string = Bytes.ToString(payloadBytes)
+        let r: JsonResult = Json.Parse(payloadStr)
+        if (!r.Ok) { return J.Null() }
+        let payload: JsonValue = r.Value
+
+        let now: int = DateTime.NowNanos() / 1000000000
+        let expv: JsonValue = payload.Get("exp")
+        if (expv.IsInt()) {
+            let e: int = expv.AsInt()
+            if (e < now) { return J.Null() }
+        }
+        return payload
+    }
+
+    // Claims depuis l'en-tête Authorization: Bearer <token>. J.Null() si absent/invalide.
+    public static JsonValue ClaimsFromCtx(WebContext ctx, string secret) {
+        let req: HttpRequest = ctx.Req
+        let h: string = req.Header("authorization")
+        if (String.IsEmpty(h)) { return J.Null() }
+        if (!String.StartsWith(h, "Bearer ")) { return J.Null() }
+        let token: string = String.Substring(h, 7, String.Length(h) - 7)
+        return Auth.Verify(token, secret)
+    }
+
+    // Claims via le secret d'environnement. J.Null() si absent/invalide.
+    public static JsonValue ClaimsOf(WebContext ctx) {
+        return Auth.ClaimsFromCtx(ctx, Auth.Secret())
+    }
+
+    // Contrôle de rôle, équivalent requireRole : renvoie 0 si OK,
+    // 401 si pas/invalide token, 403 si rôle insuffisant.
+    public static int CheckRole(WebContext ctx, string role) {
+        let claims: JsonValue = Auth.ClaimsOf(ctx)
+        if (claims.IsNull()) { return 401 }
+        if (Auth.RoleOf(claims) != role) { return 403 }
+        return 0
+    }
+
+    // Exige une authentification (n'importe quel rôle). 0 ou 401.
+    public static int CheckAuth(WebContext ctx) {
+        let claims: JsonValue = Auth.ClaimsOf(ctx)
+        if (claims.IsNull()) { return 401 }
+        return 0
+    }
+
+    // Le rôle du payload, "" si absent.
+    public static string RoleOf(JsonValue claims) {
+        if (claims.IsNull()) { return "" }
+        let rv: JsonValue = claims.Get("role")
+        if (rv.IsString()) { return rv.AsString() }
+        return ""
+    }
+
+    // L'id utilisateur (sub), -1 si absent.
+    public static int SubOf(JsonValue claims) {
+        if (claims.IsNull()) { return -1 }
+        let sv: JsonValue = claims.Get("sub")
+        if (sv.IsInt()) { return sv.AsInt() }
+        return -1
+    }
+}

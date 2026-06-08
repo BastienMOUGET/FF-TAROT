@@ -1,0 +1,29 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Net.Http
+
+// Service du front Angular (SPA) : statique via WithStatic + fallback SPA.
+// Reproduit src/app.js : toute requête GET non-/api renvoie index.html
+// (pour que /tournaments/42 marche après refresh). Le bundle est servi
+// depuis frontend/dist/frontend/browser (build `cd frontend && npm run build`).
+public class Front {
+
+    // Configurable via FRONT_DIR : un service Windows tourne avec CWD=system32,
+    // donc le chemin doit pouvoir être absolu (l'installeur le fixe).
+    public static string DIR() { return Config.Get("FRONT_DIR", "frontend/dist/frontend/browser") }
+
+    public static HttpResponse Index() {
+        // Content-Type explicite : File() renvoie application/octet-stream par
+        // défaut → le navigateur téléchargerait index.html au lieu de l'afficher.
+        return HttpResponse.New().Header("Content-Type", "text/html; charset=utf-8").File(Front.DIR() + "/index.html")
+    }
+
+    // Fallback : /api/* → 404 JSON ; tout le reste → index.html (routing client).
+    public static HttpResponse Spa(WebContext ctx) {
+        if (String.StartsWith(ctx.Path, "/api/")) {
+            return J.Err(404, "Route API introuvable")
+        }
+        return Front.Index()
+    }
+}

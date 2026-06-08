@@ -1,0 +1,60 @@
+namespace App
+
+// Portage de src/utils/fft.js — logique de notation FFT (pure).
+// computeTopage reste porté dans le module scoring (son seul appelant,
+// où la forme des données est concrète). Ici : notes spéciales + score joueur.
+
+public class PlayerScore {
+    public Session: float
+    public Total:   float
+    public General: float
+    public PlayerScore() {}
+}
+
+public class Fft {
+
+    // Note imposée par une codification (contrat spécial) selon le rôle
+    // ("A" attaquant / "D" défenseur). Renvoie -1.0 si pas de note spéciale
+    // (codif normale/inconnue) — sentinelle pour le `null` du JS.
+    public static float SpecialNote(string codif, string role) {
+        let a: bool = role == "A"
+        if (codif == "*4") { if (a) { return 40.0 } else { return 60.0 } }
+        if (codif == "*6") { if (a) { return 60.0 } else { return 40.0 } }
+        if (codif == "*8") { if (a) { return 60.0 } else { return 0.0 } }
+        if (codif == "*7") { if (a) { return 0.0 } else { return 60.0 } }
+        if (codif == "*5") { if (a) { return 40.0 } else { return 40.0 } }
+        if (codif == "*1") { return 0.0 }
+        if (codif == "*2") { return 0.0 }
+        if (codif == "*9") { return 0.0 }
+        if (codif == "*0") { return 0.0 }
+        return -1.0
+    }
+
+    // Vrai si la codif impose une note spéciale "active" côté attaquant,
+    // i.e. exclue du topage. Réplique `!getSpecialNote(codif,'A')` du JS :
+    // on exclut seulement quand la note-A spéciale est non-nulle ET > 0.
+    public static bool ExcludedFromTopage(string codif) {
+        let sa: float = Fft.SpecialNote(codif, "A")
+        return sa > 0.0
+    }
+
+    // computePlayerScore(notes, penalties, coef, previous) du JS.
+    // notes : moyenne des notes non-nulles ; session = moy - pénalités ;
+    // total = session * coef ; général = précédent + total.
+    public static PlayerScore ComputePlayerScore(List<float> notes, float penalties, float coef, float previous) {
+        var sum: float = 0.0
+        var cnt: int = 0
+        for n in notes {
+            sum = sum + n
+            cnt = cnt + 1
+        }
+        var avg: float = 0.0
+        if (cnt > 0) { avg = sum / (cnt + 0.0) }
+
+        let ps: PlayerScore = new PlayerScore()
+        ps.Session = avg - penalties
+        ps.Total = ps.Session * coef
+        ps.General = previous + ps.Total
+        return ps
+    }
+}

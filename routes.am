@@ -1,0 +1,145 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Net.Http
+
+// Enregistrement manuel de l'arbre de routes (reproduit src/app.js).
+// Chaque closure capture `db` et le passe au handler du module.
+// Les guards de rôle sont faits DANS les handlers (Auth.CheckRole).
+public class Routes {
+
+    public static void Register(WebApp app, Db db) {
+        // Racine : index.html du front Angular (SPA). /api = santé.
+        app.Get("/", ctx => Front.Index())
+        app.Get("/api", ctx => HttpResponse.New().Json("{\"app\":\"FFT TAROT API\",\"version\":\"2.0.0\"}"))
+
+        // Référentiel — cartes (lecture publique)
+        app.Get("/api/cards", ctx => ModCards.List(ctx, db))
+
+        // Référentiel — ligues (GET public ; POST/PUT/DELETE admin)
+        app.Get("/api/ligues", ctx => ModLigues.List(ctx, db))
+        app.Get("/api/ligues/:id", ctx => ModLigues.GetById(ctx, db))
+        app.Post("/api/ligues", ctx => ModLigues.Create(ctx, db))
+        app.Put("/api/ligues/:id", ctx => ModLigues.Update(ctx, db))
+        app.Delete("/api/ligues/:id", ctx => ModLigues.Remove(ctx, db))
+
+        // Référentiel — comités
+        app.Get("/api/comites", ctx => ModComites.List(ctx, db))
+        app.Get("/api/comites/:id", ctx => ModComites.GetById(ctx, db))
+        app.Post("/api/comites", ctx => ModComites.Create(ctx, db))
+        app.Put("/api/comites/:id", ctx => ModComites.Update(ctx, db))
+        app.Delete("/api/comites/:id", ctx => ModComites.Remove(ctx, db))
+
+        // Référentiel — clubs
+        app.Get("/api/clubs", ctx => ModClubs.List(ctx, db))
+        app.Get("/api/clubs/:id", ctx => ModClubs.GetById(ctx, db))
+        app.Post("/api/clubs", ctx => ModClubs.Create(ctx, db))
+        app.Put("/api/clubs/:id", ctx => ModClubs.Update(ctx, db))
+        app.Delete("/api/clubs/:id", ctx => ModClubs.Remove(ctx, db))
+
+        // Référentiel — types de pénalité
+        app.Get("/api/penalty-types", ctx => ModPenaltyTypes.List(ctx, db))
+        app.Get("/api/penalty-types/:id", ctx => ModPenaltyTypes.GetById(ctx, db))
+        app.Post("/api/penalty-types", ctx => ModPenaltyTypes.Create(ctx, db))
+        app.Put("/api/penalty-types/:id", ctx => ModPenaltyTypes.Update(ctx, db))
+        app.Delete("/api/penalty-types/:id", ctx => ModPenaltyTypes.Remove(ctx, db))
+
+        // Auth — login public, profil authentifié
+        app.Post("/api/auth/login", ctx => ModAuth.Login(ctx, db))
+        app.Get("/api/auth/me", ctx => ModAuth.Me(ctx, db))
+        app.Put("/api/auth/me/password", ctx => ModAuth.ChangeMyPassword(ctx, db))
+
+        // Auth — gestion des utilisateurs (admin)
+        app.Get("/api/users", ctx => ModAuth.ListUsers(ctx, db))
+        app.Get("/api/users/:id", ctx => ModAuth.GetUser(ctx, db))
+        app.Post("/api/users", ctx => ModAuth.CreateUser(ctx, db))
+        app.Put("/api/users/:id/password", ctx => ModAuth.ChangeUserPassword(ctx, db))
+        app.Delete("/api/users/:id", ctx => ModAuth.DeleteUser(ctx, db))
+
+        // Référentiel — joueurs (recherche + CRUD admin)
+        app.Get("/api/players", ctx => ModPlayers.List(ctx, db))
+        app.Get("/api/players/:id", ctx => ModPlayers.GetById(ctx, db))
+        app.Post("/api/players", ctx => ModPlayers.Create(ctx, db))
+        app.Put("/api/players/:id", ctx => ModPlayers.Update(ctx, db))
+        app.Delete("/api/players/:id", ctx => ModPlayers.Remove(ctx, db))
+
+        // Patrons de mouvement (admin)
+        app.Get("/api/movement-patterns", ctx => ModMovementPatterns.List(ctx, db))
+        app.Get("/api/movement-patterns/:id", ctx => ModMovementPatterns.GetById(ctx, db))
+        app.Post("/api/movement-patterns", ctx => ModMovementPatterns.Create(ctx, db))
+        app.Put("/api/movement-patterns/:id", ctx => ModMovementPatterns.Update(ctx, db))
+        app.Delete("/api/movement-patterns/:id", ctx => ModMovementPatterns.Remove(ctx, db))
+
+        // Tournois
+        app.Get("/api/tournaments", ctx => ModTournaments.List(ctx, db))
+        app.Get("/api/tournaments/:id", ctx => ModTournaments.GetById(ctx, db))
+        app.Post("/api/tournaments", ctx => ModTournaments.Create(ctx, db))
+        app.Put("/api/tournaments/:id", ctx => ModTournaments.Update(ctx, db))
+        app.Delete("/api/tournaments/:id", ctx => ModTournaments.Remove(ctx, db))
+
+        // Sous-tournois (liste imbriquée + création sous le tournoi parent)
+        app.Get("/api/tournaments/:tournamentId/sub-tournaments", ctx => ModSubTournaments.ListByTournament(ctx, db))
+        app.Post("/api/tournaments/:tournamentId/sub-tournaments", ctx => ModSubTournaments.Create(ctx, db))
+        app.Get("/api/sub-tournaments/:id", ctx => ModSubTournaments.GetById(ctx, db))
+        app.Put("/api/sub-tournaments/:id", ctx => ModSubTournaments.Update(ctx, db))
+        app.Delete("/api/sub-tournaments/:id", ctx => ModSubTournaments.Remove(ctx, db))
+
+        // Tours + placement
+        app.Get("/api/sub-tournaments/:subTournamentId/rounds", ctx => ModRounds.ListBySubTournament(ctx, db))
+        app.Post("/api/sub-tournaments/:subTournamentId/rounds", ctx => ModRounds.Create(ctx, db))
+        app.Get("/api/rounds/:id", ctx => ModRounds.GetById(ctx, db))
+        app.Post("/api/rounds/:id/generate", ctx => ModRounds.Generate(ctx, db))
+        app.Delete("/api/rounds/:id", ctx => ModRounds.Remove(ctx, db))
+
+        // Équipes (Libre par 4)
+        app.Get("/api/sub-tournaments/:subTournamentId/teams", ctx => ModTeams.ListBySubTournament(ctx, db))
+        app.Post("/api/sub-tournaments/:subTournamentId/teams", ctx => ModTeams.Create(ctx, db))
+        app.Get("/api/teams/:id", ctx => ModTeams.GetById(ctx, db))
+        app.Delete("/api/teams/:id", ctx => ModTeams.Remove(ctx, db))
+
+        // Grille PP par sous-tournoi
+        app.Get("/api/sub-tournaments/:subTournamentId/pp-grid", ctx => ModPpGrids.Get(ctx, db))
+        app.Put("/api/sub-tournaments/:subTournamentId/pp-grid", ctx => ModPpGrids.Replace(ctx, db))
+        app.Delete("/api/sub-tournaments/:subTournamentId/pp-grid", ctx => ModPpGrids.Clear(ctx, db))
+
+        // Saisie des scores (table_results + hands)
+        app.Get("/api/rounds/:roundId/table-results", ctx => ModScoring.ListByRound(ctx, db))
+        app.Get("/api/rounds/:roundId/tables/:tableNumber", ctx => ModScoring.GetByRoundAndTable(ctx, db))
+        app.Put("/api/rounds/:roundId/tables/:tableNumber/codifs", ctx => ModScoring.SetCodifs(ctx, db))
+        app.Post("/api/rounds/:roundId/tables/:tableNumber/validate", ctx => ModScoring.Validate(ctx, db))
+        app.Post("/api/rounds/:roundId/tables/:tableNumber/unvalidate", ctx => ModScoring.Unvalidate(ctx, db))
+        app.Delete("/api/rounds/:roundId/tables/:tableNumber", ctx => ModScoring.RemoveTable(ctx, db))
+        app.Post("/api/rounds/:roundId/tables/:tableNumber/hands", ctx => ModScoring.AddHand(ctx, db))
+        app.Put("/api/hands/:id", ctx => ModScoring.UpdateHand(ctx, db))
+        app.Delete("/api/hands/:id", ctx => ModScoring.RemoveHand(ctx, db))
+
+        // Pénalités
+        app.Get("/api/tournaments/:tournamentId/penalties", ctx => ModPenalties.ListByTournament(ctx, db))
+        app.Post("/api/tournaments/:tournamentId/penalties", ctx => ModPenalties.Create(ctx, db))
+        app.Get("/api/penalties/:id", ctx => ModPenalties.GetById(ctx, db))
+        app.Put("/api/penalties/:id", ctx => ModPenalties.Update(ctx, db))
+        app.Delete("/api/penalties/:id", ctx => ModPenalties.Remove(ctx, db))
+
+        // Classement (live)
+        app.Get("/api/sub-tournaments/:subTournamentId/ranking", ctx => ModRanking.GetRanking(ctx, db))
+        app.Post("/api/sub-tournaments/:subTournamentId/recompute", ctx => ModRanking.Recompute(ctx, db))
+        app.Get("/api/sub-tournaments/:subTournamentId/export-pcn.csv", ctx => ModRanking.ExportPcn(ctx, db))
+
+        // Feuille de route (imprimable)
+        app.Get("/api/sub-tournaments/:subTournamentId/route-sheet", ctx => ModRouteSheet.Get(ctx, db))
+
+        // Jeux de donnes pré-tirées
+        app.Get("/api/donne-sets", ctx => ModDonneSets.List(ctx, db))
+        app.Get("/api/donne-sets/:id", ctx => ModDonneSets.GetById(ctx, db))
+        app.Post("/api/donne-sets", ctx => ModDonneSets.Create(ctx, db))
+        app.Put("/api/donne-sets/:id", ctx => ModDonneSets.Rename(ctx, db))
+        app.Delete("/api/donne-sets/:id", ctx => ModDonneSets.Remove(ctx, db))
+        app.Get("/api/donne-sets/:id/donnes/:donneNumber", ctx => ModDonneSets.GetDonne(ctx, db))
+        app.Post("/api/donne-sets/:id/donnes/:donneNumber/regenerate", ctx => ModDonneSets.Regenerate(ctx, db))
+        app.Post("/api/donne-sets/:id/donnes/:donneNumber/swap", ctx => ModDonneSets.Swap(ctx, db))
+
+        // Fallback SPA — DOIT être enregistré en DERNIER (first-match-wins).
+        // Toute requête GET non capturée ci-dessus → index.html du front.
+        app.Get("/*path", ctx => Front.Spa(ctx))
+    }
+}

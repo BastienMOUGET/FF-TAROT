@@ -1,0 +1,133 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module movement-patterns — CRUD des patrons de mouvement (offsets par siège).
+public class ModMovementPatterns {
+
+    public static JsonValue Row(List<string> r) {
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("id", J.CellInt(r.Get(0)))
+        o.AppendEntry("table_count", J.CellInt(r.Get(1)))
+        o.AppendEntry("offset_n", J.CellInt(r.Get(2)))
+        o.AppendEntry("offset_s", J.CellInt(r.Get(3)))
+        o.AppendEntry("offset_e", J.CellInt(r.Get(4)))
+        o.AppendEntry("offset_o", J.CellInt(r.Get(5)))
+        o.AppendEntry("label", J.CellStrN(r.Get(6)))
+        return o
+    }
+
+    static string COLS() { return "id, table_count, offset_n, offset_s, offset_e, offset_o, label" }
+
+    public static HttpResponse List(WebContext ctx, Db db) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT " + ModMovementPatterns.COLS() + " FROM movement_patterns ORDER BY table_count ASC",
+            Db.NoParams())
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            arr.AppendItem(ModMovementPatterns.Row(r))
+        }
+        return J.Ok(arr)
+    }
+
+    public static HttpResponse GetById(WebContext ctx, Db db) {
+        let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows(
+            "SELECT " + ModMovementPatterns.COLS() + " FROM movement_patterns WHERE id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModMovementPatterns.Row(r0))
+    }
+
+    static HttpResponse Refetch(Db db, int id) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT " + ModMovementPatterns.COLS() + " FROM movement_patterns WHERE id = ?", Db.P1(String.FromInt(id)))
+        let r0: List<string> = rows.Get(0)
+        return J.Ok(ModMovementPatterns.Row(r0))
+    }
+
+    public static HttpResponse Create(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasInt(b, "table_count")) { return HttpErr.BadRequest("table_count requis") }
+
+        let ins: SqlIns = new SqlIns()
+        ins.Set("table_count", Fld.IntStr(b, "table_count"))
+        ins.Set("offset_n", Fld.IntOr(b, "offset_n", "0"))
+        ins.Set("offset_s", Fld.IntOr(b, "offset_s", "1"))
+        ins.Set("offset_e", Fld.IntOr(b, "offset_e", "2"))
+        ins.Set("offset_o", Fld.IntOr(b, "offset_o", "-1"))
+        if (Fld.HasStr(b, "label")) { ins.Set("label", Fld.Str(b, "label")) } else { ins.SetNull("label") }
+
+        let ok: bool = db.Exec(ins.Sql("movement_patterns"), ins.Params())
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let resp: HttpResponse = ModMovementPatterns.Refetch(db, db.LastInsertId())
+        return resp.Status(201)
+    }
+
+    public static HttpResponse Update(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasInt(b, "table_count")) { return HttpErr.BadRequest("table_count requis") }
+
+        let upd: SqlUpd = new SqlUpd()
+        upd.Set("table_count", Fld.IntStr(b, "table_count"))
+        upd.Set("offset_n", Fld.IntOr(b, "offset_n", "0"))
+        upd.Set("offset_s", Fld.IntOr(b, "offset_s", "1"))
+        upd.Set("offset_e", Fld.IntOr(b, "offset_e", "2"))
+        upd.Set("offset_o", Fld.IntOr(b, "offset_o", "-1"))
+        if (Fld.HasStr(b, "label")) { upd.Set("label", Fld.Str(b, "label")) } else { upd.SetNull("label") }
+
+        let ok: bool = db.Exec(upd.Sql("movement_patterns"), upd.ParamsWithId(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return ModMovementPatterns.Refetch(db, String.ToInt(id))
+    }
+
+    public static HttpResponse Remove(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let id: string = ctx.Param("id")
+        let ok: bool = db.Exec("DELETE FROM movement_patterns WHERE id = ?", Db.P1(id))
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        return J.NoContent()
+    }
+
+    // Résout les offsets pour un nombre de tables (utilisé par rounds).
+    // Pattern table_count=X prioritaire, sinon défaut (0), sinon fallback codé.
+    public static List<int> OffsetsForTableCount(Db db, int tableCount) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT offset_n, offset_s, offset_e, offset_o FROM movement_patterns WHERE table_count IN (?, 0) ORDER BY table_count = ? DESC LIMIT 1",
+            Db.P2(String.FromInt(tableCount), String.FromInt(tableCount)))
+        let out: List<int> = new List<int>()
+        if (rows.Count() == 0) {
+            out.Add(0)
+            out.Add(1)
+            out.Add(2)
+            out.Add(-1)
+            return out
+        }
+        let r0: List<string> = rows.Get(0)
+        out.Add(Db.CellInt(r0.Get(0)))
+        out.Add(Db.CellInt(r0.Get(1)))
+        out.Add(Db.CellInt(r0.Get(2)))
+        out.Add(Db.CellInt(r0.Get(3)))
+        return out
+    }
+}

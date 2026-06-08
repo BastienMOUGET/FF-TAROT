@@ -193,10 +193,14 @@ Write-Ok ".env généré"
 
 # ---------------------------- npm install + build ----------------------------
 
-Write-Step "Installation dépendances back (npm install)..."
-Push-Location $InstallDir
-& npm install --omit=dev --no-fund --no-audit
-Pop-Location
+# Back = binaire Amalgame (server.exe), livré dans le package release ou buildé
+# via build.sh (toolchain amc + libmariadb). Plus de npm install côté back.
+$ServerExe = Join-Path $InstallDir 'server.exe'
+if (-not (Test-Path $ServerExe)) {
+    Write-Err2 "server.exe introuvable dans $InstallDir (build AM requis : voir build.sh)."
+    exit 1
+}
+Write-Ok "Binaire back server.exe présent"
 
 $FrontIndex = Join-Path $InstallDir 'frontend\dist\frontend\browser\index.html'
 if (Test-Path $FrontIndex) {
@@ -210,120 +214,36 @@ if (Test-Path $FrontIndex) {
     Write-Ok "Front buildé dans frontend\dist\frontend\browser"
 }
 
-# ---------------------------- Service Windows via NSSM ----------------------------
-
-# NSSM transforme node.exe en vrai service Windows :
-#   - démarre au boot (auto)
-#   - redémarre tout seul en cas de crash
-#   - logs dans logs\server.log
+# ---------------------------- Service Windows natif (sans NSSM) ----------------------------
+# server.exe embarque le dispatcher SCM (amalgame-service) -> sc.exe suffit,
+# plus besoin de NSSM. Config via la cle registre Environment du service
+# (un service tourne avec CWD=system32 : on passe DB_*/JWT/FRONT_DIR par le
+# registre, lus cote binaire par Config.Get qui priorise l'env process).
 
 $ServiceName = 'FF-TAROT'
-$LogsDir     = Join-Path $InstallDir 'logs'
-New-Item -Path $LogsDir -ItemType Directory -Force | Out-Null
 
-# Localiser NSSM (priorité : bundle dans installer/, puis dans bin/, puis téléchargement)
-$NssmExe = $null
-$NssmCandidates = @(
-    (Join-Path $InstallDir 'bin\nssm.exe'),
-    (Join-Path $InstallDir 'installer\bin\nssm.exe')
+& sc.exe stop $ServiceName 2>$null | Out-Null
+& sc.exe delete $ServiceName 2>$null | Out-Null
+Start-Sleep -Seconds 1
+
+Write-Step "Creation du service Windows natif '$ServiceName'..."
+& sc.exe create $ServiceName binPath= "`"$ServerExe`"" start= auto DisplayName= "FF-TAROT" | Out-Null
+& sc.exe description $ServiceName "FF-TAROT - Gestion de tournois FFT (Libre par 4)" | Out-Null
+& sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/15000 | Out-Null
+
+$FrontDir = Join-Path $InstallDir 'frontend\dist\frontend\browser'
+$envMulti = @(
+    "PORT=3000", "SOCKET_PORT=3001",
+    "DB_HOST=localhost", "DB_USER=fft_user", "DB_PASSWORD=$DB_PASSWORD",
+    "DB_NAME=fft", "JWT_SECRET=$JWT_SECRET", "FRONT_DIR=$FrontDir"
 )
-foreach ($c in $NssmCandidates) {
-    if (Test-Path $c) { $NssmExe = $c; break }
-}
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" `
+    -Name 'Environment' -Value $envMulti -PropertyType MultiString -Force | Out-Null
 
-if (-not $NssmExe) {
-    $NssmDir = Join-Path $InstallDir 'bin'
-    New-Item -Path $NssmDir -ItemType Directory -Force | Out-Null
-    $TargetNssm = Join-Path $NssmDir 'nssm.exe'
-
-    # Source 1 : Chocolatey s'il est installé sur la machine
-    $Choco = Get-Command choco.exe -ErrorAction SilentlyContinue
-    if ($Choco) {
-        Write-Step "Installation de NSSM via Chocolatey..."
-        try {
-            & choco install nssm -y --no-progress --no-color | Out-Null
-            $candidates = @(
-                'C:\ProgramData\chocolatey\lib\nssm\tools\nssm.exe',
-                'C:\ProgramData\chocolatey\bin\nssm.exe'
-            )
-            foreach ($c in $candidates) {
-                if (Test-Path $c) {
-                    Copy-Item $c $TargetNssm -Force
-                    $NssmExe = $TargetNssm
-                    Write-Ok "NSSM récupéré via Chocolatey ($c)"
-                    break
-                }
-            }
-        } catch {
-            Write-Warn2 "Chocolatey KO : $_"
-        }
-    }
-
-    # Source 2 : nssm.cc avec retry (3 essais espacés de 5s)
-    if (-not $NssmExe) {
-        Write-Step "Téléchargement de NSSM depuis nssm.cc (retry up to 3x)..."
-        $NssmZip = Join-Path $env:TEMP 'nssm.zip'
-        $arch = if ([Environment]::Is64BitOperatingSystem) { 'win64' } else { 'win32' }
-        $ok = $false
-        for ($i = 1; $i -le 3 -and -not $ok; $i++) {
-            try {
-                Invoke-WebRequest -UseBasicParsing `
-                    -Uri 'https://nssm.cc/release/nssm-2.24.zip' `
-                    -OutFile $NssmZip -TimeoutSec 30
-                $ok = $true
-            } catch {
-                Write-Warn2 "Tentative $i KO : $($_.Exception.Message)"
-                Start-Sleep -Seconds 5
-            }
-        }
-        if ($ok) {
-            $extractDir = Join-Path $env:TEMP 'nssm-extract'
-            if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
-            Expand-Archive -Path $NssmZip -DestinationPath $extractDir -Force
-            Copy-Item -Path (Join-Path $extractDir "nssm-2.24\$arch\nssm.exe") `
-                      -Destination $TargetNssm -Force
-            $NssmExe = $TargetNssm
-            Write-Ok "NSSM téléchargé depuis nssm.cc"
-        }
-    }
-
-    if (-not $NssmExe) {
-        Write-Warn2 "Impossible d'obtenir NSSM (Chocolatey + nssm.cc échoués)"
-        Write-Warn2 "Le service Windows ne sera pas créé."
-        Write-Warn2 "Le serveur démarrera quand même via start.bat (mode standalone)."
-    }
-}
-
-if ($NssmExe) {
-    $NodeExe   = (Get-Command node).Source
-    $ServerJs  = Join-Path $InstallDir 'src\server.js'
-
-    # Si le service existe déjà, on l'arrête et le supprime avant réinstall
-    & $NssmExe stop $ServiceName 2>$null | Out-Null
-    & sc.exe query $ServiceName 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        & $NssmExe remove $ServiceName confirm | Out-Null
-    }
-
-    Write-Step "Création du service Windows '$ServiceName'..."
-    & $NssmExe install $ServiceName $NodeExe $ServerJs | Out-Null
-    & $NssmExe set $ServiceName AppDirectory $InstallDir | Out-Null
-    & $NssmExe set $ServiceName AppStdout (Join-Path $LogsDir 'server.log') | Out-Null
-    & $NssmExe set $ServiceName AppStderr (Join-Path $LogsDir 'server.log') | Out-Null
-    & $NssmExe set $ServiceName AppRotateFiles 1 | Out-Null
-    & $NssmExe set $ServiceName AppRotateBytes 10485760 | Out-Null  # 10 Mo
-    & $NssmExe set $ServiceName Start SERVICE_AUTO_START | Out-Null
-    & $NssmExe set $ServiceName Description "FF-TAROT - Gestion de tournois FFT (Libre par 4)" | Out-Null
-    & $NssmExe set $ServiceName DisplayName "FF-TAROT" | Out-Null
-
-    # Restart automatique en cas de crash
-    & sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/15000 | Out-Null
-
-    Write-Step "Démarrage du service..."
-    & $NssmExe start $ServiceName | Out-Null
-    Start-Sleep -Seconds 2
-    Write-Ok "Service '$ServiceName' installé et démarré (auto-start au boot)"
-}
+Write-Step "Demarrage du service..."
+& sc.exe start $ServiceName | Out-Null
+Start-Sleep -Seconds 2
+Write-Ok "Service natif '$ServiceName' installe et demarre (auto-start au boot)"
 
 # ---------------------------- Scripts start/stop pilotant le service ----------------------------
 
@@ -343,7 +263,7 @@ if %ERRORLEVEL% EQU 0 (
     echo [FFT] Service introuvable, demarrage en mode standalone...
     cd /d "%~dp0"
     if not exist logs mkdir logs
-    start /b "" cmd /c "node src\server.js > logs\server.log 2>&1"
+    start /b "" "%~dp0server.exe" > logs\server.log 2>&1
     timeout /t 3 /nobreak >nul
     start http://localhost:3000
 )
