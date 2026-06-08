@@ -59,10 +59,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc libmariadb-dev libgc-dev libssl-dev zlib1g-dev
 
-      - name: Install amc (toolchain Amalgame)
+      - name: Install amc (release tarball)
+        env:
+          AMC_VERSION: 0.8.75
         run: |
-          curl -fsSL https://raw.githubusercontent.com/amalgame-lang/Amalgame/main/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL "https://github.com/amalgame-lang/Amalgame/releases/download/v${AMC_VERSION}/amc-${AMC_VERSION}-linux-x86_64.tar.gz" | tar -xz -C "$HOME"
+          echo "$HOME/amc-${AMC_VERSION}-linux-x86_64/bin" >> "$GITHUB_PATH"
 
       - name: Resolve amalgame packages
         run: |
@@ -146,11 +148,20 @@ jobs:
             echo "$($conn.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
           }
 
-      - name: Install amc (toolchain Amalgame Windows, MinGW bundlé)
+      - name: Install amc (MSI Windows, MinGW bundlé)
         shell: pwsh
+        env:
+          AMC_VERSION: 0.8.75
         run: |
-          irm https://raw.githubusercontent.com/amalgame-lang/Amalgame/main/install/windows/install.ps1 | iex
-          echo "$env:LOCALAPPDATA\Amalgame\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          $v = $env:AMC_VERSION
+          curl.exe -fsSL "https://github.com/amalgame-lang/Amalgame/releases/download/v$v/amalgame-$v.msi" -o amalgame.msi
+          Start-Process msiexec.exe -ArgumentList '/i','amalgame.msi','/qn','/norestart' -Wait
+          # Le MSI installe sous %ProgramFiles%\Amalgame (+ MinGW bundlé) et
+          # modifie le PATH HKCU. On expose bin + gcc-bundle\bin au job.
+          $base = "C:\Program Files\Amalgame"
+          if (Test-Path "$base\bin")            { echo "$base\bin"            | Out-File $env:GITHUB_PATH -Append }
+          if (Test-Path "$base\gcc-bundle\bin") { echo "$base\gcc-bundle\bin" | Out-File $env:GITHUB_PATH -Append }
+          Get-ChildItem $base -ErrorAction SilentlyContinue | Select-Object Name
 
       - name: Resolve amalgame packages
         shell: pwsh

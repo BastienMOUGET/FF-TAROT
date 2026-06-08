@@ -30,10 +30,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc libmariadb-dev libgc-dev libssl-dev zlib1g-dev
 
-      - name: Install amc
+      - name: Install amc (release tarball)
+        env:
+          AMC_VERSION: 0.8.75
         run: |
-          curl -fsSL https://raw.githubusercontent.com/amalgame-lang/Amalgame/main/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL "https://github.com/amalgame-lang/Amalgame/releases/download/v${AMC_VERSION}/amc-${AMC_VERSION}-linux-x86_64.tar.gz" | tar -xz -C "$HOME"
+          echo "$HOME/amc-${AMC_VERSION}-linux-x86_64/bin" >> "$GITHUB_PATH"
+          ls "$HOME/amc-${AMC_VERSION}-linux-x86_64/bin"
 
       - name: Resolve amalgame packages
         run: |
