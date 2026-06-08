@@ -440,7 +440,7 @@ function InstallService(): Boolean;
 var
   ExitCode: Integer;
   AppDir, ExePath, Sc: String;
-  EnvLines: TArrayOfString;
+  EnvData: String;
 begin
   SetProgress('Installation du service Windows natif FF-TAROT (auto-start)...');
   AppDir  := ExpandConstant('{app}');
@@ -459,18 +459,20 @@ begin
   Exec(Sc, 'failure FF-TAROT reset= 60 actions= restart/5000/restart/5000/restart/15000',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
 
-  // Environnement du service (REG_MULTI_SZ). FRONT_DIR en absolu pour servir
-  // le bundle Angular malgré le CWD=system32.
-  SetArrayLength(EnvLines, 8);
-  EnvLines[0] := 'PORT=3000';
-  EnvLines[1] := 'SOCKET_PORT=3001';
-  EnvLines[2] := 'DB_HOST=localhost';
-  EnvLines[3] := 'DB_USER=fft_user';
-  EnvLines[4] := 'DB_PASSWORD=' + DbPassword;
-  EnvLines[5] := 'DB_NAME=fft';
-  EnvLines[6] := 'JWT_SECRET=' + JwtSecret;
-  EnvLines[7] := 'FRONT_DIR=' + AppDir + '\frontend\dist\frontend\browser';
-  RegWriteMultiStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\FF-TAROT', 'Environment', EnvLines);
+  // Environnement du service (REG_MULTI_SZ). RegWriteMultiStringValue attend
+  // une String unique dont les entrées sont séparées par #0 (Inno ajoute le
+  // double-NUL terminal). FRONT_DIR en absolu pour servir le bundle Angular
+  // malgré le CWD=system32.
+  EnvData :=
+    'PORT=3000'        + #0 +
+    'SOCKET_PORT=3001' + #0 +
+    'DB_HOST=localhost' + #0 +
+    'DB_USER=fft_user' + #0 +
+    'DB_PASSWORD=' + DbPassword + #0 +
+    'DB_NAME=fft'      + #0 +
+    'JWT_SECRET=' + JwtSecret + #0 +
+    'FRONT_DIR=' + AppDir + '\frontend\dist\frontend\browser';
+  RegWriteMultiStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\FF-TAROT', 'Environment', EnvData);
 
   Exec(Sc, 'start FF-TAROT', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   Sleep(2000);
