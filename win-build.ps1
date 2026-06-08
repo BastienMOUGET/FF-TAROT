@@ -7,21 +7,28 @@
 # Usage :  .\win-build.ps1
 $ErrorActionPreference = 'Stop'
 
+# amc résout HOME pour le cache index ; sur Windows HOME est vide → il tombe
+# sur un chemin POSIX cassé (/tmp). On force HOME = USERPROFILE pour que le
+# cache index, le cache packages et notre pré-fetch pointent au même endroit.
+# (amc >= 0.8.84 gère ce fallback nativement.)
+$env:HOME = $env:USERPROFILE
+
 Write-Host "=== amc version (attendu 0.8.83) ===" -ForegroundColor Cyan
 amc --version
 
-# Cache propre : évite que de vieilles versions POSIX-only (pré-port Windows)
-# trainent en cache et soient incluses par amc.
-Write-Host "=== nettoyage cache packages ===" -ForegroundColor Cyan
-amc package cache clear --all
+# Cache propre. On utilise Remove-Item -Force (et PAS `amc package cache
+# clear --all`) : le rm natif d'amc 0.8.83 laisse des dossiers partiels sur
+# Windows quand un fichier est read-only/verrouillé (d'où des "missing
+# amalgame.toml" sur un paquet "already cached"). -Force gère le read-only.
+Write-Host "=== nettoyage cache packages (Remove-Item -Force) ===" -ForegroundColor Cyan
+Remove-Item -Recurse -Force "$env:HOME\.amalgame\packages" -ErrorAction SilentlyContinue
+Remove-Item -Force "$env:HOME\.amalgame\cache\packages-index.toml" -ErrorAction SilentlyContinue
 
-# Pré-télécharge l'index packages avec --ssl-no-revoke. Sur ton poste, le
-# curl Windows (schannel) échoue la vérif de révocation du certif quand amc
-# auto-résout une dép transitive (ex. tls -> crypto). On met l'index en cache
-# AVANT, pour qu'amc le lise au lieu de re-fetcher. (amc >= 0.8.84 passe ce
-# flag nativement ; ceci débloque avec 0.8.83.)
+# Pré-télécharge l'index avec --ssl-no-revoke (le curl Windows/schannel échoue
+# sinon la vérif de révocation quand amc auto-résout une dép transitive).
+# Chemin = celui qu'amc lit (HOME/.amalgame/cache), HOME forcé plus haut.
 Write-Host "=== pré-fetch index packages (contourne schannel revocation) ===" -ForegroundColor Cyan
-$idxDir = "$env:USERPROFILE\.amalgame\cache"
+$idxDir = "$env:HOME\.amalgame\cache"
 New-Item -ItemType Directory -Force -Path $idxDir | Out-Null
 curl.exe -fsSL --ssl-no-revoke `
     "https://raw.githubusercontent.com/amalgame-lang/packages-index/main/packages.toml" `
