@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  AMC_VERSION: "0.8.87"
+  AMC_VERSION: "0.8.88"
   AMC_PKGS: "web net-http crypto mysql threading service"
 
 jobs:
