@@ -87,4 +87,16 @@ foreach ($p in $pkgs) {
 }
 
 Write-Host "=== build.ps1 (amc -> server.c -> gcc link) ===" -ForegroundColor Cyan
-.\build.ps1
+# Capture dans build.log et affiche un résumé filtré (les warnings \F/\m sont
+# du bruit ; on veut les vraies erreurs ou le succès).
+try { .\build.ps1 *> build.log } catch { }
+Write-Host ""
+Write-Host "=== RÉSUMÉ (erreurs / succès) ===" -ForegroundColor Yellow
+$summary = Get-Content build.log | Where-Object {
+    $_ -match "error:|#error|undefined reference|collect2|ld returned|No such file|OK built|DLL bundl" -and $_ -notmatch "warning"
+}
+if ($summary) { $summary | Select-Object -First 40 } else { Get-Content build.log | Select-Object -Last 12 }
+if (Test-Path .\server.exe) {
+    Write-Host ""
+    Write-Host "✓✓✓ server.exe CONSTRUIT : $((Get-Item .\server.exe).Length) octets" -ForegroundColor Green
+}
