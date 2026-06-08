@@ -83,9 +83,14 @@ foreach ($r in $ConnRoots) {
 $SysLibs = @('-lmariadb', '-lgc', '-lssl', '-lcrypto', '-lz', '-lws2_32', '-lbcrypt')
 
 # ── Step 4 : gcc (MinGW) link ────────────────────────────────────
-$gcc = (Get-Command gcc.exe -ErrorAction SilentlyContinue)?.Source
-if (-not $gcc) { $gcc = "$Prefix\gcc-bundle\bin\gcc.exe" }
-if (-not (Test-Path $gcc)) { throw "gcc (MinGW) introuvable." }
+# PRÉFÉRER le gcc bundlé par amc ($Prefix\gcc\bin) : c'est lui qui a compilé
+# le libgc.a embarqué (gc.h + libgc.a sont dans son include/lib). Linker avec
+# un autre gcc (ex. C:\mingw64 du runner) provoque un mismatch d'ABI
+# (__imp__setjmp) ou un gc.h introuvable. Fallback PATH si le bundle est absent.
+$gcc = "$Prefix\gcc\bin\gcc.exe"
+if (-not (Test-Path $gcc)) { $gcc = (Get-Command gcc.exe -ErrorAction SilentlyContinue)?.Source }
+if (-not $gcc -or -not (Test-Path $gcc)) { throw "gcc (MinGW) introuvable." }
+Write-Host "gcc        : $gcc"
 
 # -static-libgcc : embarque le runtime gcc dans l'exe (moins de DLL à bundler).
 $cmd = @($Includes) + @('-O2', '-static-libgcc', '-Wno-int-conversion', '-Wno-incompatible-pointer-types',

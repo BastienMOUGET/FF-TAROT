@@ -68,8 +68,13 @@ jobs:
           curl.exe -fsSL "https://github.com/amalgame-lang/Amalgame/releases/download/v$v/amalgame-$v.msi" -o amalgame.msi
           Start-Process msiexec.exe -ArgumentList '/i','amalgame.msi','/qn','/norestart' -Wait
           $base = "C:\Program Files\Amalgame"
-          if (Test-Path "$base\bin")            { echo "$base\bin"            | Out-File $env:GITHUB_PATH -Append }
-          if (Test-Path "$base\gcc-bundle\bin") { echo "$base\gcc-bundle\bin" | Out-File $env:GITHUB_PATH -Append }
+          # The bundled winlibs toolchain installs to {app}\gcc\ (gcc\bin,
+          # gcc\include\gc.h, gcc\lib\libgc.a). We MUST use *this* gcc to
+          # link: the bundled libgc.a was built with it, so the runner's
+          # other C:\mingw64 gcc would hit an ABI mismatch (__imp__setjmp).
+          # Prepend gcc\bin so `gcc` resolves to the amc-bundled compiler.
+          if (Test-Path "$base\gcc\bin") { echo "$base\gcc\bin" | Out-File $env:GITHUB_PATH -Append }
+          if (Test-Path "$base\bin")     { echo "$base\bin"     | Out-File $env:GITHUB_PATH -Append }
           Write-Host "=== Contenu $base ==="
           Get-ChildItem $base -ErrorAction SilentlyContinue -Recurse -Depth 1 | Select-Object FullName
 
