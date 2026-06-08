@@ -32,7 +32,7 @@ jobs:
 
       - name: Install amc (release tarball)
         env:
-          AMC_VERSION: 0.8.86
+          AMC_VERSION: 0.8.87
         run: |
           curl -fsSL "https://github.com/amalgame-lang/Amalgame/releases/download/v${AMC_VERSION}/amc-${AMC_VERSION}-linux-x86_64.tar.gz" | tar -xz -C "$HOME"
           echo "$HOME/amc-${AMC_VERSION}-linux-x86_64/bin" >> "$GITHUB_PATH"
