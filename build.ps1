@@ -33,6 +33,25 @@ Write-Host "libamalgame: $LibAmalgame"
 
 if (-not (Test-Path amalgame.lock)) { throw "amalgame.lock absent — lancez 'amc package add ...' ici d'abord." }
 
+# ── Step 0 : élaguer les versions dupliquées du cache ────────────
+# Une dépendance transitive (web/redis) peut épingler une ancienne version
+# d'un package (ex. amalgame-tls v0.3.3) à côté de celle qu'on résout
+# (v0.3.4). amc auto-inclut le header de CHAQUE version en cache, donc
+# l'ancien header (ici non porté Windows) casse le build. On ne garde que
+# la plus récente de chaque package — un build n'utilise qu'une version.
+$PkgRoot = "$env:USERPROFILE\.amalgame\packages\github.com\amalgame-lang"
+if (Test-Path $PkgRoot) {
+    Get-ChildItem -Directory $PkgRoot | ForEach-Object {
+        $vers = Get-ChildItem -Directory $_.FullName | Sort-Object Name
+        if ($vers.Count -gt 1) {
+            $vers | Select-Object -SkipLast 1 | ForEach-Object {
+                Write-Host "prune doublon: $($_.Name)"
+                Remove-Item -Recurse -Force $_.FullName
+            }
+        }
+    }
+}
+
 # ── Step 1 : collecte des sources (lib/ → modules/ → routes.am → server.am) ──
 $Sources = @()
 $Sources += (Get-ChildItem -Recurse -Path lib, modules -Filter *.am | Sort-Object FullName | ForEach-Object FullName)
