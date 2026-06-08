@@ -73,7 +73,7 @@ $pkgs = @(
     'github.com/amalgame-lang/amalgame-tls@v0.3.5',
     'github.com/amalgame-lang/amalgame-database-nosql-redis@v0.2.0',
     'github.com/amalgame-lang/amalgame-net-http@v0.26.1',
-    'github.com/amalgame-lang/amalgame-web@v0.36.1',
+    'github.com/amalgame-lang/amalgame-web@v0.36.2',
     'github.com/amalgame-lang/amalgame-service@v0.2.0',
     'github.com/amalgame-lang/amalgame-database-mysql@v0.3.0',
     'github.com/amalgame-lang/amalgame-net-http@v0.26.1',
