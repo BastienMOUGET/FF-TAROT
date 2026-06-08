@@ -132,11 +132,19 @@ jobs:
           npm ci --no-fund --no-audit
           npm run build
 
-      - name: Install MariaDB Connector/C (libmariadb pour le link)
+      - name: "Install MariaDB Connector/C (libmariadb: link + DLL à bundler)"
         shell: pwsh
         run: |
           choco install mariadb-connector-c -y --no-progress
-          # Expose les libs/headers au compilateur (chemin à ajuster selon le paquet choco)
+          # Met le bin du Connector/C (libmariadb.dll) sur le PATH pour que
+          # build.ps1 puisse le bundler (objdump). Chemin typique choco :
+          $conn = Get-ChildItem 'C:\Program Files\MariaDB' -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -like '*Connector*C*' } | Select-Object -First 1
+          if ($conn) {
+            $bin = Join-Path $conn.FullName 'lib'
+            echo "$bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+            echo "$($conn.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
 
       - name: Install amc (toolchain Amalgame Windows, MinGW bundlé)
         shell: pwsh

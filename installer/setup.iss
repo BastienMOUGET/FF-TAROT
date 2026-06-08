@@ -65,6 +65,9 @@ Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; \
 ; à la racine du repo AVANT `iscc`). C'est un vrai service Windows grâce au
 ; dispatcher SCM d'amalgame-service : plus besoin de NSSM ni de Node back.
 Source: "..\server.exe"; DestDir: "{app}"; Flags: ignoreversion
+; DLL runtime requises par server.exe (libmariadb, openssl, gc…), collectées
+; par build.ps1 (objdump) → app auto-suffisante, aucune dépendance système.
+Source: "..\windows-dll\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\db.sql"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\seed.sql"; DestDir: "{app}"; Flags: ignoreversion
 

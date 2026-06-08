@@ -61,6 +61,16 @@ $SysLibs  = @()
 Get-ChildItem -Recurse -Path $PkgRoot -Filter 'libamalgame-pkg-*.a' -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -match 'win' } | ForEach-Object { $Archives += $_.FullName }
 
+# MariaDB Connector/C : headers (mysql.h) + import lib (libmariadb) pour le link.
+$ConnRoots = Get-ChildItem 'C:\Program Files\MariaDB' -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like '*Connector*C*' }
+foreach ($r in $ConnRoots) {
+    $inc = Join-Path $r.FullName 'include'
+    $lib = Join-Path $r.FullName 'lib'
+    if (Test-Path $inc) { $Includes += "-I$inc"; $Includes += "-I$(Join-Path $inc 'mariadb')" }
+    if (Test-Path $lib) { $Includes += "-L$lib" }
+}
+
 # Libs système : libmariadb (driver mysql) + bdwgc + openssl + zlib + threads.
 $SysLibs = @('-lmariadb', '-lgc', '-lssl', '-lcrypto', '-lz', '-lws2_32', '-lbcrypt')
 
@@ -69,10 +79,44 @@ $gcc = (Get-Command gcc.exe -ErrorAction SilentlyContinue)?.Source
 if (-not $gcc) { $gcc = "$Prefix\gcc-bundle\bin\gcc.exe" }
 if (-not (Test-Path $gcc)) { throw "gcc (MinGW) introuvable." }
 
-$cmd = @($Includes) + @('-O2', '-Wno-int-conversion', '-Wno-incompatible-pointer-types',
+# -static-libgcc : embarque le runtime gcc dans l'exe (moins de DLL à bundler).
+$cmd = @($Includes) + @('-O2', '-static-libgcc', '-Wno-int-conversion', '-Wno-incompatible-pointer-types',
         'server.c', '-Wl,--start-group') + $Archives + @($LibAmalgame, '-Wl,--end-group') +
         $SysLibs + @('-o', $Out)
 Write-Host "link: gcc $($cmd -join ' ')"
 & $gcc @cmd
 if ($LASTEXITCODE -ne 0) { throw "gcc link a échoué." }
 Write-Host "OK built $Out"
+
+# ── Step 5 : bundle des DLL réellement requises (uniquement) ──────
+# objdump -p liste les DLL dont dépend l'exe. On copie celles qui ne sont
+# PAS des DLL système Windows (depuis le PATH : MinGW, libmariadb, openssl…).
+$objdump = Join-Path (Split-Path $gcc) 'objdump.exe'
+$DllDir = if ($env:DLL_DIR) { $env:DLL_DIR } else { '.\windows-dll' }
+New-Item -ItemType Directory -Force -Path $DllDir | Out-Null
+$systemDlls = @('kernel32','user32','advapi32','ws2_32','msvcrt','ucrtbase','bcrypt',
+    'crypt32','ole32','shell32','secur32','gdi32','ntdll','rpcrt4','shlwapi',
+    'api-ms-','ext-ms-','vcruntime','kernelbase','setupapi','iphlpapi','dnsapi','version','psapi')
+$pathDirs = $env:PATH.Split(';') | Where-Object { $_ -and (Test-Path $_) }
+$seen = @{}
+function Copy-Deps($exe) {
+    if (-not (Test-Path $objdump)) { return }
+    $deps = & $objdump -p $exe | Select-String 'DLL Name:' | ForEach-Object { ($_ -split ':')[1].Trim() }
+    foreach ($d in $deps) {
+        $low = $d.ToLower()
+        if ($seen.ContainsKey($low)) { continue }
+        $seen[$low] = $true
+        if ($systemDlls | Where-Object { $low.StartsWith($_) -or $low -eq "$_.dll" }) { continue }
+        $found = $pathDirs | ForEach-Object { Join-Path $_ $d } | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if ($found) {
+            Copy-Item $found $DllDir -Force
+            Write-Host "  bundle DLL: $d  ($found)"
+            Copy-Deps $found   # récursif (deps des deps)
+        } else {
+            Write-Host "  (DLL non trouvée sur PATH, à vérifier): $d"
+        }
+    }
+}
+Copy-Deps (Resolve-Path $Out).Path
+Write-Host "DLL bundlées dans $DllDir :"
+Get-ChildItem $DllDir -Filter *.dll | ForEach-Object { Write-Host "  $($_.Name)" }
