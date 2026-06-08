@@ -9,8 +9,8 @@ rev  = "672b0eaf"
 [[package]]
 name = "tls"
 git  = "github.com/amalgame-lang/amalgame-tls"
-tag  = "v0.3.3"
-rev  = "13e6c1c8"
+tag  = "v0.3.4"
+rev  = "234a6d95"
 
 [[package]]
 name = "async"
@@ -21,8 +21,8 @@ rev  = "9e2c2e3e"
 [[package]]
 name = "http"
 git  = "github.com/amalgame-lang/amalgame-net-http"
-tag  = "v0.24.0"
-rev  = "7d0e9d39"
+tag  = "v0.25.0"
+rev  = "954edfb7"
 
 [[package]]
 name = "datetime"
