@@ -80,10 +80,28 @@ jobs:
           Write-Host "gcc : $((Get-Command gcc.exe -ErrorAction SilentlyContinue).Source)"
           amc --version
 
-      - name: Resolve amalgame packages (précompile les facades Windows)
+      - name: Resolve amalgame packages (URLs+tags explicites — pas d'index)
         shell: pwsh
         run: |
-          foreach ($p in "$env:AMC_PKGS".Split(' ')) {
+          # amc package add <shortname> fetche l'index via curl, cassé sur
+          # Windows. On passe les URLs git complètes + tag (feuilles → racine)
+          # pour éviter toute résolution d'index.
+          $pkgs = @(
+            'github.com/amalgame-lang/amalgame-crypto@v0.7.0',
+            'github.com/amalgame-lang/amalgame-async@v0.3.0',
+            'github.com/amalgame-lang/amalgame-datetime@v0.2.2',
+            'github.com/amalgame-lang/amalgame-random@v0.1.0',
+            'github.com/amalgame-lang/amalgame-logging@v0.2.0',
+            'github.com/amalgame-lang/amalgame-compress@v0.1.0',
+            'github.com/amalgame-lang/amalgame-threading@v0.1.0',
+            'github.com/amalgame-lang/amalgame-tls@v0.3.3',
+            'github.com/amalgame-lang/amalgame-database-nosql-redis@v0.2.0',
+            'github.com/amalgame-lang/amalgame-net-http@v0.24.0',
+            'github.com/amalgame-lang/amalgame-web@v0.36.1',
+            'github.com/amalgame-lang/amalgame-service@v0.2.0',
+            'github.com/amalgame-lang/amalgame-database-mysql@v0.3.0'
+          )
+          foreach ($p in $pkgs) {
             Write-Host "=== amc package add $p ==="
             amc package add $p
             if ($LASTEXITCODE -ne 0) { throw "amc package add $p a échoué" }
