@@ -87,7 +87,9 @@ jobs:
           # On pré-clone chaque repo au chemin cache attendu (<tag>_<rev>) ;
           # amc package add le détecte alors "cached" et se contente de
           # précompiler la facade (pas de git clone).
-          $root = "$env:USERPROFILE\.amalgame\packages\github.com\amalgame-lang"
+          # amc sur Windows utilise /tmp/amalgame-packages (→ C:\tmp\...) comme cache.
+          $root = "C:\tmp\amalgame-packages\github.com\amalgame-lang"
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
           $pkgs = @(
             @('amalgame-crypto','v0.7.0','672b0eaf'),
             @('amalgame-tls','v0.3.3','13e6c1c8'),
