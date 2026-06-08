@@ -21,8 +21,8 @@ rev  = "1f44b8f7"
 [[package]]
 name = "http"
 git  = "github.com/amalgame-lang/amalgame-net-http"
-tag  = "v0.25.0"
-rev  = "954edfb7"
+tag  = "v0.26.0"
+rev  = "6326d1e4"
 
 [[package]]
 name = "datetime"
