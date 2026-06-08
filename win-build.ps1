@@ -15,6 +15,19 @@ amc --version
 Write-Host "=== nettoyage cache packages ===" -ForegroundColor Cyan
 amc package cache clear --all
 
+# Pré-télécharge l'index packages avec --ssl-no-revoke. Sur ton poste, le
+# curl Windows (schannel) échoue la vérif de révocation du certif quand amc
+# auto-résout une dép transitive (ex. tls -> crypto). On met l'index en cache
+# AVANT, pour qu'amc le lise au lieu de re-fetcher. (amc >= 0.8.84 passe ce
+# flag nativement ; ceci débloque avec 0.8.83.)
+Write-Host "=== pré-fetch index packages (contourne schannel revocation) ===" -ForegroundColor Cyan
+$idxDir = "$env:USERPROFILE\.amalgame\cache"
+New-Item -ItemType Directory -Force -Path $idxDir | Out-Null
+curl.exe -fsSL --ssl-no-revoke `
+    "https://raw.githubusercontent.com/amalgame-lang/packages-index/main/packages.toml" `
+    -o "$idxDir\packages-index.toml"
+if ($LASTEXITCODE -ne 0) { Write-Host "  (pré-fetch index échoué — on tente quand même)" -ForegroundColor Yellow }
+
 # Mêmes packages/ordre que le CI. Les versions portées Winsock2 (net-http
 # 0.25.0, tls 0.3.4, async 0.4.0) sont ré-ajoutées EN DERNIER pour que le
 # lock (clé par nom) les garde malgré le downgrade de web.
