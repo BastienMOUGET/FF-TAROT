@@ -15,11 +15,11 @@ public class Db {
 
     // Ouvre la connexion depuis l'environnement. true si OK.
     public bool Open() {
-        let host: string = Env.Get("DB_HOST")
-        let portS: string = Env.Get("DB_PORT")
-        let user: string = Env.Get("DB_USER")
-        let pass: string = Env.Get("DB_PASSWORD")
-        let name: string = Env.Get("DB_NAME")
+        let host: string = Config.Get("DB_HOST", "127.0.0.1")
+        let portS: string = Config.Get("DB_PORT", "3306")
+        let user: string = Config.Get("DB_USER", "fft_user")
+        let pass: string = Config.Get("DB_PASSWORD", "")
+        let name: string = Config.Get("DB_NAME", "fft")
         var port: int = 3306
         if (String.Length(portS) > 0) { port = String.ToInt(portS) }
 

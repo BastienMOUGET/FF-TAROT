@@ -14,9 +14,7 @@ public class Auth {
 
     // Secret JWT depuis l'environnement (défaut dev = celui du back Node).
     public static string Secret() {
-        let s: string = Env.Get("JWT_SECRET")
-        if (String.Length(s) > 0) { return s }
-        return "dev-secret-change-me"
+        return Config.Get("JWT_SECRET", "dev-secret-change-me")
     }
 
     public static string B64Url(string s) {

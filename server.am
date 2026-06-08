@@ -11,7 +11,8 @@ import Amalgame.Service
 public class Program {
     public static void Main(string[] args) {
         // Handlers de signaux + (Windows) dispatcher de service. En tête de Main.
-        Service.RunAsService("ff-tarot-api")
+        // Le nom DOIT matcher `sc create FF-TAROT` de l'installeur (setup.iss).
+        Service.RunAsService("FF-TAROT")
 
         let db: Db = new Db()
         let io: SocketIO = new SocketIO()
@@ -24,9 +25,7 @@ public class Program {
         }
 
         // Serveur Socket.IO (classement live) sur un port dédié.
-        var sioPort: int = 3001
-        let sioS: string = Env.Get("SOCKET_PORT")
-        if (String.Length(sioS) > 0) { sioPort = String.ToInt(sioS) }
+        var sioPort: int = String.ToInt(Config.Get("SOCKET_PORT", "3001"))
         io.ServeBackground(sioPort)
         Console.WriteLine("Socket.IO : port " + String.FromInt(sioPort))
 
@@ -37,9 +36,7 @@ public class Program {
         app.WithStatic(Static.New("/", Front.DIR()))
         Routes.Register(app, db)
 
-        var port: int = 3000
-        let portS: string = Env.Get("PORT")
-        if (String.Length(portS) > 0) { port = String.ToInt(portS) }
+        var port: int = String.ToInt(Config.Get("PORT", "3000"))
 
         Console.WriteLine("FFT TAROT API — port " + String.FromInt(port))
         app.Serve(port)

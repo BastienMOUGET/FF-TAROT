@@ -9,7 +9,9 @@ import Amalgame.Net.Http
 // depuis frontend/dist/frontend/browser (build `cd frontend && npm run build`).
 public class Front {
 
-    public static string DIR() { return "frontend/dist/frontend/browser" }
+    // Configurable via FRONT_DIR : un service Windows tourne avec CWD=system32,
+    // donc le chemin doit pouvoir être absolu (l'installeur le fixe).
+    public static string DIR() { return Config.Get("FRONT_DIR", "frontend/dist/frontend/browser") }
 
     public static HttpResponse Index() {
         // Content-Type explicite : File() renvoie application/octet-stream par

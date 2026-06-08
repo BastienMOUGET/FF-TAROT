@@ -39,9 +39,10 @@ services:
       DB_PASSWORD: fft_password
       DB_NAME: fft
       JWT_SECRET: change-me-in-production-please
-      JWT_EXPIRES_IN: 12h
+      SOCKET_PORT: 3001
     ports:
       - '3000:3000'
+      - '3001:3001'   # Socket.IO (classement live)
 
 volumes:
   fft-db-data:

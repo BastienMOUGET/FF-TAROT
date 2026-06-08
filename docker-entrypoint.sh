@@ -24,5 +24,5 @@ else
   echo "[entrypoint] DB déjà initialisée"
 fi
 
-echo "[entrypoint] Démarrage du serveur Node..."
+echo "[entrypoint] Démarrage du back Amalgame (API :3000 + Socket.IO :3001)..."
 exec "$@"
