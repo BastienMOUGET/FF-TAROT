@@ -94,7 +94,7 @@ jobs:
           # Requiert amc ≥ version patchée (git clone Windows sans quoting parasite).
           $pkgs = @(
             'github.com/amalgame-lang/amalgame-crypto@v0.7.0',
-            'github.com/amalgame-lang/amalgame-async@v0.3.0',
+            'github.com/amalgame-lang/amalgame-async@v0.4.0',
             'github.com/amalgame-lang/amalgame-datetime@v0.2.2',
             'github.com/amalgame-lang/amalgame-random@v0.1.0',
             'github.com/amalgame-lang/amalgame-logging@v0.2.0',
@@ -111,7 +111,8 @@ jobs:
             # rétrograde ces entrées. On les ré-ajoute EN DERNIER pour que le lock
             # (lu par `amc -o server`) garde les versions portées Winsock2.
             'github.com/amalgame-lang/amalgame-net-http@v0.25.0',
-            'github.com/amalgame-lang/amalgame-tls@v0.3.4'
+            'github.com/amalgame-lang/amalgame-tls@v0.3.4',
+            'github.com/amalgame-lang/amalgame-async@v0.4.0'
           )
           foreach ($p in $pkgs) {
             Write-Host "=== amc package add $p ==="
