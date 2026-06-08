@@ -7,6 +7,16 @@
 # Usage :  .\win-build.ps1
 $ErrorActionPreference = 'Stop'
 
+# Auto-alignement sur origin/main. `amc package add` réécrit amalgame.lock à
+# chaque run, ce qui salit l'arbre et fait échouer (silencieusement) git pull
+# en fast-forward — on restait coincé sur un vieux commit. On force donc l'état
+# distant ici. (Le script en cours est déjà chargé en mémoire : une éventuelle
+# MAJ de win-build.ps1 lui-même prend effet au run suivant.)
+Write-Host "=== alignement sur origin/main (git reset --hard) ===" -ForegroundColor Cyan
+git fetch origin 2>&1 | Out-Null
+git reset --hard origin/main
+git log --oneline -1
+
 # amc résout HOME pour le cache index ; sur Windows HOME est vide → il tombe
 # sur un chemin POSIX cassé (/tmp). On force HOME = USERPROFILE pour que le
 # cache index, le cache packages et notre pré-fetch pointent au même endroit.
