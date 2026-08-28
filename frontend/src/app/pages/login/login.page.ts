@@ -114,8 +114,8 @@ export class LoginPage {
   errorMsg = signal<string | null>(null);
 
   form = this.fb.nonNullable.group({
-    username: ['admin', Validators.required],
-    password: ['admin123', Validators.required],
+    username: ['', Validators.required],
+    password: ['', Validators.required],
   });
 
   async submit() {

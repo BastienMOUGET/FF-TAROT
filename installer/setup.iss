@@ -18,17 +18,17 @@
 ;   - propose d'ouvrir le navigateur à la fin
 
 ; --- VERSIONING ---
-; Source unique de vérité : le tag git (ex : v3.0.16).
+; Source unique de vérité : le tag git (ex : v3.0.17).
 ; Flow :
 ;   1. La CI (release.yml) extrait : version=${GITHUB_REF_NAME#v}
-;   2. Elle compile en passant : iscc /DAppVersion=3.0.16 setup.iss
+;   2. Elle compile en passant : iscc /DAppVersion=3.0.17 setup.iss
 ;   3. /D définit AppVersion AVANT lecture du script -> #ifndef est skip
-;   4. Le .exe résultant s'appelle pabb90-3.0.16-setup.exe et toutes
-;      les références {#AppVersion} dans [Setup]/[Files]/etc. portent 3.0.16
+;   4. Le .exe résultant s'appelle pabb90-3.0.17-setup.exe et toutes
+;      les références {#AppVersion} dans [Setup]/[Files]/etc. portent 3.0.17
 ;
 ; En compilation locale (test du script sans la CI), on retombe sur le
 ; placeholder "0.0.0-dev" pour que ça fonctionne quand même. Pour
-; tester avec une vraie version : iscc /DAppVersion=3.0.16 setup.iss
+; tester avec une vraie version : iscc /DAppVersion=3.0.17 setup.iss
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"
 #endif
