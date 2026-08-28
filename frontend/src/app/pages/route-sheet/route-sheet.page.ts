@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { DatePipe } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
+import { DatePipe, Location } from '@angular/common';
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -12,7 +12,6 @@ import { RouteSheet } from '../../core/api.types';
 @Component({
   selector: 'app-route-sheet-page',
   imports: [
-    RouterLink,
     DatePipe,
     MatButtonModule,
     MatIconModule,
@@ -20,9 +19,9 @@ import { RouteSheet } from '../../core/api.types';
   ],
   template: `
     <div class="no-print toolbar">
-      <a routerLink="/tournaments" class="back">
+      <button type="button" class="back" (click)="goBack()">
         <mat-icon>arrow_back</mat-icon> Retour
-      </a>
+      </button>
       <span class="spacer"></span>
       <button mat-flat-button color="primary" (click)="print()">
         <mat-icon>print</mat-icon> Imprimer
@@ -87,7 +86,7 @@ import { RouteSheet } from '../../core/api.types';
 
         <footer class="no-print">
           <small>
-            Imprimé le {{ now() | date: 'dd/MM/yyyy à HH:mm' }} via FF-TAROT
+            Imprimé le {{ now() | date: 'dd/MM/yyyy à HH:mm' }} via PABB90
           </small>
         </footer>
       </div>
@@ -100,6 +99,7 @@ import { RouteSheet } from '../../core/api.types';
     .back {
       display: inline-flex; align-items: center; gap: 4px;
       text-decoration: none; color: #1976d2;
+      background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
     .spacer { flex: 1 1 auto; }
     .empty { color: #757575; }
@@ -173,6 +173,7 @@ import { RouteSheet } from '../../core/api.types';
 export class RouteSheetPage implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
 
   loading = signal(true);
   sheet = signal<RouteSheet | null>(null);
@@ -191,5 +192,9 @@ export class RouteSheetPage implements OnInit {
 
   print(): void {
     window.print();
+  }
+
+  goBack(): void {
+    this.location.back();
   }
 }

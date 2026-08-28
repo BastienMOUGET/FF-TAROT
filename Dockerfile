@@ -1,11 +1,11 @@
 # =====================================================
-# FF-TAROT — Image binaire Amalgame + front statique
+# PABB90 — Image binaire Amalgame + front statique
 # =====================================================
 # IMPORTANT : le binaire back AM (`./server`) doit être buildé sur l'hôte
 # (ou en CI) AVANT `docker build` :
 #
 #     ./build.sh            # produit ./server (linké à libmariadb)
-#     docker build -t ff-tarot .
+#     docker build -t pabb90 .
 #
 # On bâtit ici sur debian:12-slim pour une ABI glibc/libmariadb compatible
 # avec un binaire produit sur Debian 12. (Construire l'AM dans Docker

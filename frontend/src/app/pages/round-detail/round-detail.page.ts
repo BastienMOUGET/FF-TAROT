@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Location } from '@angular/common';
 
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -14,7 +15,6 @@ import { Round } from '../../core/api.types';
 @Component({
   selector: 'app-round-detail-page',
   imports: [
-    RouterLink,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -23,9 +23,9 @@ import { Round } from '../../core/api.types';
     MatSnackBarModule,
   ],
   template: `
-    <a routerLink="/tournaments" class="back">
+    <button type="button" class="back" (click)="goBack()">
       <mat-icon>arrow_back</mat-icon> Retour
-    </a>
+    </button>
 
     @if (loading()) {
       <mat-progress-spinner mode="indeterminate" diameter="40" />
@@ -81,6 +81,7 @@ import { Round } from '../../core/api.types';
     .back {
       display: inline-flex; align-items: center; gap: 4px;
       margin-bottom: 16px; text-decoration: none; color: #1976d2;
+      background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
     .actions { margin-bottom: 24px; }
     .empty { color: #757575; }
@@ -114,6 +115,7 @@ export class RoundDetailPage implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private location = inject(Location);
   private snack = inject(MatSnackBar);
 
   loading = signal(true);
@@ -161,5 +163,9 @@ export class RoundDetailPage implements OnInit {
 
   goSaisie(roundId: number, tableNumber: number): void {
     this.router.navigate(['/rounds', roundId, 'tables', tableNumber]);
+  }
+
+  goBack(): void {
+    this.location.back();
   }
 }

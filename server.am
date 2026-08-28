@@ -5,14 +5,14 @@ import Amalgame.Net.Http
 import Amalgame.Json
 import Amalgame.Service
 
-// Point d'entrée FF-TAROT (Amalgame/Mosaic). Ouvre la DB, monte les
+// Point d'entrée PABB90 (Amalgame/Mosaic). Ouvre la DB, monte les
 // routes, sert. amalgame-service installe SIGINT/SIGTERM (Ctrl+C) et
 // bootstrappe le dispatcher SCM Windows (service natif, sans NSSM).
 public class Program {
     public static void Main(string[] args) {
         // Handlers de signaux + (Windows) dispatcher de service. En tête de Main.
-        // Le nom DOIT matcher `sc create FF-TAROT` de l'installeur (setup.iss).
-        Service.RunAsService("FF-TAROT")
+        // Le nom DOIT matcher `sc create PABB90` de l'installeur (setup.iss).
+        Service.RunAsService("PABB90")
 
         let db: Db = new Db()
         let io: SocketIO = new SocketIO()

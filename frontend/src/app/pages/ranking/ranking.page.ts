@@ -7,8 +7,8 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { DatePipe } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
+import { DatePipe, Location } from '@angular/common';
 
 import { MatTableModule } from '@angular/material/table';
 import { MatCardModule } from '@angular/material/card';
@@ -24,7 +24,6 @@ import { RankingEntry } from '../../core/api.types';
 @Component({
   selector: 'app-ranking-page',
   imports: [
-    RouterLink,
     DatePipe,
     MatTableModule,
     MatCardModule,
@@ -34,9 +33,9 @@ import { RankingEntry } from '../../core/api.types';
     MatProgressSpinnerModule,
   ],
   template: `
-    <a routerLink="/tournaments" class="back">
+    <button type="button" class="back" (click)="goBack()">
       <mat-icon>arrow_back</mat-icon> Retour
-    </a>
+    </button>
 
     <mat-card class="head">
       <mat-card-header>
@@ -117,6 +116,7 @@ import { RankingEntry } from '../../core/api.types';
       margin-bottom: 16px;
       text-decoration: none;
       color: #1976d2;
+      background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
     .head { margin-bottom: 24px; }
     .updated { margin-left: 12px; color: #757575; font-size: 0.85em; }
@@ -134,6 +134,7 @@ import { RankingEntry } from '../../core/api.types';
 export class RankingPage implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
   protected socket = inject(SocketService);
 
   loading = signal(true);
@@ -171,5 +172,9 @@ export class RankingPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Keep socket alive for other pages — don't disconnect here.
+  }
+
+  goBack(): void {
+    this.location.back();
   }
 }

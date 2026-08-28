@@ -1,4 +1,4 @@
-# FF-TAROT — Roadmap & versions
+# PABB90 — Roadmap & versions
 
 > Refonte from-scratch d'un logiciel ASP de gestion de tournois FFT
 > (Fédération Française de Tarot). Stack : Node.js + Express + MariaDB +
@@ -131,7 +131,7 @@ et /socket.io vers :3000).
   DB + .env avec mots de passe aléatoires, build front, raccourci Bureau,
   start.bat/stop.bat
 - `install.sh` (Linux : Debian/Ubuntu/Fedora/RHEL) : apt/dnf, systemd
-  unit ff-tarot.service pour démarrage auto au boot, start.sh/stop.sh
+  unit pabb90.service pour démarrage auto au boot, start.sh/stop.sh
 - `docker-compose.yml` + Dockerfile multi-stage : conteneurs MariaDB +
   app, entrypoint qui applique db.sql/seed.sql au premier boot
 
@@ -153,7 +153,7 @@ Documentation centralisée dans `INSTALL.md`. README.md refait.
   - Application de db.sql + seed.sql
   - Écriture .env
   - npm install (back + front si pas pré-buildé)
-  - Installation NSSM comme service Windows "FF-TAROT" :
+  - Installation NSSM comme service Windows "PABB90" :
     - démarre automatiquement au boot (SERVICE_AUTO_START)
     - redémarre tout seul en cas de crash (`sc failure`)
     - logs rotatifs (10 Mo) dans logs\server.log
@@ -176,13 +176,13 @@ Documentation centralisée dans `INSTALL.md`. README.md refait.
   - Le release final attache les 3 archives : `.exe`, `.zip`, `.tar.gz`
     + image Docker GHCR
 
-- **Front** : version affichée dans la sidebar (sous "FF-TAROT") et
+- **Front** : version affichée dans la sidebar (sous "PABB90") et
   sous le titre du login. Lue depuis `environment.appVersion`,
   injectée par la CI au build pour rester synchro avec le tag.
 
 - **Démarrage automatique** garanti partout :
-  - Windows : service NSSM `FF-TAROT` (auto-start)
-  - Linux : `systemctl enable ff-tarot.service`
+  - Windows : service NSSM `PABB90` (auto-start)
+  - Linux : `systemctl enable pabb90.service`
   - Docker : `restart: unless-stopped` dans docker-compose.yml
 
 ### V2.0.5 (à venir)

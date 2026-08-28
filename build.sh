@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build FF-TAROT (Amalgame/Mosaic, multi-fichier) → ./server
+# Build PABB90 (Amalgame/Mosaic, multi-fichier) → ./server
 #
 # Adapté de mosaic/tools/mosaic-build.sh : même résolution amc/runtime/lib
 # et même link gcc, mais on passe TOUTES nos sources (server.am + lib/*.am +

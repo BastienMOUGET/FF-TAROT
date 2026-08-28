@@ -1,4 +1,4 @@
-# Build FF-TAROT (Amalgame/Mosaic) → server.exe  (Windows, port de build.sh)
+# Build PABB90 (Amalgame/Mosaic) → server.exe  (Windows, port de build.sh)
 #
 # Prérequis runner/poste :
 #   - amc installé (irm https://.../install/windows/install.ps1 | iex) →

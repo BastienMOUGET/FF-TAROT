@@ -1,9 +1,9 @@
 
 [package]
-name = "ff-tarot-api"
-version = "2.0.0"
+name = "pabb90-api"
+version = "3.0.16"
 entry = "server.am"
-description = "FF-TAROT — Backend Amalgame/Mosaic pour gestion de tournois FFT (Libre par 4)"
+description = "PABB90 (Petit Au Bout Belfortain 90) — Backend Amalgame/Mosaic pour gestion de tournois de tarot (Libre par 4)"
 
 [dependencies]
 

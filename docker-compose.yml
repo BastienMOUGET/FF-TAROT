@@ -1,5 +1,5 @@
 # =====================================================
-# FF-TAROT — Stack Docker complète
+# PABB90 — Stack Docker complète
 # =====================================================
 # Lancer :  docker compose up -d
 # Arrêter : docker compose down
@@ -27,7 +27,7 @@ services:
 
   app:
     build: .
-    image: ff-tarot:latest
+    image: pabb90:latest
     restart: unless-stopped
     depends_on:
       db:

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# FF-TAROT — Installeur Linux clé en main
+# PABB90 — Installeur Linux clé en main
 #
 # Installe automatiquement :
 #   - Node.js 20+ (si absent)
@@ -233,10 +233,10 @@ ok "Scripts start.sh / stop.sh créés"
 # ---------------------------- Service systemd ----------------------------
 
 if [[ "$INSTALL_SYSTEMD" -eq 1 ]] && command -v systemctl >/dev/null 2>&1; then
-  log "Création du service systemd ff-tarot.service..."
-  cat > /etc/systemd/system/ff-tarot.service <<EOF
+  log "Création du service systemd pabb90.service..."
+  cat > /etc/systemd/system/pabb90.service <<EOF
 [Unit]
-Description=FF-TAROT — Gestion de tournois FFT
+Description=PABB90 — Gestion de tournois FFT
 After=network.target mariadb.service mysql.service
 Wants=mariadb.service
 
@@ -256,8 +256,8 @@ EOF
   mkdir -p "$INSTALL_DIR/logs"
   chown "$APP_USER":"$APP_USER" "$INSTALL_DIR/logs"
   systemctl daemon-reload
-  systemctl enable --now ff-tarot.service
-  ok "Service ff-tarot.service installé et démarré (auto-start au boot)"
+  systemctl enable --now pabb90.service
+  ok "Service pabb90.service installé et démarré (auto-start au boot)"
 fi
 
 # ---------------------------- Récap ----------------------------
@@ -265,7 +265,7 @@ fi
 cat <<EOF
 
 \033[1;32m================================================================\033[0m
-  FF-TAROT installé avec succès
+  PABB90 installé avec succès
 
   URL          : http://localhost:3000
   Identifiant  : admin
@@ -281,7 +281,7 @@ EOF
 
 if [[ "$INSTALL_SYSTEMD" -eq 1 ]]; then
 cat <<EOF
-  Service systemd  : systemctl {status,start,stop,restart} ff-tarot
+  Service systemd  : systemctl {status,start,stop,restart} pabb90
 EOF
 fi
 

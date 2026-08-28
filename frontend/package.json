@@ -1,7 +1,7 @@
 {
-  "name": "ff-tarot-front",
-  "version": "0.3.0",
-  "description": "FF-TAROT — Front Angular pour gestion de tournois FFT (mode Libre par 4)",
+  "name": "pabb90-front",
+  "version": "3.0.16",
+  "description": "PABB90 (Petit Au Bout Belfortain 90) — Front Angular pour gestion de tournois de tarot (mode Libre par 4)",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",

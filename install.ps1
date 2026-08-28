@@ -1,5 +1,5 @@
 # =====================================================
-# FF-TAROT — Installeur Windows clé en main (PowerShell)
+# PABB90 — Installeur Windows clé en main (PowerShell)
 # =====================================================
 #
 # Installe automatiquement :
@@ -8,7 +8,7 @@
 #   - Crée la base `fft` + un utilisateur dédié avec mot de passe aléatoire
 #   - Construit le front Angular si pas déjà pré-buildé
 #   - Crée start.bat / stop.bat à la racine
-#   - Crée un raccourci "FF-TAROT" sur le Bureau (sauf si -NoShortcut)
+#   - Crée un raccourci "PABB90" sur le Bureau (sauf si -NoShortcut)
 #   - Lance le serveur et ouvre le navigateur (sauf si -NoStart)
 #
 # Usage (clic droit -> Exécuter avec PowerShell, OU dans une console admin) :
@@ -220,15 +220,15 @@ if (Test-Path $FrontIndex) {
 # (un service tourne avec CWD=system32 : on passe DB_*/JWT/FRONT_DIR par le
 # registre, lus cote binaire par Config.Get qui priorise l'env process).
 
-$ServiceName = 'FF-TAROT'
+$ServiceName = 'PABB90'
 
 & sc.exe stop $ServiceName 2>$null | Out-Null
 & sc.exe delete $ServiceName 2>$null | Out-Null
 Start-Sleep -Seconds 1
 
 Write-Step "Creation du service Windows natif '$ServiceName'..."
-& sc.exe create $ServiceName binPath= "`"$ServerExe`"" start= auto DisplayName= "FF-TAROT" | Out-Null
-& sc.exe description $ServiceName "FF-TAROT - Gestion de tournois FFT (Libre par 4)" | Out-Null
+& sc.exe create $ServiceName binPath= "`"$ServerExe`"" start= auto DisplayName= "PABB90" | Out-Null
+& sc.exe description $ServiceName "PABB90 - Gestion de tournois FFT (Libre par 4)" | Out-Null
 & sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/15000 | Out-Null
 
 $FrontDir = Join-Path $InstallDir 'frontend\dist\frontend\browser'
@@ -252,10 +252,10 @@ $StopBat  = Join-Path $InstallDir 'stop.bat'
 
 @'
 @echo off
-REM Démarre le service FF-TAROT puis ouvre le navigateur
-sc query "FF-TAROT" >nul 2>&1
+REM Démarre le service PABB90 puis ouvre le navigateur
+sc query "PABB90" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    net start "FF-TAROT" >nul 2>&1
+    net start "PABB90" >nul 2>&1
     timeout /t 1 /nobreak >nul
     start http://localhost:3000
     echo [FFT] Service demarre. http://localhost:3000  (admin / admin123)
@@ -271,10 +271,10 @@ if %ERRORLEVEL% EQU 0 (
 
 @'
 @echo off
-REM Arrête le service FF-TAROT (ou les processus standalone en fallback)
-sc query "FF-TAROT" >nul 2>&1
+REM Arrête le service PABB90 (ou les processus standalone en fallback)
+sc query "PABB90" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    net stop "FF-TAROT" >nul 2>&1
+    net stop "PABB90" >nul 2>&1
     echo [FFT] Service arrete
 ) else (
     for /f "tokens=2" %%P in ('tasklist /fi "imagename eq node.exe" /fo table /nh ^| findstr /v "INFO"') do (
@@ -292,15 +292,15 @@ if (-not $NoShortcut) {
     try {
         $WshShell = New-Object -ComObject WScript.Shell
         $Desktop  = [Environment]::GetFolderPath('Desktop')
-        $Lnk      = $WshShell.CreateShortcut((Join-Path $Desktop 'FF-TAROT.lnk'))
+        $Lnk      = $WshShell.CreateShortcut((Join-Path $Desktop 'PABB90.lnk'))
         $Lnk.TargetPath        = $StartBat
         $Lnk.WorkingDirectory  = $InstallDir
         $Lnk.WindowStyle       = 7  # minimisé
-        $Lnk.Description       = 'Démarrer FF-TAROT et ouvrir l''interface'
+        $Lnk.Description       = 'Démarrer PABB90 et ouvrir l''interface'
         $IconPath = Join-Path $InstallDir 'frontend\public\favicon.ico'
         if (Test-Path $IconPath) { $Lnk.IconLocation = $IconPath }
         $Lnk.Save()
-        Write-Ok "Raccourci 'FF-TAROT' créé sur le Bureau"
+        Write-Ok "Raccourci 'PABB90' créé sur le Bureau"
     } catch {
         Write-Warn2 "Impossible de créer le raccourci Bureau : $_"
     }
@@ -312,14 +312,14 @@ if (-not $NoShortcut) {
 
 Write-Host ''
 Write-Host '================================================================' -ForegroundColor Green
-Write-Host '  FF-TAROT installé avec succès' -ForegroundColor Green
+Write-Host '  PABB90 installé avec succès' -ForegroundColor Green
 Write-Host '================================================================' -ForegroundColor Green
 Write-Host ''
 Write-Host '  URL          : http://localhost:3000'
 Write-Host '  Identifiant  : admin'
 Write-Host '  Mot de passe : admin123  (à changer immédiatement via /admin)' -ForegroundColor Yellow
 Write-Host ''
-Write-Host "  Démarrer  : double-clic sur 'FF-TAROT' (Bureau) ou .\start.bat"
+Write-Host "  Démarrer  : double-clic sur 'PABB90' (Bureau) ou .\start.bat"
 Write-Host '  Arrêter   : .\stop.bat'
 Write-Host '  Logs      : Get-Content logs\server.log -Wait'
 Write-Host ''

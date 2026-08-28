@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
+import { Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import { MatCardModule } from '@angular/material/card';
@@ -17,7 +18,6 @@ import { PpEntry } from '../../core/api.types';
 @Component({
   selector: 'app-pp-grid-page',
   imports: [
-    RouterLink,
     FormsModule,
     MatCardModule,
     MatButtonModule,
@@ -29,9 +29,9 @@ import { PpEntry } from '../../core/api.types';
     MatSnackBarModule,
   ],
   template: `
-    <a routerLink="/tournaments" class="back">
+    <button type="button" class="back" (click)="goBack()">
       <mat-icon>arrow_back</mat-icon> Retour
-    </a>
+    </button>
     <h1>Grille PP (Palmarès des Points)</h1>
     <p class="hint">
       <mat-icon>info</mat-icon>
@@ -101,6 +101,7 @@ import { PpEntry } from '../../core/api.types';
     .back {
       display: inline-flex; align-items: center; gap: 4px;
       margin-bottom: 16px; text-decoration: none; color: #1976d2;
+      background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
     .hint {
       display: flex; align-items: center; gap: 8px;
@@ -121,6 +122,7 @@ import { PpEntry } from '../../core/api.types';
 export class PpGridPage implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
   private snack = inject(MatSnackBar);
 
   loading = signal(true);
@@ -149,6 +151,10 @@ export class PpGridPage implements OnInit {
 
   removeRow(i: number): void {
     this.entries.update((arr) => arr.filter((_, idx) => idx !== i));
+  }
+
+  goBack(): void {
+    this.location.back();
   }
 
   presetTop3(): void {

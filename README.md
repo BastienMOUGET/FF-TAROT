@@ -1,6 +1,7 @@
-# FF-TAROT
+# PABB90
 
-Logiciel de gestion de tournois pour la **Fédération Française de Tarot**
+**PABB90** (Petit Au Bout Belfortain 90) — logiciel de gestion de tournois
+de tarot
 (mode Libre par 4). Refonte from-scratch d'un ancien outil ASP, en
 **Node.js + Express + MariaDB** côté back et **Angular 21 + Material**
 côté front, avec **classement live** via Socket.IO.
@@ -12,11 +13,11 @@ côté front, avec **classement live** via Socket.IO.
 
 Voir **[INSTALL.md](INSTALL.md)** — 3 méthodes au choix :
 
-- **Windows** : télécharge `ff-tarot-X.Y.Z-windows.zip` depuis la
+- **Windows** : télécharge `pabb90-X.Y.Z-windows.zip` depuis la
   [page Releases](../../releases), dézippe, et lance `.\install.ps1`
   en PowerShell admin → installe Node + MariaDB via winget, build,
   crée un raccourci sur le Bureau.
-- **Linux** : télécharge `ff-tarot-X.Y.Z-linux.tar.gz` depuis la
+- **Linux** : télécharge `pabb90-X.Y.Z-linux.tar.gz` depuis la
   [page Releases](../../releases), décompresse, lance `sudo ./install.sh`
   → apt/dnf, systemd unit pour démarrage auto.
 - **Docker** : `docker compose up -d` (clone du repo) ou

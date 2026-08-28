@@ -27,7 +27,7 @@ import { environment } from '../../../environments/environment';
     <div class="login-wrapper">
       <mat-card class="login-card">
         <mat-card-header>
-          <mat-card-title>FF-TAROT <small class="version">v{{ version }}</small></mat-card-title>
+          <mat-card-title>PABB90 <small class="version">v{{ version }}</small></mat-card-title>
           <mat-card-subtitle>Connexion arbitre</mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>

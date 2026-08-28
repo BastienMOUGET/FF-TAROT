@@ -1,14 +1,14 @@
-# Installation FF-TAROT
+# Installation PABB90
 
 4 façons d'installer, choisis celle qui te convient.
 
 > 💡 **Le plus simple sous Windows** : télécharger
-> `ff-tarot-X.Y.Z-setup.exe` depuis la
+> `pabb90-X.Y.Z-setup.exe` depuis la
 > [page Releases GitHub](../../releases) et double-cliquer. L'installeur
 > Inno Setup s'occupe de tout (Node, MariaDB, base, service Windows
 > auto-start, raccourci Bureau).
 >
-> Toutes les méthodes installent FF-TAROT en **service auto-démarré au
+> Toutes les méthodes installent PABB90 en **service auto-démarré au
 > boot** : Windows (NSSM), Linux (systemd), Docker (`restart: unless-stopped`).
 
 ---
@@ -17,7 +17,7 @@
 
 **Prérequis** : Windows 10 1809+ avec winget.
 
-1. Télécharger `ff-tarot-X.Y.Z-setup.exe` depuis la [page Releases](../../releases)
+1. Télécharger `pabb90-X.Y.Z-setup.exe` depuis la [page Releases](../../releases)
 2. Double-clic sur le fichier
 3. Suivre l'assistant : Suivant → Suivant → Installer
 4. Le wizard fait tout :
@@ -25,17 +25,17 @@
    - Installe MariaDB Server via winget (si absent)
    - Crée la base + utilisateur avec mots de passe aléatoires
    - Build le front Angular si pas déjà pré-buildé
-   - Enregistre **FF-TAROT comme service Windows** (NSSM, auto-start au boot,
+   - Enregistre **PABB90 comme service Windows** (NSSM, auto-start au boot,
      restart automatique en cas de crash)
    - Crée des raccourcis Menu Démarrer + Bureau (pointant sur http://localhost:3000)
 5. À la fin, le navigateur s'ouvre tout seul. Login : `admin` / `admin123`
 
 ### Au quotidien
 - **Le service tourne en permanence en arrière-plan** : pas besoin de le démarrer
-- Cliquer sur le raccourci **FF-TAROT** ouvre directement le navigateur
-- Gestion : Menu Démarrer > FF-TAROT > Démarrer/Arrêter le service
-- Logs : `C:\FF-TAROT\logs\server.log`
-- Désinstallation : Panneau de configuration > Programmes > FF-TAROT > Désinstaller
+- Cliquer sur le raccourci **PABB90** ouvre directement le navigateur
+- Gestion : Menu Démarrer > PABB90 > Démarrer/Arrêter le service
+- Logs : `C:\PABB90\logs\server.log`
+- Désinstallation : Panneau de configuration > Programmes > PABB90 > Désinstaller
   (stoppe et supprime le service automatiquement)
 
 ---
@@ -45,12 +45,12 @@
 **Prérequis** : Windows 10 1809+ avec winget.
 
 ```powershell
-# Télécharger ff-tarot-X.Y.Z-windows.zip depuis la page Releases, dézipper.
+# Télécharger pabb90-X.Y.Z-windows.zip depuis la page Releases, dézipper.
 # Ouvrir PowerShell EN ADMIN (clic droit -> Exécuter en admin) dans le dossier.
 # Si la politique d'exécution refuse les scripts, autoriser une fois :
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
-cd C:\chemin\vers\ff-tarot
+cd C:\chemin\vers\pabb90
 .\install.ps1
 ```
 
@@ -62,7 +62,7 @@ L'installeur va :
 4. générer un secret JWT aléatoire dans `.env`
 5. installer les dépendances back + front et builder le bundle Angular
 6. créer **`start.bat`** et **`stop.bat`** à la racine
-7. créer un raccourci **"FF-TAROT" sur le Bureau**
+7. créer un raccourci **"PABB90" sur le Bureau**
 8. lancer le serveur et ouvrir [http://localhost:3000](http://localhost:3000)
 
 **Identifiants par défaut** : `admin` / `admin123` (à changer immédiatement via la page Admin).
@@ -89,7 +89,7 @@ Puis relancer `.\install.ps1` (il détecte les présences existantes).
 **Prérequis** : un système avec `apt-get` ou `dnf`/`yum`, et un accès root.
 
 ```bash
-cd /chemin/vers/FF-TAROT
+cd /chemin/vers/PABB90
 sudo ./install.sh
 ```
 
@@ -101,7 +101,7 @@ L'installeur va :
 4. générer un secret JWT aléatoire dans `.env`
 5. installer les dépendances back + front et builder le bundle Angular
 6. créer **`start.sh`** / **`stop.sh`** à la racine
-7. créer une **unité systemd `ff-tarot.service`** pour démarrage auto au boot
+7. créer une **unité systemd `pabb90.service`** pour démarrage auto au boot
 8. afficher l'URL d'accès
 
 Pour ne pas installer le service systemd :
@@ -112,9 +112,9 @@ sudo ./install.sh --no-systemd
 
 ### Au quotidien
 
-- **Service systemd** : `systemctl {status,start,stop,restart} ff-tarot`
+- **Service systemd** : `systemctl {status,start,stop,restart} pabb90`
 - **Manuel** : `./start.sh` et `./stop.sh`
-- **Logs** : `tail -f logs/server.log` (ou `journalctl -u ff-tarot -f`)
+- **Logs** : `tail -f logs/server.log` (ou `journalctl -u pabb90 -f`)
 - **URL** : http://localhost:3000
 
 ---
@@ -124,7 +124,7 @@ sudo ./install.sh --no-systemd
 **Prérequis** : Docker + Docker Compose v2.
 
 ```bash
-cd /chemin/vers/FF-TAROT
+cd /chemin/vers/PABB90
 docker compose up -d
 ```
 
@@ -175,13 +175,13 @@ Modifier `docker-compose.yml` pour :
 # Optionnel : désinstaller MariaDB et Node via Panneau de configuration
 # Optionnel : supprimer la base
 mysql -u root -e "DROP DATABASE fft; DROP USER 'fft_user'@'localhost';"
-# Supprimer le raccourci Bureau et le dossier FF-TAROT
+# Supprimer le raccourci Bureau et le dossier PABB90
 ```
 
 ### Linux
 ```bash
-sudo systemctl disable --now ff-tarot
-sudo rm /etc/systemd/system/ff-tarot.service
+sudo systemctl disable --now pabb90
+sudo rm /etc/systemd/system/pabb90.service
 sudo systemctl daemon-reload
 mysql -u root -e "DROP DATABASE fft; DROP USER 'fft_user'@'localhost';"
 # Optionnel : sudo apt remove --purge mariadb-server nodejs
@@ -190,7 +190,7 @@ mysql -u root -e "DROP DATABASE fft; DROP USER 'fft_user'@'localhost';"
 ### Docker
 ```bash
 docker compose down -v
-docker rmi ff-tarot:latest
+docker rmi pabb90:latest
 ```
 
 ---

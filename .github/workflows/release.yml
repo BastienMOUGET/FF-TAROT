@@ -146,16 +146,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: installer/output/ff-tarot-*-setup.exe
+          path: installer/output/pabb90-*-setup.exe
           retention-days: 5
 
       # ---- Publication de la release ----
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: FF-TAROT v${{ steps.version.outputs.version }}
+          name: PABB90 v${{ steps.version.outputs.version }}
           body: |
-            ## FF-TAROT v${{ steps.version.outputs.version }} — back Amalgame/Mosaic
+            ## PABB90 v${{ steps.version.outputs.version }} — back Amalgame/Mosaic
 
             Backend réécrit en **Amalgame** (plus de Node). Installeur Windows
             tout-en-un : installe MariaDB, enregistre **server.exe comme service
@@ -164,4 +164,4 @@ jobs:
             live Socket.IO.
 
             Login par défaut : `admin` / `admin123`.
-          files: installer/output/ff-tarot-*-setup.exe
+          files: installer/output/pabb90-*-setup.exe

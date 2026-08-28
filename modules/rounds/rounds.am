@@ -161,7 +161,7 @@ public class ModRounds {
                     tp.PlayerNumber = Db.CellInt(prow.Get(1))
                     team.Players.Add(tp)
                 }
-                if (team.Players.Count() != 4) { return HttpErr.BadRequest("Équipe incomplète : " + tidS) }
+                if (team.Players.Count() != 3 && team.Players.Count() != 4) { return HttpErr.BadRequest("Équipe incomplète : " + tidS) }
                 teams.Add(team)
             }
             seats = Placement.GenerateInitialSeats(teams)

@@ -30,7 +30,7 @@ import { environment } from '../../environments/environment';
         <div class="brand">
           <mat-icon>casino</mat-icon>
           <div class="brand-text">
-            <span class="brand-name">FF-TAROT</span>
+            <span class="brand-name">PABB90</span>
             <span class="brand-version">v{{ version }}</span>
           </div>
         </div>

@@ -1,10 +1,15 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Location } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { from } from 'rxjs';
+import { concatMap, toArray } from 'rxjs/operators';
 
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -13,16 +18,17 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { ApiService } from '../../core/api.service';
-import { Player, Team } from '../../core/api.types';
+import { Pair, Player, Team } from '../../core/api.types';
 
 @Component({
   selector: 'app-teams-page',
   imports: [
-    RouterLink,
     ReactiveFormsModule,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
+    MatCheckboxModule,
+    MatButtonToggleModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
@@ -31,20 +37,120 @@ import { Player, Team } from '../../core/api.types';
     MatSnackBarModule,
   ],
   template: `
-    <a routerLink="/tournaments" class="back">
+    <button type="button" class="back" (click)="goBack()">
       <mat-icon>arrow_back</mat-icon> Retour
-    </a>
+    </button>
     <h1>Inscriptions</h1>
+
+    <mat-card class="form-card draw-card">
+      <mat-card-header>
+        <mat-card-title>Tirage au sort — Round 1</mat-card-title>
+        <mat-card-subtitle>
+          Sélectionne les joueurs présents, l'appli forme des équipes de 4 (et
+          de 3 si besoin pour compléter) au hasard et génère la mise en place
+          du round 1.
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        @if (availablePlayers().length === 0) {
+          <p class="empty">
+            Tous les joueurs sont déjà inscrits dans une équipe pour ce
+            sous-tournoi.
+          </p>
+        } @else {
+          <mat-form-field appearance="outline" class="full search">
+            <mat-label>Filtrer</mat-label>
+            <input
+              matInput
+              [value]="drawFilter()"
+              (input)="drawFilter.set($any($event.target).value)"
+              placeholder="nom, prénom, licence…"
+            />
+          </mat-form-field>
+
+          <div class="draw-toolbar">
+            <button mat-button type="button" (click)="selectAllDraw()">
+              Tout sélectionner
+            </button>
+            <button mat-button type="button" (click)="clearDrawSelection()">
+              Tout désélectionner
+            </button>
+            <span class="spacer"></span>
+            <span
+              class="draw-count"
+              [class.warn]="drawCount() > 0 && !canDraw()"
+            >
+              {{ drawCount() }} joueur(s) sélectionné(s)
+              @if (drawCount() > 0) {
+                @if (drawPlan(); as plan) {
+                  →
+                  @if (plan.fours > 0) {
+                    {{ plan.fours }} table(s) de 4
+                  }
+                  @if (plan.fours > 0 && plan.threes > 0) {
+                    +
+                  }
+                  @if (plan.threes > 0) {
+                    {{ plan.threes }} table(s) de 3
+                  }
+                } @else {
+                  (nombre impossible à répartir en tables de 3 ou 4 — ajoute
+                  ou retire un joueur)
+                }
+              }
+            </span>
+          </div>
+
+          <div class="draw-list">
+            @for (p of filteredAvailablePlayers(); track p.id) {
+              <mat-checkbox
+                [checked]="drawSelection().has(p.id)"
+                (change)="toggleDraw(p.id)"
+              >
+                {{ p.name }} {{ p.firstname }}
+                @if (p.licence) {
+                  <small>({{ p.licence }})</small>
+                }
+              </mat-checkbox>
+            }
+          </div>
+        }
+      </mat-card-content>
+      <mat-card-actions align="end">
+        <button
+          mat-flat-button
+          color="primary"
+          [disabled]="!canDraw() || drawing()"
+          (click)="randomDraw()"
+        >
+          <mat-icon>shuffle</mat-icon> Tirer au sort et générer le round 1
+        </button>
+      </mat-card-actions>
+    </mat-card>
 
     <mat-card class="form-card">
       <mat-card-header>
-        <mat-card-title>Nouvelle équipe (Libre par 4)</mat-card-title>
-        <mat-card-subtitle>2 joueurs NS + 2 joueurs EO</mat-card-subtitle>
+        <mat-card-title>Nouvelle équipe (Libre par 3 ou 4)</mat-card-title>
+        <mat-card-subtitle>
+          @if (teamSize() === 4) {
+            2 joueurs NS + 2 joueurs EO
+          } @else {
+            2 joueurs NS + 1 joueur EO
+          }
+        </mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
+        <mat-button-toggle-group
+          class="size-toggle"
+          [value]="teamSize()"
+          (change)="setTeamSize($event.value)"
+        >
+          <mat-button-toggle [value]="4">4 joueurs</mat-button-toggle>
+          <mat-button-toggle [value]="3">3 joueurs</mat-button-toggle>
+        </mat-button-toggle-group>
         <form [formGroup]="form" (ngSubmit)="add()">
           <div class="grid">
-            @for (slot of slots; track slot.idx) {
+            @for (slot of slots(); track slot.idx) {
               <mat-form-field appearance="outline">
                 <mat-label
                   >{{ slot.label }} ({{ slot.pair }})</mat-label
@@ -112,8 +218,30 @@ import { Player, Team } from '../../core/api.types';
     .back {
       display: inline-flex; align-items: center; gap: 4px;
       margin-bottom: 16px; text-decoration: none; color: #1976d2;
+      background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
     .form-card { margin-bottom: 24px; }
+    .draw-card mat-card-subtitle { margin-top: 4px; }
+    .search.full { width: 100%; margin-top: 12px; }
+    .draw-toolbar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .draw-toolbar .spacer { flex: 1 1 auto; }
+    .draw-count { color: #757575; font-size: 0.9em; }
+    .draw-count.warn { color: #c62828; }
+    .draw-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 4px 12px;
+      max-height: 320px;
+      overflow-y: auto;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 8px 12px;
+    }
+    .draw-list small { color: #757575; }
+    .size-toggle { margin-bottom: 16px; }
     .grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -134,6 +262,8 @@ import { Player, Team } from '../../core/api.types';
 export class TeamsPage implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private location = inject(Location);
   private fb = inject(FormBuilder);
   private snack = inject(MatSnackBar);
 
@@ -142,12 +272,39 @@ export class TeamsPage implements OnInit {
   teams = signal<Team[]>([]);
   saving = signal(false);
 
-  slots = [
-    { idx: 1, label: 'Joueur 1', pair: 'NS' as const },
-    { idx: 2, label: 'Joueur 2', pair: 'NS' as const },
-    { idx: 3, label: 'Joueur 3', pair: 'EO' as const },
-    { idx: 4, label: 'Joueur 4', pair: 'EO' as const },
-  ];
+  drawSelection = signal<Set<number>>(new Set());
+  drawFilter = signal('');
+  drawing = signal(false);
+
+  registeredPlayerIds = computed(
+    () => new Set(this.teams().flatMap((t) => t.players.map((p) => p.player_id)))
+  );
+  availablePlayers = computed(() =>
+    this.players().filter((p) => !this.registeredPlayerIds().has(p.id))
+  );
+  filteredAvailablePlayers = computed(() => {
+    const q = this.drawFilter().trim().toLowerCase();
+    if (!q) return this.availablePlayers();
+    return this.availablePlayers().filter((p) =>
+      `${p.name} ${p.firstname} ${p.licence ?? ''}`.toLowerCase().includes(q)
+    );
+  });
+  drawCount = computed(() => this.drawSelection().size);
+  drawPlan = computed(() => this.decompose(this.drawCount()));
+  canDraw = computed(() => this.drawPlan() !== null);
+
+  teamSize = signal<3 | 4>(4);
+  slots = computed(() => {
+    const base = [
+      { idx: 1, label: 'Joueur 1', pair: 'NS' as const },
+      { idx: 2, label: 'Joueur 2', pair: 'NS' as const },
+      { idx: 3, label: 'Joueur 3', pair: 'EO' as const },
+    ];
+    if (this.teamSize() === 4) {
+      base.push({ idx: 4, label: 'Joueur 4', pair: 'EO' as const });
+    }
+    return base;
+  });
 
   form = this.fb.nonNullable.group({
     p1: [null as number | null, Validators.required],
@@ -167,26 +324,48 @@ export class TeamsPage implements OnInit {
     this.api.teams(this.subTournamentId()).subscribe((t) => this.teams.set(t));
   }
 
+  setTeamSize(size: 3 | 4): void {
+    this.teamSize.set(size);
+    const p4 = this.form.controls.p4;
+    if (size === 3) {
+      p4.clearValidators();
+      p4.setValue(null);
+    } else {
+      p4.setValidators(Validators.required);
+    }
+    p4.updateValueAndValidity();
+  }
+
   add(): void {
     const v = this.form.getRawValue();
-    if (!v.p1 || !v.p2 || !v.p3 || !v.p4) return;
-    const ids = [v.p1, v.p2, v.p3, v.p4];
-    if (new Set(ids).size !== 4) {
+    const size = this.teamSize();
+    const ids = size === 4 ? [v.p1, v.p2, v.p3, v.p4] : [v.p1, v.p2, v.p3];
+    if (ids.some((id) => !id)) return;
+    if (new Set(ids).size !== ids.length) {
       this.snack.open('Doublon : un joueur est sélectionné plusieurs fois', 'Fermer', { duration: 3000 });
       return;
     }
+    const players =
+      size === 4
+        ? [
+            { player_id: v.p1!, pair: 'NS' as Pair },
+            { player_id: v.p2!, pair: 'NS' as Pair },
+            { player_id: v.p3!, pair: 'EO' as Pair },
+            { player_id: v.p4!, pair: 'EO' as Pair },
+          ]
+        : [
+            { player_id: v.p1!, pair: 'NS' as Pair },
+            { player_id: v.p2!, pair: 'NS' as Pair },
+            { player_id: v.p3!, pair: 'EO' as Pair },
+          ];
     this.saving.set(true);
     this.api
-      .createTeam(this.subTournamentId(), [
-        { player_id: v.p1, pair: 'NS' },
-        { player_id: v.p2, pair: 'NS' },
-        { player_id: v.p3, pair: 'EO' },
-        { player_id: v.p4, pair: 'EO' },
-      ])
+      .createTeam(this.subTournamentId(), players)
       .subscribe({
         next: () => {
           this.snack.open('Équipe inscrite', 'Fermer', { duration: 2000 });
           this.form.reset();
+          this.setTeamSize(this.teamSize());
           this.refreshTeams();
           this.saving.set(false);
         },
@@ -204,5 +383,159 @@ export class TeamsPage implements OnInit {
   remove(id: number): void {
     if (!confirm("Supprimer cette équipe ?")) return;
     this.api.deleteTeam(id).subscribe(() => this.refreshTeams());
+  }
+
+  goBack(): void {
+    this.location.back();
+  }
+
+  toggleDraw(playerId: number): void {
+    this.drawSelection.update((s) => {
+      const next = new Set(s);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  }
+
+  selectAllDraw(): void {
+    this.drawSelection.set(new Set(this.filteredAvailablePlayers().map((p) => p.id)));
+  }
+
+  clearDrawSelection(): void {
+    this.drawSelection.set(new Set());
+  }
+
+  private shuffle<T>(arr: T[]): T[] {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  // Décompose n joueurs en tables de 4 (prioritaire) + tables de 3 pour
+  // finir correctement quand n n'est pas un multiple de 4. Infaisable
+  // seulement pour n < 3 ou n === 5.
+  private decompose(n: number): { fours: number; threes: number } | null {
+    if (n < 3) return null;
+    const r = n % 4;
+    const threes = r === 0 ? 0 : r === 1 ? 3 : r === 2 ? 2 : 1;
+    const remaining = n - threes * 3;
+    if (remaining < 0 || remaining % 4 !== 0) return null;
+    return { fours: remaining / 4, threes };
+  }
+
+  randomDraw(): void {
+    const plan = this.drawPlan();
+    if (!plan || this.drawing()) return;
+    const nbTeams = plan.fours + plan.threes;
+    const detail =
+      plan.threes > 0
+        ? `${plan.fours} de 4 + ${plan.threes} de 3`
+        : `${plan.fours} de 4`;
+    if (
+      !confirm(
+        `Tirer au sort ${this.drawCount()} joueurs en ${nbTeams} équipe(s) (${detail}) et générer la mise en place du round 1 ?`
+      )
+    ) {
+      return;
+    }
+
+    const ids = this.shuffle(Array.from(this.drawSelection()));
+    const payloads: { player_id: number; pair: Pair }[][] = [];
+    let cursor = 0;
+    for (let i = 0; i < plan.fours; i++) {
+      const group = this.shuffle(ids.slice(cursor, cursor + 4));
+      cursor += 4;
+      payloads.push([
+        { player_id: group[0], pair: 'NS' },
+        { player_id: group[1], pair: 'NS' },
+        { player_id: group[2], pair: 'EO' },
+        { player_id: group[3], pair: 'EO' },
+      ]);
+    }
+    for (let i = 0; i < plan.threes; i++) {
+      const group = this.shuffle(ids.slice(cursor, cursor + 3));
+      cursor += 3;
+      const majority: Pair = Math.random() < 0.5 ? 'NS' : 'EO';
+      const minority: Pair = majority === 'NS' ? 'EO' : 'NS';
+      payloads.push([
+        { player_id: group[0], pair: majority },
+        { player_id: group[1], pair: majority },
+        { player_id: group[2], pair: minority },
+      ]);
+    }
+
+    this.drawing.set(true);
+    from(payloads)
+      .pipe(
+        concatMap((players) => this.api.createTeam(this.subTournamentId(), players)),
+        toArray()
+      )
+      .subscribe({
+        next: () => {
+          this.drawSelection.set(new Set());
+          this.refreshTeams();
+          this.snack.open(`${nbTeams} équipe(s) tirée(s) au sort`, 'Fermer', {
+            duration: 2000,
+          });
+          this.generateFirstRound();
+        },
+        error: (err) => {
+          this.drawing.set(false);
+          this.refreshTeams();
+          this.snack.open(
+            err?.error?.error || 'Erreur pendant le tirage au sort',
+            'Fermer',
+            { duration: 3000 }
+          );
+        },
+      });
+  }
+
+  private generateFirstRound(): void {
+    this.api.rounds(this.subTournamentId()).subscribe({
+      next: (rounds) => {
+        const existing = rounds.find((r) => r.round_number === 1);
+        if (existing) {
+          this.applyPlacement(existing.id);
+        } else {
+          this.api.createRound(this.subTournamentId()).subscribe({
+            next: (round) => this.applyPlacement(round.id),
+            error: (err) => {
+              this.drawing.set(false);
+              this.snack.open(
+                err?.error?.error || 'Erreur création du round 1',
+                'Fermer',
+                { duration: 3000 }
+              );
+            },
+          });
+        }
+      },
+      error: () => this.drawing.set(false),
+    });
+  }
+
+  private applyPlacement(roundId: number): void {
+    this.api.generatePlacement(roundId).subscribe({
+      next: () => {
+        this.drawing.set(false);
+        this.snack.open('Mise en place du round 1 générée', 'Fermer', {
+          duration: 2000,
+        });
+        this.router.navigate(['/rounds', roundId]);
+      },
+      error: (err) => {
+        this.drawing.set(false);
+        this.snack.open(
+          err?.error?.error || 'Erreur génération de la mise en place',
+          'Fermer',
+          { duration: 3000 }
+        );
+      },
+    });
   }
 }

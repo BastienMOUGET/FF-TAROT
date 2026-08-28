@@ -1,12 +1,12 @@
 ; =====================================================
-; FF-TAROT — Inno Setup script (100% natif, pas de PowerShell)
+; PABB90 — Inno Setup script (100% natif, pas de PowerShell)
 ; =====================================================
 ; Compile via :
 ;   iscc /DAppVersion=2.0.4 setup.iss
 ; (la CI passe la version via /DAppVersion=...)
 ;
 ; Le .exe résultant fait tout :
-;   - extrait les fichiers dans C:\FF-TAROT (modifiable au wizard)
+;   - extrait les fichiers dans C:\PABB90 (modifiable au wizard)
 ;   - installe Node.js LTS (MSI officiel téléchargé) si absent
 ;   - installe MariaDB Server (MSI officiel téléchargé) si absent
 ;   - génère un mot de passe DB et un secret JWT aléatoires
@@ -18,38 +18,38 @@
 ;   - propose d'ouvrir le navigateur à la fin
 
 ; --- VERSIONING ---
-; Source unique de vérité : le tag git (ex : v2.0.4).
+; Source unique de vérité : le tag git (ex : v3.0.16).
 ; Flow :
 ;   1. La CI (release.yml) extrait : version=${GITHUB_REF_NAME#v}
-;   2. Elle compile en passant : iscc /DAppVersion=2.0.4 setup.iss
+;   2. Elle compile en passant : iscc /DAppVersion=3.0.16 setup.iss
 ;   3. /D définit AppVersion AVANT lecture du script -> #ifndef est skip
-;   4. Le .exe résultant s'appelle ff-tarot-2.0.4-setup.exe et toutes
-;      les références {#AppVersion} dans [Setup]/[Files]/etc. portent 2.0.4
+;   4. Le .exe résultant s'appelle pabb90-3.0.16-setup.exe et toutes
+;      les références {#AppVersion} dans [Setup]/[Files]/etc. portent 3.0.16
 ;
 ; En compilation locale (test du script sans la CI), on retombe sur le
 ; placeholder "0.0.0-dev" pour que ça fonctionne quand même. Pour
-; tester avec une vraie version : iscc /DAppVersion=2.0.4 setup.iss
+; tester avec une vraie version : iscc /DAppVersion=3.0.16 setup.iss
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"
 #endif
 
 [Setup]
-AppId={{B5F7F1B4-4F77-4F2C-A9F0-FFTAROTV1}}
-AppName=FF-TAROT
+AppId={{2402B3E5-9D93-41BB-A8A2-9E2D3B3F35AB}}
+AppName=PABB90
 AppVersion={#AppVersion}
-AppPublisher=FF-TAROT
-DefaultDirName={sd}\FF-TAROT
-DefaultGroupName=FF-TAROT
+AppPublisher=PABB90
+DefaultDirName={sd}\PABB90
+DefaultGroupName=PABB90
 DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 PrivilegesRequired=admin
-OutputBaseFilename=ff-tarot-{#AppVersion}-setup
+OutputBaseFilename=pabb90-{#AppVersion}-setup
 OutputDir=output
 Compression=lzma2/ultra
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayName=FF-TAROT {#AppVersion}
+UninstallDisplayName=PABB90 {#AppVersion}
 ChangesEnvironment=no
 MinVersion=10.0
 
@@ -82,30 +82,30 @@ Source: "..\ROADMAP.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\FF-TAROT"; Filename: "http://localhost:3000"; \
+Name: "{group}\PABB90"; Filename: "http://localhost:3000"; \
   IconFilename: "{app}\frontend\public\favicon.ico"; \
-  Comment: "Ouvrir l'interface FF-TAROT (le service tourne en arrière-plan en permanence)"
-Name: "{group}\Démarrer le service FF-TAROT"; Filename: "{sys}\net.exe"; \
-  Parameters: "start FF-TAROT"; Flags: runminimized
-Name: "{group}\Arrêter le service FF-TAROT"; Filename: "{sys}\net.exe"; \
-  Parameters: "stop FF-TAROT"; Flags: runminimized
-Name: "{group}\Désinstaller FF-TAROT"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\FF-TAROT"; Filename: "http://localhost:3000"; \
+  Comment: "Ouvrir l'interface PABB90 (le service tourne en arrière-plan en permanence)"
+Name: "{group}\Démarrer le service PABB90"; Filename: "{sys}\net.exe"; \
+  Parameters: "start PABB90"; Flags: runminimized
+Name: "{group}\Arrêter le service PABB90"; Filename: "{sys}\net.exe"; \
+  Parameters: "stop PABB90"; Flags: runminimized
+Name: "{group}\Désinstaller PABB90"; Filename: "{uninstallexe}"
+Name: "{commondesktop}\PABB90"; Filename: "http://localhost:3000"; \
   IconFilename: "{app}\frontend\public\favicon.ico"; \
-  Comment: "Ouvrir l'interface FF-TAROT"; Tasks: desktopicon
+  Comment: "Ouvrir l'interface PABB90"; Tasks: desktopicon
 
 [Run]
 ; Lancer le navigateur après install (case cochée par défaut, masquable en mode silencieux)
 Filename: "http://localhost:3000"; \
-  Description: "Ouvrir FF-TAROT dans le navigateur"; \
+  Description: "Ouvrir PABB90 dans le navigateur"; \
   Flags: shellexec postinstall skipifsilent
 
 [UninstallRun]
 ; Stopper et supprimer le service natif avant désinstallation des fichiers
-Filename: "{sys}\sc.exe"; Parameters: "stop FF-TAROT"; \
-  Flags: runhidden; RunOnceId: "StopFftService"
-Filename: "{sys}\sc.exe"; Parameters: "delete FF-TAROT"; \
-  Flags: runhidden; RunOnceId: "RemoveFftService"
+Filename: "{sys}\sc.exe"; Parameters: "stop PABB90"; \
+  Flags: runhidden; RunOnceId: "StopPabb90Service"
+Filename: "{sys}\sc.exe"; Parameters: "delete PABB90"; \
+  Flags: runhidden; RunOnceId: "RemovePabb90Service"
 
 [UninstallDelete]
 Type: files; Name: "{app}\.env"
@@ -221,7 +221,7 @@ begin
     ProgressPage.SetText(Msg, '');
     ProgressPage.Show;
   end;
-  Log('[FFT] ' + Msg);
+  Log('[PABB90] ' + Msg);
 end;
 
 // Télécharge un MSI (vérif SHA256) dans le dossier temp et l'installe en
@@ -239,7 +239,7 @@ begin
     SetProgress('Téléchargement de ' + FileName + ' (peut prendre 1-3 min)...');
     DownloadTemporaryFile(Url, FileName, Sha256, nil);
   except
-    Log('[FFT] Échec téléchargement ' + Url + ' : ' + GetExceptionMessage);
+    Log('[PABB90] Échec téléchargement ' + Url + ' : ' + GetExceptionMessage);
     Exit;
   end;
 
@@ -247,10 +247,10 @@ begin
   if not ExecAndWait('msiexec.exe',
        '/i "' + MsiPath + '" /qn /norestart ' + ExtraProps, '', ExitCode) then
   begin
-    Log('[FFT] msiexec n''a pas pu démarrer pour ' + FileName);
+    Log('[PABB90] msiexec n''a pas pu démarrer pour ' + FileName);
     Exit;
   end;
-  Log('[FFT] msiexec ' + FileName + ' exit code = ' + IntToStr(ExitCode));
+  Log('[PABB90] msiexec ' + FileName + ' exit code = ' + IntToStr(ExitCode));
   // 0 = OK, 3010 = OK mais reboot requis (on ignore le reboot, services déjà up)
   Result := (ExitCode = 0) or (ExitCode = 3010);
 end;
@@ -442,21 +442,21 @@ var
   AppDir, ExePath, Sc: String;
   EnvData: String;
 begin
-  SetProgress('Installation du service Windows natif FF-TAROT (auto-start)...');
+  SetProgress('Installation du service Windows natif PABB90 (auto-start)...');
   AppDir  := ExpandConstant('{app}');
   ExePath := ExpandConstant('{app}\server.exe');
   Sc      := ExpandConstant('{sys}\sc.exe');
 
-  Exec(Sc, 'stop FF-TAROT',   '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(Sc, 'delete FF-TAROT', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  Exec(Sc, 'stop PABB90',   '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  Exec(Sc, 'delete PABB90', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   Sleep(1000);
 
-  Exec(Sc, 'create FF-TAROT binPath= "' + ExePath + '" start= auto DisplayName= "FF-TAROT"',
+  Exec(Sc, 'create PABB90 binPath= "' + ExePath + '" start= auto DisplayName= "PABB90"',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-  Exec(Sc, 'description FF-TAROT "FF-TAROT - Gestion de tournois FFT"',
+  Exec(Sc, 'description PABB90 "PABB90 - Gestion de tournois FFT"',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   // Restart automatique en cas de crash (3 essais : 5s, 5s, 15s)
-  Exec(Sc, 'failure FF-TAROT reset= 60 actions= restart/5000/restart/5000/restart/15000',
+  Exec(Sc, 'failure PABB90 reset= 60 actions= restart/5000/restart/5000/restart/15000',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
 
   // Environnement du service (REG_MULTI_SZ). RegWriteMultiStringValue attend
@@ -472,9 +472,9 @@ begin
     'DB_NAME=fft'      + #0 +
     'JWT_SECRET=' + JwtSecret + #0 +
     'FRONT_DIR=' + AppDir + '\frontend\dist\frontend\browser';
-  RegWriteMultiStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\FF-TAROT', 'Environment', EnvData);
+  RegWriteMultiStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\PABB90', 'Environment', EnvData);
 
-  Exec(Sc, 'start FF-TAROT', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  Exec(Sc, 'start PABB90', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   Sleep(2000);
   Result := True;
 end;
@@ -491,7 +491,7 @@ begin
   MariaWeInstalled := False;
   ProgressPage := CreateOutputProgressPage(
     'Configuration runtime',
-    'Installation et démarrage de FF-TAROT en cours.');
+    'Installation et démarrage de PABB90 en cours.');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

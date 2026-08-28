@@ -74,13 +74,14 @@ public class ModTeams {
         let b: JsonValue = pr.Value
         let playersV: JsonValue = b.Get("players")
         if (!playersV.IsArray()) { return HttpErr.BadRequest("players doit être un tableau") }
-        if (playersV.Length() != 4) { return HttpErr.BadRequest("Une équipe Libre par 4 doit contenir 4 joueurs") }
+        let n: int = playersV.Length()
+        if (n != 3 && n != 4) { return HttpErr.BadRequest("Une équipe doit contenir 3 ou 4 joueurs") }
 
-        // Validation 2 NS / 2 EO + pas de doublon ; collecte ordonnée NS puis EO.
+        // Validation NS / EO + pas de doublon ; collecte ordonnée NS puis EO.
         let nsIds: List<string> = new List<string>()
         let eoIds: List<string> = new List<string>()
         let seen: List<string> = new List<string>()
-        for i in 0..4 {
+        for i in 0..n {
             let p: JsonValue = playersV.At(i)
             let pidV: JsonValue = p.Get("player_id")
             let pairV: JsonValue = p.Get("pair")
@@ -93,8 +94,11 @@ public class ModTeams {
             if (pair == "NS") { nsIds.Add(pid) }
             else { if (pair == "EO") { eoIds.Add(pid) } else { return HttpErr.BadRequest("pair doit être NS ou EO") } }
         }
-        if (nsIds.Count() != 2) { return HttpErr.BadRequest("L'équipe doit avoir exactement 2 joueurs NS et 2 joueurs EO") }
-        if (eoIds.Count() != 2) { return HttpErr.BadRequest("L'équipe doit avoir exactement 2 joueurs NS et 2 joueurs EO") }
+        if (n == 4) {
+            if (nsIds.Count() != 2 || eoIds.Count() != 2) { return HttpErr.BadRequest("Une équipe de 4 doit avoir exactement 2 joueurs NS et 2 joueurs EO") }
+        } else {
+            if (nsIds.Count() == 0 || eoIds.Count() == 0) { return HttpErr.BadRequest("Une équipe de 3 doit avoir au moins 1 joueur de chaque côté (NS/EO)") }
+        }
 
         let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
         if (subt.Count() == 0) { return HttpErr.NotFound() }
