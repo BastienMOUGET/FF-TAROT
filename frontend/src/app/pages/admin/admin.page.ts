@@ -16,8 +16,6 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import {
   Club,
-  Comite,
-  Ligue,
   PenaltyType,
   Player,
   User,
@@ -25,8 +23,6 @@ import {
 import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
 import { PlayerDialog } from './dialogs/player-dialog';
 import { ClubDialog } from './dialogs/club-dialog';
-import { ComiteDialog } from './dialogs/comite-dialog';
-import { LigueDialog } from './dialogs/ligue-dialog';
 import { PenaltyTypeDialog } from './dialogs/penalty-type-dialog';
 import { UserDialog } from './dialogs/user-dialog';
 
@@ -158,76 +154,6 @@ import { UserDialog } from './dialogs/user-dialog';
         </table>
       </mat-tab>
 
-      <!-- ====== COMITÉS ====== -->
-      <mat-tab label="Comités">
-        <div class="tab-toolbar">
-          <span class="spacer"></span>
-          <button mat-flat-button color="primary" (click)="newComite()">
-            <mat-icon>add</mat-icon> Ajouter un comité
-          </button>
-        </div>
-        <table mat-table [dataSource]="comites()" class="mat-elevation-z2">
-          <ng-container matColumnDef="code">
-            <th mat-header-cell *matHeaderCellDef>Code</th>
-            <td mat-cell *matCellDef="let c">{{ c.code }}</td>
-          </ng-container>
-          <ng-container matColumnDef="name">
-            <th mat-header-cell *matHeaderCellDef>Nom</th>
-            <td mat-cell *matCellDef="let c">{{ c.name }}</td>
-          </ng-container>
-          <ng-container matColumnDef="ligue">
-            <th mat-header-cell *matHeaderCellDef>Ligue</th>
-            <td mat-cell *matCellDef="let c">{{ c.ligue_name || '—' }}</td>
-          </ng-container>
-          <ng-container matColumnDef="actions">
-            <th mat-header-cell *matHeaderCellDef class="actions-col"></th>
-            <td mat-cell *matCellDef="let c" class="actions-col">
-              <button mat-icon-button (click)="editComite(c)">
-                <mat-icon>edit</mat-icon>
-              </button>
-              <button mat-icon-button color="warn" (click)="deleteComite(c)">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </td>
-          </ng-container>
-          <tr mat-header-row *matHeaderRowDef="['code', 'name', 'ligue', 'actions']"></tr>
-          <tr mat-row *matRowDef="let row; columns: ['code', 'name', 'ligue', 'actions']"></tr>
-        </table>
-      </mat-tab>
-
-      <!-- ====== LIGUES ====== -->
-      <mat-tab label="Ligues">
-        <div class="tab-toolbar">
-          <span class="spacer"></span>
-          <button mat-flat-button color="primary" (click)="newLigue()">
-            <mat-icon>add</mat-icon> Ajouter une ligue
-          </button>
-        </div>
-        <table mat-table [dataSource]="ligues()" class="mat-elevation-z2">
-          <ng-container matColumnDef="code">
-            <th mat-header-cell *matHeaderCellDef>Code</th>
-            <td mat-cell *matCellDef="let l">{{ l.code }}</td>
-          </ng-container>
-          <ng-container matColumnDef="name">
-            <th mat-header-cell *matHeaderCellDef>Nom</th>
-            <td mat-cell *matCellDef="let l">{{ l.name }}</td>
-          </ng-container>
-          <ng-container matColumnDef="actions">
-            <th mat-header-cell *matHeaderCellDef class="actions-col"></th>
-            <td mat-cell *matCellDef="let l" class="actions-col">
-              <button mat-icon-button (click)="editLigue(l)">
-                <mat-icon>edit</mat-icon>
-              </button>
-              <button mat-icon-button color="warn" (click)="deleteLigue(l)">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </td>
-          </ng-container>
-          <tr mat-header-row *matHeaderRowDef="['code', 'name', 'actions']"></tr>
-          <tr mat-row *matRowDef="let row; columns: ['code', 'name', 'actions']"></tr>
-        </table>
-      </mat-tab>
-
       <!-- ====== PÉNALITÉS (TYPES) ====== -->
       <mat-tab label="Types de pénalités">
         <div class="tab-toolbar">
@@ -329,8 +255,6 @@ export class AdminPage implements OnInit {
   private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
 
-  ligues = signal<Ligue[]>([]);
-  comites = signal<Comite[]>([]);
   clubs = signal<Club[]>([]);
   players = signal<Player[]>([]);
   penaltyTypes = signal<PenaltyType[]>([]);
@@ -346,8 +270,6 @@ export class AdminPage implements OnInit {
 
   reloadAll() {
     this.reloadPlayers();
-    this.api.ligues().subscribe((d) => this.ligues.set(d));
-    this.api.comites().subscribe((d) => this.comites.set(d));
     this.api.clubs().subscribe((d) => this.clubs.set(d));
     this.api.penaltyTypes().subscribe((d) => this.penaltyTypes.set(d));
     this.api.users().subscribe((d) => this.users.set(d));
@@ -393,44 +315,6 @@ export class AdminPage implements OnInit {
       `Supprimer le club "${c.name}" ?`,
       () => this.api.deleteClub(c.id),
       () => this.api.clubs().subscribe((cl) => this.clubs.set(cl))
-    );
-  }
-
-  /* ----- Comités ----- */
-  newComite() {
-    this.openDialog(ComiteDialog, {}, () =>
-      this.api.comites().subscribe((c) => this.comites.set(c))
-    );
-  }
-  editComite(comite: Comite) {
-    this.openDialog(ComiteDialog, { comite }, () =>
-      this.api.comites().subscribe((c) => this.comites.set(c))
-    );
-  }
-  deleteComite(c: Comite) {
-    this.confirmAndDelete(
-      `Supprimer le comité "${c.name}" ?`,
-      () => this.api.deleteComite(c.id),
-      () => this.api.comites().subscribe((cl) => this.comites.set(cl))
-    );
-  }
-
-  /* ----- Ligues ----- */
-  newLigue() {
-    this.openDialog(LigueDialog, {}, () =>
-      this.api.ligues().subscribe((l) => this.ligues.set(l))
-    );
-  }
-  editLigue(ligue: Ligue) {
-    this.openDialog(LigueDialog, { ligue }, () =>
-      this.api.ligues().subscribe((l) => this.ligues.set(l))
-    );
-  }
-  deleteLigue(l: Ligue) {
-    this.confirmAndDelete(
-      `Supprimer la ligue "${l.name}" ?`,
-      () => this.api.deleteLigue(l.id),
-      () => this.api.ligues().subscribe((li) => this.ligues.set(li))
     );
   }
 
