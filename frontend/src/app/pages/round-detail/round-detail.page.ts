@@ -41,6 +41,16 @@ import { Round } from '../../core/api.types';
         >
           <mat-icon>shuffle</mat-icon> Régénérer la mise en place
         </button>
+        @if (auth.isAdmin() && r.tables && r.tables.length > 0) {
+          <button
+            mat-flat-button
+            color="primary"
+            (click)="nextRound(r)"
+            [disabled]="busy()"
+          >
+            <mat-icon>skip_next</mat-icon> Manche suivante
+          </button>
+        }
         @if (auth.isAdmin()) {
           <button
             mat-stroked-button
@@ -192,6 +202,48 @@ export class RoundDetailPage implements OnInit {
           duration: 3000,
         });
         this.busy.set(false);
+      },
+    });
+  }
+
+  nextRound(r: Round): void {
+    if (
+      !confirm(
+        `Créer et générer la mise en place de la manche ${r.round_number + 1} ?`
+      )
+    ) {
+      return;
+    }
+    this.busy.set(true);
+    this.api.createRound(r.sub_tournament_id).subscribe({
+      next: (created) => {
+        this.api.generatePlacement(created.id).subscribe({
+          next: () => {
+            this.busy.set(false);
+            this.snack.open(`Manche ${created.round_number} créée`, 'Fermer', {
+              duration: 2000,
+            });
+            this.router.navigate(['/rounds', created.id]);
+          },
+          error: (err) => {
+            this.busy.set(false);
+            this.snack.open(
+              `Manche ${created.round_number} créée, mais mise en place impossible : ` +
+                (err?.error?.error || 'erreur inconnue'),
+              'Fermer',
+              { duration: 5000 }
+            );
+            this.router.navigate(['/rounds', created.id]);
+          },
+        });
+      },
+      error: (err) => {
+        this.busy.set(false);
+        this.snack.open(
+          err?.error?.error || 'Erreur création de la manche suivante',
+          'Fermer',
+          { duration: 3000 }
+        );
       },
     });
   }
