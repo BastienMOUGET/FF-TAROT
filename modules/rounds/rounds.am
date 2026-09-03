@@ -189,7 +189,14 @@ public class ModRounds {
         }
 
         // Persistance transactionnelle.
+        // table_results est indexé par (round_id, table_number), pas par joueur :
+        // sans ce nettoyage, régénérer la mise en place laisserait les scores déjà
+        // saisis rattachés au n° de table alors que d'autres joueurs peuvent
+        // désormais s'y trouver. On les supprime pour tenir la promesse déjà
+        // faite à l'utilisateur ("les scores éventuels seront perdus").
         db.Begin()
+        let delResOk: bool = db.Exec("DELETE FROM table_results WHERE round_id = ?", Db.P1(id))
+        if (!delResOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
         let delOk: bool = db.Exec("DELETE FROM seats WHERE round_id = ?", Db.P1(id))
         if (!delOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
         for i in 0..seats.Count() {
