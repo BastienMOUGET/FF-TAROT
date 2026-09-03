@@ -53,6 +53,7 @@ export interface Player {
   category: string | null;
   gender: 'M' | 'F' | null;
   birth_year: number | null;
+  club_member: boolean;
 }
 
 export type TournamentStatus = 'draft' | 'open' | 'running' | 'closed';

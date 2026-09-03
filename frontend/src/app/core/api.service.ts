@@ -45,10 +45,15 @@ export class ApiService {
     this.http.delete<void>(`${this.base}/clubs/${id}`);
 
   /* ----- Joueurs ----- */
-  players = (q?: { search?: string; club_id?: number }): Observable<Player[]> => {
+  players = (q?: {
+    search?: string;
+    club_id?: number;
+    club_member?: boolean;
+  }): Observable<Player[]> => {
     const params: Record<string, string> = {};
     if (q?.search) params['search'] = q.search;
     if (q?.club_id) params['club_id'] = String(q.club_id);
+    if (q?.club_member) params['club_member'] = '1';
     return this.http.get<Player[]>(`${this.base}/players`, { params });
   };
   createPlayer = (data: Partial<Player>): Observable<Player> =>

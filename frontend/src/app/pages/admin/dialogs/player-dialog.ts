@@ -14,6 +14,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 
 import { ApiService } from '../../../core/api.service';
 import { Club, Player } from '../../../core/api.types';
@@ -32,6 +33,7 @@ export interface PlayerDialogData {
     MatSelectModule,
     MatButtonModule,
     MatIconModule,
+    MatCheckboxModule,
   ],
   template: `
     <h2 mat-dialog-title>
@@ -82,6 +84,9 @@ export interface PlayerDialogData {
             <input matInput type="number" formControlName="birth_year" />
           </mat-form-field>
         </div>
+        <mat-checkbox formControlName="club_member">
+          Adhérent du club
+        </mat-checkbox>
         @if (errorMsg()) {
           <p class="err">
             <mat-icon>error_outline</mat-icon>
@@ -147,6 +152,7 @@ export class PlayerDialog implements OnInit {
     category: [''],
     gender: [null as 'M' | 'F' | null],
     birth_year: [null as number | null],
+    club_member: [false],
   });
 
   ngOnInit(): void {
@@ -161,6 +167,7 @@ export class PlayerDialog implements OnInit {
         category: p.category || '',
         gender: p.gender,
         birth_year: p.birth_year,
+        club_member: p.club_member,
       });
     }
   }
@@ -176,6 +183,7 @@ export class PlayerDialog implements OnInit {
       category: v.category || null,
       gender: v.gender,
       birth_year: v.birth_year,
+      club_member: v.club_member,
     };
     this.saving.set(true);
     this.errorMsg.set(null);

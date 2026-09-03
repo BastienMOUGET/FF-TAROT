@@ -10,6 +10,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { FormsModule } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
@@ -42,6 +43,7 @@ import { UserDialog } from './dialogs/user-dialog';
     MatTooltipModule,
     MatFormFieldModule,
     MatInputModule,
+    MatCheckboxModule,
   ],
   template: `
     <div class="header">
@@ -62,6 +64,13 @@ import { UserDialog } from './dialogs/user-dialog';
             />
             <mat-icon matSuffix>search</mat-icon>
           </mat-form-field>
+          <mat-checkbox
+            [(ngModel)]="playerMemberOnly"
+            (ngModelChange)="reloadPlayers()"
+          >
+            Adhérents uniquement
+          </mat-checkbox>
+          <span class="spacer"></span>
           <button mat-flat-button color="primary" (click)="newPlayer()">
             <mat-icon>person_add</mat-icon> Ajouter un joueur
           </button>
@@ -82,6 +91,16 @@ import { UserDialog } from './dialogs/user-dialog';
           <ng-container matColumnDef="cat">
             <th mat-header-cell *matHeaderCellDef>Cat.</th>
             <td mat-cell *matCellDef="let p">{{ p.category || '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="member">
+            <th mat-header-cell *matHeaderCellDef>Adhérent</th>
+            <td mat-cell *matCellDef="let p">
+              @if (p.club_member) {
+                <mat-icon class="member-yes" title="Adhérent">check_circle</mat-icon>
+              } @else {
+                —
+              }
+            </td>
           </ng-container>
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef class="actions-col"></th>
@@ -302,6 +321,7 @@ import { UserDialog } from './dialogs/user-dialog';
     table { width: 100%; }
     .num { text-align: right; }
     .actions-col { width: 120px; text-align: right; }
+    .member-yes { color: #2e7d32; vertical-align: middle; }
   `,
 })
 export class AdminPage implements OnInit {
@@ -317,7 +337,8 @@ export class AdminPage implements OnInit {
   users = signal<User[]>([]);
 
   playerSearch = '';
-  playerCols = ['licence', 'name', 'club', 'cat', 'actions'];
+  playerMemberOnly = false;
+  playerCols = ['licence', 'name', 'club', 'cat', 'member', 'actions'];
 
   ngOnInit(): void {
     this.reloadAll();
@@ -334,7 +355,10 @@ export class AdminPage implements OnInit {
 
   reloadPlayers() {
     this.api
-      .players({ search: this.playerSearch || undefined })
+      .players({
+        search: this.playerSearch || undefined,
+        club_member: this.playerMemberOnly || undefined,
+      })
       .subscribe((p) => this.players.set(p));
   }
 

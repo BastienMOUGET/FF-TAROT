@@ -7,7 +7,7 @@ import Amalgame.Json
 public class ModPlayers {
 
     static string SELECT_BASE() {
-        return "SELECT p.id, p.licence, p.name, p.firstname, p.club_id, p.category, p.gender, p.birth_year, p.created_at, c.code AS club_code, c.name AS club_name FROM players p LEFT JOIN clubs c ON c.id = p.club_id"
+        return "SELECT p.id, p.licence, p.name, p.firstname, p.club_id, p.category, p.gender, p.birth_year, p.created_at, c.code AS club_code, c.name AS club_name, p.club_member FROM players p LEFT JOIN clubs c ON c.id = p.club_id"
     }
 
     public static JsonValue Row(List<string> r) {
@@ -23,6 +23,7 @@ public class ModPlayers {
         o.AppendEntry("created_at", J.CellStrN(r.Get(8)))
         o.AppendEntry("club_code", J.CellStrN(r.Get(9)))
         o.AppendEntry("club_name", J.CellStrN(r.Get(10)))
+        o.AppendEntry("club_member", J.CellBool(r.Get(11)))
         return o
     }
 
@@ -30,6 +31,7 @@ public class ModPlayers {
         let licence: string = ctx.QueryParam("licence")
         let clubId: string = ctx.QueryParam("club_id")
         let search: string = ctx.QueryParam("search")
+        let member: string = ctx.QueryParam("club_member")
 
         let conds: List<string> = new List<string>()
         let params: List<string> = new List<string>()
@@ -40,6 +42,9 @@ public class ModPlayers {
         if (String.Length(clubId) > 0) {
             conds.Add("p.club_id = ?")
             params.Add(clubId)
+        }
+        if (member == "1" || member == "true") {
+            conds.Add("p.club_member = TRUE")
         }
         if (String.Length(search) > 0) {
             conds.Add("(p.name LIKE ? OR p.firstname LIKE ? OR p.licence LIKE ?)")
@@ -99,6 +104,7 @@ public class ModPlayers {
         if (Fld.HasStr(b, "category")) { ins.Set("category", Fld.Str(b, "category")) } else { ins.SetNull("category") }
         if (Fld.HasStr(b, "gender")) { ins.Set("gender", Fld.Str(b, "gender")) } else { ins.SetNull("gender") }
         if (Fld.HasInt(b, "birth_year")) { ins.Set("birth_year", Fld.IntStr(b, "birth_year")) } else { ins.SetNull("birth_year") }
+        ins.Set("club_member", Fld.BoolTo01(b, "club_member"))
 
         let ok: bool = db.Exec(ins.Sql("players"), ins.Params())
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
@@ -126,6 +132,7 @@ public class ModPlayers {
         if (Fld.HasStr(b, "category")) { upd.Set("category", Fld.Str(b, "category")) } else { upd.SetNull("category") }
         if (Fld.HasStr(b, "gender")) { upd.Set("gender", Fld.Str(b, "gender")) } else { upd.SetNull("gender") }
         if (Fld.HasInt(b, "birth_year")) { upd.Set("birth_year", Fld.IntStr(b, "birth_year")) } else { upd.SetNull("birth_year") }
+        upd.Set("club_member", Fld.BoolTo01(b, "club_member"))
 
         let ok: bool = db.Exec(upd.Sql("players"), upd.ParamsWithId(id))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }

@@ -92,6 +92,8 @@ CREATE TABLE players (
   category    VARCHAR(10)  NULL,           -- ex : 'S','E','J','D1','D2'…
   gender      CHAR(1)      NULL,           -- 'M' / 'F'
   birth_year  SMALLINT     NULL,
+  -- Adhérent du club (statut club, indépendant de la licence FFT).
+  club_member BOOLEAN NOT NULL DEFAULT FALSE,
   created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_players_club
     FOREIGN KEY (club_id) REFERENCES clubs(id)
