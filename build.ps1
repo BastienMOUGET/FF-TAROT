@@ -45,6 +45,17 @@ Write-Host "sources    : $($Sources.Count) fichier(s)"
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path server.c)) { throw "amc a échoué (server.c non généré)." }
 
 # ── Step 3 : -I des runtimes packages + archives depuis amalgame.lock ─────────
+# ATTENTION (connu, non corrigé ici faute de pouvoir tester sous Windows) :
+# ceci prend "la version la plus récente installée sur ce poste" pour
+# chaque package, PAS la version verrouillée dans amalgame.lock. Sur un
+# poste qui a accumulé plusieurs versions d'un même package (au fil des
+# itérations), ça peut compiler contre les headers d'UNE version tout en
+# linkant la lib précompilée d'UNE AUTRE — décalage ABI silencieux, sans
+# erreur de build. Repéré et corrigé côté build.sh (Linux) le 2026-09-03 :
+# les -I y sont maintenant dérivés d'amalgame.lock, comme les archives.
+# Le pipeline de release (CI, runner propre à chaque run) n'est pas
+# affecté ; seuls des builds locaux répétés sur un même poste peuvent
+# l'être. Porter le même correctif ici si ça se reproduit en local.
 $PkgRoot = "$env:USERPROFILE\.amalgame\packages\github.com\amalgame-lang"
 $Includes = @("-I$AmcRuntime")
 if (Test-Path $PkgRoot) {

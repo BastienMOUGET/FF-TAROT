@@ -68,16 +68,32 @@ fi
 [ -f "$NAME.c" ] || { echo "error: amc didn't generate $NAME.c" >&2; exit 1; }
 
 # ── Step 3: facades + libs système depuis amalgame.lock ──────────
+# Packages verrouillés (name|git|tag|rev), lus une seule fois.
+LOCKED_PKGS="$(awk '
+    BEGIN { name=""; git=""; tag=""; rev=""; in_pkg=0 }
+    /^\[\[package\]\]/ { if (in_pkg && name!="") print name "|" git "|" tag "|" rev; in_pkg=1; name=""; git=""; tag=""; rev=""; next }
+    /^\[\[/ { if (in_pkg && name!="") print name "|" git "|" tag "|" rev; in_pkg=0; next }
+    in_pkg && /^[[:space:]]*name[[:space:]]*=/ { match($0, /"[^"]*"/); name=substr($0,RSTART+1,RLENGTH-2) }
+    in_pkg && /^[[:space:]]*git[[:space:]]*=/  { match($0, /"[^"]*"/); git=substr($0,RSTART+1,RLENGTH-2) }
+    in_pkg && /^[[:space:]]*tag[[:space:]]*=/  { match($0, /"[^"]*"/); tag=substr($0,RSTART+1,RLENGTH-2) }
+    in_pkg && /^[[:space:]]*rev[[:space:]]*=/  { match($0, /"[^"]*"/); rev=substr($0,RSTART+1,RLENGTH-2) }
+    END { if (in_pkg && name!="") print name "|" git "|" tag "|" rev }
+' amalgame.lock)"
+
+# Include paths : UNIQUEMENT les runtime/ des versions verrouillées dans
+# amalgame.lock — jamais "la version la plus récente installée sur cette
+# machine" (ancien comportement). Un cache multi-versions (plusieurs
+# projets/itérations sur le même poste) désynchronisait sinon les headers
+# compilés (derniers installés) de la lib précompilée réellement liée
+# (celle du lock) : décalage ABI silencieux — ex. HttpRequest.Headers lu
+# à un mauvais offset, header_count toujours à 0, 401 sur toute requête
+# authentifiée sans aucune erreur de build.
 PKG_INCLUDES=()
-if [ -d "$HOME/.amalgame/packages/github.com/amalgame-lang" ]; then
-    for pkg_parent in "$HOME/.amalgame/packages/github.com/amalgame-lang"/*/; do
-        latest=$(ls -1 "$pkg_parent" 2>/dev/null | sort -V | tail -1)
-        runtime_dir="${pkg_parent}${latest}/runtime"
-        if [ -n "$latest" ] && [ -d "$runtime_dir" ]; then
-            PKG_INCLUDES+=(-I"$runtime_dir")
-        fi
-    done
-fi
+while IFS='|' read -r name git tag rev; do
+    [ -z "${name:-}" ] && continue
+    runtime_dir="$HOME/.amalgame/packages/$git/${tag}_${rev}/runtime"
+    [ -d "$runtime_dir" ] && PKG_INCLUDES+=(-I"$runtime_dir")
+done <<< "$LOCKED_PKGS"
 
 PKG_ARCHIVES=()
 SYS_LIBS=()
@@ -109,16 +125,7 @@ while IFS='|' read -r name git tag rev; do
         [ -n "$lib" ] && SYS_LIBS+=("-l$lib")
     done < <(awk '/^libs[[:space:]]*=/,/]/' "$PKG_CACHE/amalgame.toml" \
              | grep -oE '"[a-z0-9_+-]+"' | tr -d '"' || true)
-done < <(awk '
-    BEGIN { name=""; git=""; tag=""; rev=""; in_pkg=0 }
-    /^\[\[package\]\]/ { if (in_pkg && name!="") print name "|" git "|" tag "|" rev; in_pkg=1; name=""; git=""; tag=""; rev=""; next }
-    /^\[\[/ { if (in_pkg && name!="") print name "|" git "|" tag "|" rev; in_pkg=0; next }
-    in_pkg && /^[[:space:]]*name[[:space:]]*=/ { match($0, /"[^"]*"/); name=substr($0,RSTART+1,RLENGTH-2) }
-    in_pkg && /^[[:space:]]*git[[:space:]]*=/  { match($0, /"[^"]*"/); git=substr($0,RSTART+1,RLENGTH-2) }
-    in_pkg && /^[[:space:]]*tag[[:space:]]*=/  { match($0, /"[^"]*"/); tag=substr($0,RSTART+1,RLENGTH-2) }
-    in_pkg && /^[[:space:]]*rev[[:space:]]*=/  { match($0, /"[^"]*"/); rev=substr($0,RSTART+1,RLENGTH-2) }
-    END { if (in_pkg && name!="") print name "|" git "|" tag "|" rev }
-' amalgame.lock)
+done <<< "$LOCKED_PKGS"
 
 # ── Step 4: gcc link ─────────────────────────────────────────────
 GCC_CMD=(gcc -O2 -I"$AMC_RUNTIME" "${PKG_INCLUDES[@]}"
