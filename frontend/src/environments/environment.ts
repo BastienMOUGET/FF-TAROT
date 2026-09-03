@@ -5,7 +5,7 @@
 // frontend/package.json et le tag git). Affiché dans la toolbar.
 export const environment = {
   production: false,
-  appVersion: '3.0.17',
+  appVersion: '3.0.18',
   apiUrl: '/api',
   socketUrl: '', // même origine que la page (auto-détection par socket.io)
 };
