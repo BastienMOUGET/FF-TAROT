@@ -4,8 +4,8 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import {
-  Club, Comite, DonneSet, Hand, Ligue, MovementPattern, Pair, Penalty,
-  PenaltyType, Player, PpEntry, RankingEntry, Round, RouteSheet, Seat,
+  ChallengeRanking, Club, Comite, DonneSet, Hand, Ligue, MovementPattern, Pair,
+  Penalty, PenaltyType, Player, PpEntry, RankingEntry, Round, RouteSheet, Seat,
   SubTournament, TableResult, Team, Tournament, User,
 } from './api.types';
 
@@ -69,6 +69,10 @@ export class ApiService {
     this.http.put<Tournament>(`${this.base}/tournaments/${id}`, data);
   deleteTournament = (id: number): Observable<void> =>
     this.http.delete<void>(`${this.base}/tournaments/${id}`);
+  challengeRanking = (tournamentId: number): Observable<ChallengeRanking> =>
+    this.http.get<ChallengeRanking>(
+      `${this.base}/tournaments/${tournamentId}/challenge-ranking`
+    );
 
   /* ----- Sub-tournois ----- */
   subTournaments = (tournamentId: number): Observable<SubTournament[]> =>

@@ -4,6 +4,7 @@ import { DatePipe } from '@angular/common';
 
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
@@ -23,6 +24,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
 import {
+  ChallengeRanking,
   Round,
   SubTournament,
   Tournament,
@@ -91,6 +93,7 @@ export class SubTournamentDialog {
     DatePipe,
     MatCardModule,
     MatButtonModule,
+    MatButtonToggleModule,
     MatIconModule,
     MatChipsModule,
     MatExpansionModule,
@@ -126,6 +129,57 @@ export class SubTournamentDialog {
               <mat-chip>{{ t.club_name }}</mat-chip>
             }
           </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="head challenge-card">
+        <mat-card-header>
+          <mat-card-title>Classement Challenge</mat-card-title>
+          <mat-card-subtitle>
+            Cumul sur {{ challengeRanking()?.sub_tournaments_count ?? 0 }}
+            tournoi(s) hebdomadaire(s)
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <mat-button-toggle-group
+            [value]="t.challenge_mode"
+            (change)="setChallengeMode(t.id, $event.value)"
+          >
+            <mat-button-toggle value="place">Par place</mat-button-toggle>
+            <mat-button-toggle value="raw">Cumul brut</mat-button-toggle>
+          </mat-button-toggle-group>
+
+          @if (challengeLoading()) {
+            <mat-progress-spinner mode="indeterminate" diameter="30" />
+          } @else if (
+            !challengeRanking() || challengeRanking()!.ranking.length === 0
+          ) {
+            <p class="empty">
+              Pas encore de classement Challenge (aucun résultat de
+              sous-tournoi validé).
+            </p>
+          } @else {
+            <table class="challenge-table">
+              <thead>
+                <tr>
+                  <th>Place</th>
+                  <th>Joueur</th>
+                  <th>Tournois joués</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (e of challengeRanking()!.ranking; track e.player_id) {
+                  <tr>
+                    <td>{{ e.place }}</td>
+                    <td>{{ e.name }} {{ e.firstname }}</td>
+                    <td>{{ e.sub_tournaments_played }}</td>
+                    <td>{{ e.points }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
         </mat-card-content>
       </mat-card>
 
@@ -237,6 +291,11 @@ export class SubTournamentDialog {
       flex-wrap: wrap;
     }
     .rounds { display: flex; gap: 8px; flex-wrap: wrap; }
+    .challenge-card mat-card-content { display: flex; flex-direction: column; gap: 12px; }
+    .challenge-table { width: 100%; border-collapse: collapse; }
+    .challenge-table th, .challenge-table td {
+      text-align: left; padding: 6px 12px; border-bottom: 1px solid #eee;
+    }
   `,
 })
 export class TournamentDetailPage implements OnInit {
@@ -250,6 +309,8 @@ export class TournamentDetailPage implements OnInit {
   tournament = signal<Tournament | null>(null);
   subs = signal<SubTournament[]>([]);
   roundsBySub = signal<Record<number, Round[]>>({});
+  challengeRanking = signal<ChallengeRanking | null>(null);
+  challengeLoading = signal(false);
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
@@ -260,12 +321,39 @@ export class TournamentDetailPage implements OnInit {
           this.subs.set(subs);
           this.loading.set(false);
         });
+        this.loadChallengeRanking(id);
       },
       error: () => {
         this.snack.open('Challenge introuvable', 'Fermer', { duration: 3000 });
         this.loading.set(false);
         this.router.navigate(['/tournaments']);
       },
+    });
+  }
+
+  loadChallengeRanking(id: number): void {
+    this.challengeLoading.set(true);
+    this.api.challengeRanking(id).subscribe({
+      next: (r) => {
+        this.challengeRanking.set(r);
+        this.challengeLoading.set(false);
+      },
+      error: () => this.challengeLoading.set(false),
+    });
+  }
+
+  setChallengeMode(id: number, mode: 'place' | 'raw'): void {
+    const t = this.tournament();
+    if (!t || t.challenge_mode === mode) return;
+    this.api.updateTournament(id, { ...t, challenge_mode: mode }).subscribe({
+      next: (updated) => {
+        this.tournament.set(updated);
+        this.loadChallengeRanking(id);
+      },
+      error: () =>
+        this.snack.open('Erreur changement de mode', 'Fermer', {
+          duration: 3000,
+        }),
     });
   }
 

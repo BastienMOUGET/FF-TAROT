@@ -112,6 +112,11 @@ CREATE TABLE tournaments (
   status          ENUM('draft','open','running','closed') NOT NULL DEFAULT 'draft',
   current_round   INT          NOT NULL DEFAULT 0,
   coef_default    DECIMAL(4,2) NOT NULL DEFAULT 1.00,
+  -- Mode de calcul du classement "Challenge" agrégeant les sous-tournois :
+  -- 'place' = points selon le rang (1er = N points si N joueurs, dernier
+  -- = 1 point) ; 'raw' = cumul brut des points de chaque sous-tournoi.
+  -- Reproduit les 2 modes de ChallengeLib214.xls.
+  challenge_mode  ENUM('place','raw') NOT NULL DEFAULT 'place',
   club_id         INT NULL,
   comite_id       INT NULL,
   created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

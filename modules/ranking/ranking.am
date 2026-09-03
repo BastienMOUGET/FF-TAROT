@@ -20,6 +20,18 @@ public class RankEntry {
     public RankEntry() {}
 }
 
+// Une ligne du classement "Challenge" (agrégation de sous-tournois).
+public class ChallengeEntry {
+    public PlayerId: int
+    public Licence:  string
+    public Name:     string
+    public Firstname: string
+    public Played:   int
+    public Points:   float
+    public Place:    int
+    public ChallengeEntry() {}
+}
+
 public class ModRanking {
 
     // abatement = 0.69 + (nb_table - 3)*0.01, capé [0, 0.95].
@@ -301,6 +313,118 @@ public class ModRanking {
             arr.AppendItem(o)
         }
         return J.Ok(arr)
+    }
+
+    // Tri décroissant par Points (classement Challenge).
+    static void SortDescChallenge(List<ChallengeEntry> xs) {
+        let n: int = xs.Count()
+        for i in 0..n {
+            var best: int = i
+            for j in (i + 1)..n {
+                let xj: ChallengeEntry = xs.Get(j)
+                let xb: ChallengeEntry = xs.Get(best)
+                if (xj.Points > xb.Points) { best = j }
+            }
+            if (best != i) {
+                let tmp: ChallengeEntry = xs.Get(i)
+                xs.Set(i, xs.Get(best))
+                xs.Set(best, tmp)
+            }
+        }
+    }
+
+    // GET /api/tournaments/:tournamentId/challenge-ranking
+    // Classement "Challenge" agrégeant le classement final de tous les
+    // sous-tournois (Tournois hebdomadaires) d'un tournoi (Challenge
+    // trimestriel), comme ChallengeLib214.xls : soit points par place
+    // (1er = N points si N joueurs, dernier = 1 point), soit cumul brut
+    // des points de chaque sous-tournoi — mode choisi via
+    // tournaments.challenge_mode.
+    public static HttpResponse GetChallengeRanking(WebContext ctx, Db db) {
+        let tid: string = ctx.Param("tournamentId")
+        let trows: List<List<string>> = db.Rows("SELECT id, challenge_mode FROM tournaments WHERE id = ?", Db.P1(tid))
+        if (trows.Count() == 0) { return HttpErr.NotFound() }
+        let t0: List<string> = trows.Get(0)
+        let mode: string = t0.Get(1)
+
+        let subs: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE tournament_id = ? ORDER BY id ASC", Db.P1(tid))
+
+        let pointsByPlayer: Map<string, string> = new Map<string, string>()
+        let playedByPlayer: Map<string, int> = new Map<string, int>()
+        let licenceByPlayer: Map<string, string> = new Map<string, string>()
+        let nameByPlayer: Map<string, string> = new Map<string, string>()
+        let firstnameByPlayer: Map<string, string> = new Map<string, string>()
+
+        for si in 0..subs.Count() {
+            let srow: List<string> = subs.Get(si)
+            let subId: string = srow.Get(0)
+            let rows: List<List<string>> = db.Rows(
+                "SELECT r.player_id, p.licence, p.name, p.firstname, r.total_general, r.place FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? ORDER BY r.place ASC", Db.P1(subId))
+            let n: int = rows.Count()
+            for i in 0..n {
+                let row: List<string> = rows.Get(i)
+                let pid: string = row.Get(0)
+                var pts: float = 0.0
+                if (mode == "raw") {
+                    pts = Db.CellFloat(row.Get(4))
+                } else {
+                    let place: int = Db.CellInt(row.Get(5))
+                    var p: int = n - place + 1
+                    if (p < 1) { p = 1 }
+                    pts = String.ToFloat(String.FromInt(p))
+                }
+                let cur: float = ModRanking.MapGetF(pointsByPlayer, pid)
+                pointsByPlayer.Set(pid, String.FromFloat(cur + pts))
+                playedByPlayer.Set(pid, ModRanking.MapGetI(playedByPlayer, pid) + 1)
+                licenceByPlayer.Set(pid, row.Get(1))
+                nameByPlayer.Set(pid, row.Get(2))
+                firstnameByPlayer.Set(pid, row.Get(3))
+            }
+        }
+
+        let entries: List<ChallengeEntry> = new List<ChallengeEntry>()
+        let ids: List<string> = pointsByPlayer.Keys()
+        for i in 0..ids.Count() {
+            let pid: string = ids.Get(i)
+            let e: ChallengeEntry = new ChallengeEntry()
+            e.PlayerId = Db.CellInt(pid)
+            e.Licence = licenceByPlayer.Get(pid)
+            e.Name = nameByPlayer.Get(pid)
+            e.Firstname = firstnameByPlayer.Get(pid)
+            e.Played = ModRanking.MapGetI(playedByPlayer, pid)
+            e.Points = ModRanking.MapGetF(pointsByPlayer, pid)
+            entries.Add(e)
+        }
+
+        ModRanking.SortDescChallenge(entries)
+        var place: int = 1
+        for i in 0..entries.Count() {
+            let e: ChallengeEntry = entries.Get(i)
+            if (i > 0) {
+                let prev: ChallengeEntry = entries.Get(i - 1)
+                if (e.Points < prev.Points) { place = i + 1 }
+            }
+            e.Place = place
+        }
+
+        let arr: JsonValue = J.Arr()
+        for i in 0..entries.Count() {
+            let e: ChallengeEntry = entries.Get(i)
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("player_id", J.Int(e.PlayerId))
+            o.AppendEntry("licence", J.CellStrN(e.Licence))
+            o.AppendEntry("name", J.Str(e.Name))
+            o.AppendEntry("firstname", J.Str(e.Firstname))
+            o.AppendEntry("sub_tournaments_played", J.Int(e.Played))
+            o.AppendEntry("points", J.Float(e.Points))
+            o.AppendEntry("place", J.Int(e.Place))
+            arr.AppendItem(o)
+        }
+        let result: JsonValue = J.Obj()
+        result.AppendEntry("challenge_mode", J.Str(mode))
+        result.AppendEntry("sub_tournaments_count", J.Int(subs.Count()))
+        result.AppendEntry("ranking", arr)
+        return J.Ok(result)
     }
 
     // POST /api/sub-tournaments/:subTournamentId/recompute (admin)

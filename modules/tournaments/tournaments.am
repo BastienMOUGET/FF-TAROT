@@ -7,7 +7,7 @@ import Amalgame.Json
 public class ModTournaments {
 
     static string SELECT_BASE() {
-        return "SELECT t.id, t.code, t.name, t.date, t.type, t.status, t.current_round, t.coef_default, t.club_id, t.comite_id, t.created_at, cl.code AS club_code, cl.name AS club_name, co.code AS comite_code, co.name AS comite_name FROM tournaments t LEFT JOIN clubs cl ON cl.id = t.club_id LEFT JOIN comites co ON co.id = t.comite_id"
+        return "SELECT t.id, t.code, t.name, t.date, t.type, t.status, t.current_round, t.coef_default, t.club_id, t.comite_id, t.created_at, cl.code AS club_code, cl.name AS club_name, co.code AS comite_code, co.name AS comite_name, t.challenge_mode FROM tournaments t LEFT JOIN clubs cl ON cl.id = t.club_id LEFT JOIN comites co ON co.id = t.comite_id"
     }
 
     public static JsonValue Row(List<string> r) {
@@ -27,6 +27,7 @@ public class ModTournaments {
         o.AppendEntry("club_name", J.CellStrN(r.Get(12)))
         o.AppendEntry("comite_code", J.CellStrN(r.Get(13)))
         o.AppendEntry("comite_name", J.CellStrN(r.Get(14)))
+        o.AppendEntry("challenge_mode", J.CellStr(r.Get(15)))
         return o
     }
 
@@ -79,6 +80,7 @@ public class ModTournaments {
         ins.Set("coef_default", Fld.NumOr(b, "coef_default", "1.0"))
         if (Fld.HasInt(b, "club_id")) { ins.Set("club_id", Fld.IntStr(b, "club_id")) } else { ins.SetNull("club_id") }
         if (Fld.HasInt(b, "comite_id")) { ins.Set("comite_id", Fld.IntStr(b, "comite_id")) } else { ins.SetNull("comite_id") }
+        if (Fld.HasStr(b, "challenge_mode")) { ins.Set("challenge_mode", Fld.Str(b, "challenge_mode")) } else { ins.Set("challenge_mode", "place") }
     }
 
     public static HttpResponse Create(WebContext ctx, Db db) {
@@ -122,6 +124,7 @@ public class ModTournaments {
         upd.Set("coef_default", Fld.NumOr(b, "coef_default", "1.0"))
         if (Fld.HasInt(b, "club_id")) { upd.Set("club_id", Fld.IntStr(b, "club_id")) } else { upd.SetNull("club_id") }
         if (Fld.HasInt(b, "comite_id")) { upd.Set("comite_id", Fld.IntStr(b, "comite_id")) } else { upd.SetNull("comite_id") }
+        if (Fld.HasStr(b, "challenge_mode")) { upd.Set("challenge_mode", Fld.Str(b, "challenge_mode")) } else { upd.Set("challenge_mode", "place") }
 
         let ok: bool = db.Exec(upd.Sql("tournaments"), upd.ParamsWithId(id))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }

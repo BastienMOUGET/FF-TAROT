@@ -72,6 +72,23 @@ export interface Tournament {
   club_name?: string | null;
   comite_code?: string | null;
   comite_name?: string | null;
+  challenge_mode: 'place' | 'raw';
+}
+
+export interface ChallengeRankingEntry {
+  player_id: number;
+  licence: string | null;
+  name: string;
+  firstname: string;
+  sub_tournaments_played: number;
+  points: number;
+  place: number;
+}
+
+export interface ChallengeRanking {
+  challenge_mode: 'place' | 'raw';
+  sub_tournaments_count: number;
+  ranking: ChallengeRankingEntry[];
 }
 
 export interface SubTournament {
