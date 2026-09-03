@@ -22,6 +22,7 @@ import {
 } from '../../core/api.types';
 import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
 import { PlayerDialog } from './dialogs/player-dialog';
+import { PlayersImportDialog } from './dialogs/players-import-dialog';
 import { ClubDialog } from './dialogs/club-dialog';
 import { PenaltyTypeDialog } from './dialogs/penalty-type-dialog';
 import { UserDialog } from './dialogs/user-dialog';
@@ -67,6 +68,9 @@ import { UserDialog } from './dialogs/user-dialog';
             Adhérents uniquement
           </mat-checkbox>
           <span class="spacer"></span>
+          <button mat-stroked-button (click)="importPlayers()">
+            <mat-icon>upload</mat-icon> Importer une liste
+          </button>
           <button mat-flat-button color="primary" (click)="newPlayer()">
             <mat-icon>person_add</mat-icon> Ajouter un joueur
           </button>
@@ -287,6 +291,12 @@ export class AdminPage implements OnInit {
   /* ----- Players ----- */
   newPlayer() {
     this.openDialog(PlayerDialog, {}, () => this.reloadPlayers());
+  }
+  importPlayers() {
+    const ref = this.dialog.open(PlayersImportDialog, { width: '600px' });
+    ref.afterClosed().subscribe((imported) => {
+      if (imported) this.reloadPlayers();
+    });
   }
   editPlayer(player: Player) {
     this.openDialog(PlayerDialog, { player }, () => this.reloadPlayers());

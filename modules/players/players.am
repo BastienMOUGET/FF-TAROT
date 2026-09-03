@@ -140,6 +140,90 @@ public class ModPlayers {
         return ModPlayers.Refetch(db, String.ToInt(id))
     }
 
+    // POST /api/players/import (admin)
+    // Import en masse (liste club). Upsert par licence quand fournie : crée
+    // si absente, met à jour nom/prénom si la licence existe déjà et diffère.
+    // Sans licence, création simple. Ne fusionne jamais automatiquement deux
+    // joueurs différents : un même nom+prénom déjà en base (licence
+    // différente ou absente) est seulement signalé en "doublon potentiel"
+    // dans la réponse, à vérifier manuellement.
+    public static HttpResponse Import(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        let playersV: JsonValue = b.Get("players")
+        if (!playersV.IsArray()) { return HttpErr.BadRequest("players doit être un tableau") }
+        let n: int = playersV.Length()
+
+        var created: int = 0
+        var updated: int = 0
+        var unchanged: int = 0
+        let dupWarnings: JsonValue = J.Arr()
+
+        db.Begin()
+        for i in 0..n {
+            let p: JsonValue = playersV.At(i)
+            if (!Fld.HasStr(p, "name")) { continue }
+            let name: string = Fld.Str(p, "name")
+            var firstname: string = ""
+            if (Fld.HasStr(p, "firstname")) { firstname = Fld.Str(p, "firstname") }
+            var licence: string = ""
+            var hasLicence: bool = false
+            if (Fld.HasStr(p, "licence")) { licence = Fld.Str(p, "licence") hasLicence = true }
+
+            if (hasLicence) {
+                let existing: List<List<string>> = db.Rows("SELECT id, name, firstname FROM players WHERE licence = ?", Db.P1(licence))
+                if (existing.Count() > 0) {
+                    let e0: List<string> = existing.Get(0)
+                    let pid: string = e0.Get(0)
+                    if (e0.Get(1) == name && e0.Get(2) == firstname) {
+                        unchanged = unchanged + 1
+                    } else {
+                        let updOk: bool = db.Exec("UPDATE players SET name = ?, firstname = ? WHERE id = ?", Db.P3(name, firstname, pid))
+                        if (!updOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+                        updated = updated + 1
+                    }
+                    continue
+                }
+            }
+
+            // Doublon potentiel : même nom+prénom déjà en base (licence différente ou absente).
+            let dupRows: List<List<string>> = db.Rows("SELECT licence FROM players WHERE name = ? AND firstname = ?", Db.P2(name, firstname))
+            if (dupRows.Count() > 0) {
+                let dw: JsonValue = J.Obj()
+                dw.AppendEntry("name", J.Str(name))
+                dw.AppendEntry("firstname", J.Str(firstname))
+                if (hasLicence) { dw.AppendEntry("new_licence", J.Str(licence)) } else { dw.AppendEntry("new_licence", J.Null()) }
+                dupWarnings.AppendItem(dw)
+            }
+
+            let ins: SqlIns = new SqlIns()
+            if (hasLicence && String.Length(licence) > 0) { ins.Set("licence", licence) } else { ins.SetNull("licence") }
+            ins.Set("name", name)
+            ins.Set("firstname", firstname)
+            ins.SetNull("club_id")
+            ins.SetNull("category")
+            ins.SetNull("gender")
+            ins.SetNull("birth_year")
+            ins.Set("club_member", Fld.BoolTo01(p, "club_member"))
+            let ok: bool = db.Exec(ins.Sql("players"), ins.Params())
+            if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+            created = created + 1
+        }
+        db.Commit()
+
+        let result: JsonValue = J.Obj()
+        result.AppendEntry("created", J.Int(created))
+        result.AppendEntry("updated", J.Int(updated))
+        result.AppendEntry("unchanged", J.Int(unchanged))
+        result.AppendEntry("potential_duplicates", dupWarnings)
+        return J.Ok(result)
+    }
+
     public static HttpResponse Remove(WebContext ctx, Db db) {
         let rc: int = Auth.CheckRole(ctx, "admin")
         if (rc == 401) { return HttpErr.Unauthorized() }

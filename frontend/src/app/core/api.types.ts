@@ -56,6 +56,25 @@ export interface Player {
   club_member: boolean;
 }
 
+export interface PlayerImportRow {
+  licence: string | null;
+  name: string;
+  firstname: string;
+}
+
+export interface PlayerImportDuplicate {
+  name: string;
+  firstname: string;
+  new_licence: string | null;
+}
+
+export interface PlayerImportResult {
+  created: number;
+  updated: number;
+  unchanged: number;
+  potential_duplicates: PlayerImportDuplicate[];
+}
+
 export type TournamentStatus = 'draft' | 'open' | 'running' | 'closed';
 
 export interface Tournament {

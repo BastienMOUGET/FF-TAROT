@@ -5,8 +5,9 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   ChallengeRanking, Club, Comite, DonneSet, Hand, Ligue, MovementPattern, Pair,
-  Penalty, PenaltyType, Player, PpEntry, RankingEntry, Round, RouteSheet, Seat,
-  SubTournament, TableResult, Team, Tournament, User,
+  Penalty, PenaltyType, Player, PlayerImportResult, PlayerImportRow, PpEntry,
+  RankingEntry, Round, RouteSheet, Seat, SubTournament, TableResult, Team,
+  Tournament, User,
 } from './api.types';
 
 @Injectable({ providedIn: 'root' })
@@ -62,6 +63,8 @@ export class ApiService {
     this.http.put<Player>(`${this.base}/players/${id}`, data);
   deletePlayer = (id: number): Observable<void> =>
     this.http.delete<void>(`${this.base}/players/${id}`);
+  importPlayers = (players: PlayerImportRow[]): Observable<PlayerImportResult> =>
+    this.http.post<PlayerImportResult>(`${this.base}/players/import`, { players });
 
   /* ----- Tournois ----- */
   tournaments = (): Observable<Tournament[]> =>
