@@ -19,7 +19,9 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 
 import { ApiService } from '../../core/api.service';
-import { Pair, Player, Team } from '../../core/api.types';
+import { Pair, Player, Seat, Team } from '../../core/api.types';
+
+type Orientation = 'random' | Seat | 'not_north';
 import { PlayerDialog } from '../admin/dialogs/player-dialog';
 
 @Component({
@@ -112,15 +114,31 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
 
           <div class="draw-list">
             @for (p of filteredAvailablePlayers(); track p.id) {
-              <mat-checkbox
-                [checked]="drawSelection().has(p.id)"
-                (change)="toggleDraw(p.id)"
-              >
-                {{ p.name }} {{ p.firstname }}
-                @if (p.licence) {
-                  <small>({{ p.licence }})</small>
+              <div class="draw-row">
+                <mat-checkbox
+                  [checked]="drawSelection().has(p.id)"
+                  (change)="toggleDraw(p.id)"
+                >
+                  {{ p.name }} {{ p.firstname }}
+                  @if (p.licence) {
+                    <small>({{ p.licence }})</small>
+                  }
+                </mat-checkbox>
+                @if (drawSelection().has(p.id)) {
+                  <mat-select
+                    class="orientation-select"
+                    [value]="orientationFor(p.id)"
+                    (selectionChange)="setOrientation(p.id, $event.value)"
+                  >
+                    <mat-option value="random">Position aléatoire</mat-option>
+                    <mat-option value="N">Nord fixe</mat-option>
+                    <mat-option value="S">Sud fixe</mat-option>
+                    <mat-option value="E">Est fixe</mat-option>
+                    <mat-option value="O">Ouest fixe</mat-option>
+                    <mat-option value="not_north">Non Nord</mat-option>
+                  </mat-select>
                 }
-              </mat-checkbox>
+              </div>
             }
           </div>
         }
@@ -249,7 +267,7 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     .draw-count.warn { color: #c62828; }
     .draw-list {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 4px 12px;
       max-height: 320px;
       overflow-y: auto;
@@ -258,6 +276,8 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
       padding: 8px 12px;
     }
     .draw-list small { color: #757575; }
+    .draw-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
+    .orientation-select { width: 150px; font-size: 0.85em; }
     .size-toggle { margin-bottom: 16px; }
     .grid {
       display: grid;
@@ -293,6 +313,20 @@ export class TeamsPage implements OnInit {
   drawSelection = signal<Set<number>>(new Set());
   drawFilter = signal('');
   drawing = signal(false);
+  drawOrientation = signal<Map<number, Orientation>>(new Map());
+
+  orientationFor(playerId: number): Orientation {
+    return this.drawOrientation().get(playerId) ?? 'random';
+  }
+
+  setOrientation(playerId: number, o: Orientation): void {
+    this.drawOrientation.update((m) => {
+      const next = new Map(m);
+      if (o === 'random') next.delete(playerId);
+      else next.set(playerId, o);
+      return next;
+    });
+  }
 
   registeredPlayerIds = computed(
     () => new Set(this.teams().flatMap((t) => t.players.map((p) => p.player_id)))
@@ -457,6 +491,64 @@ export class TeamsPage implements OnInit {
     return { fours: remaining / 4, threes };
   }
 
+  // Répartit un groupe de joueurs sur les sièges disponibles en respectant
+  // au mieux les orientations demandées (fixe N/S/E/O, ou non-Nord) :
+  // 1) préférences fixes, 2) non-Nord sur un siège != N si possible,
+  // 3) le reste au hasard sur les sièges restants. `unmet` compte les
+  // préférences qui n'ont pas pu être honorées (conflit à la même table).
+  private assignSeats(
+    group: number[],
+    seatPool: Seat[]
+  ): { assigned: { id: number; seat: Seat }[]; unmet: number } {
+    const orient = this.drawOrientation();
+    const remaining = new Set<Seat>(seatPool);
+    const result: { id: number; seat: Seat }[] = [];
+    let unmet = 0;
+
+    for (const id of group) {
+      const o = orient.get(id);
+      if (o && o !== 'random' && o !== 'not_north' && remaining.has(o)) {
+        result.push({ id, seat: o });
+        remaining.delete(o);
+      } else if (o && o !== 'random' && o !== 'not_north') {
+        unmet++;
+      }
+    }
+
+    for (const id of group) {
+      if (result.some((r) => r.id === id)) continue;
+      if (orient.get(id) !== 'not_north') continue;
+      const choice =
+        [...remaining].find((s) => s !== 'N') ?? [...remaining][0];
+      if (choice === undefined) continue;
+      if (choice === 'N') unmet++;
+      result.push({ id, seat: choice });
+      remaining.delete(choice);
+    }
+
+    const rest = this.shuffle(group.filter((id) => !result.some((r) => r.id === id)));
+    const seatsLeft = this.shuffle([...remaining]);
+    rest.forEach((id, i) => result.push({ id, seat: seatsLeft[i] }));
+
+    return { assigned: result, unmet };
+  }
+
+  // Reconstruit le tableau player_id/pair attendu par l'API dans l'ordre
+  // N,S,E,O — cet ordre détermine le player_number (1..4) donc le siège
+  // final (cf modules/teams/teams.am : NS d'abord, EO ensuite).
+  private toPayload(
+    assigned: { id: number; seat: Seat }[]
+  ): { player_id: number; pair: Pair }[] {
+    const bySeat = new Map(assigned.map((a) => [a.seat, a.id]));
+    const payload: { player_id: number; pair: Pair }[] = [];
+    for (const seat of ['N', 'S', 'E', 'O'] as Seat[]) {
+      const id = bySeat.get(seat);
+      if (id === undefined) continue;
+      payload.push({ player_id: id, pair: seat === 'N' || seat === 'S' ? 'NS' : 'EO' });
+    }
+    return payload;
+  }
+
   randomDraw(): void {
     const plan = this.drawPlan();
     if (!plan || this.drawing()) return;
@@ -476,26 +568,21 @@ export class TeamsPage implements OnInit {
     const ids = this.shuffle(Array.from(this.drawSelection()));
     const payloads: { player_id: number; pair: Pair }[][] = [];
     let cursor = 0;
+    let unmetOrientations = 0;
     for (let i = 0; i < plan.fours; i++) {
-      const group = this.shuffle(ids.slice(cursor, cursor + 4));
+      const group = ids.slice(cursor, cursor + 4);
       cursor += 4;
-      payloads.push([
-        { player_id: group[0], pair: 'NS' },
-        { player_id: group[1], pair: 'NS' },
-        { player_id: group[2], pair: 'EO' },
-        { player_id: group[3], pair: 'EO' },
-      ]);
+      const { assigned, unmet } = this.assignSeats(group, ['N', 'S', 'E', 'O']);
+      unmetOrientations += unmet;
+      payloads.push(this.toPayload(assigned));
     }
     for (let i = 0; i < plan.threes; i++) {
-      const group = this.shuffle(ids.slice(cursor, cursor + 3));
+      const group = ids.slice(cursor, cursor + 3);
       cursor += 3;
-      const majority: Pair = Math.random() < 0.5 ? 'NS' : 'EO';
-      const minority: Pair = majority === 'NS' ? 'EO' : 'NS';
-      payloads.push([
-        { player_id: group[0], pair: majority },
-        { player_id: group[1], pair: majority },
-        { player_id: group[2], pair: minority },
-      ]);
+      // Table de 3 : sièges N, S, E occupés (pas de 4ème joueur/Ouest).
+      const { assigned, unmet } = this.assignSeats(group, ['N', 'S', 'E']);
+      unmetOrientations += unmet;
+      payloads.push(this.toPayload(assigned));
     }
 
     this.drawing.set(true);
@@ -507,10 +594,14 @@ export class TeamsPage implements OnInit {
       .subscribe({
         next: () => {
           this.drawSelection.set(new Set());
+          this.drawOrientation.set(new Map());
           this.refreshTeams();
-          this.snack.open(`${nbTeams} équipe(s) tirée(s) au sort`, 'Fermer', {
-            duration: 2000,
-          });
+          const msg =
+            `${nbTeams} équipe(s) tirée(s) au sort` +
+            (unmetOrientations > 0
+              ? ` — ${unmetOrientations} orientation(s) demandée(s) non respectée(s) (conflit à la même table)`
+              : '');
+          this.snack.open(msg, 'Fermer', { duration: unmetOrientations > 0 ? 5000 : 2000 });
           this.generateFirstRound();
         },
         error: (err) => {
