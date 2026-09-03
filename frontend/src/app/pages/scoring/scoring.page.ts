@@ -34,10 +34,10 @@ import { Hand, Round, RoundSeat, Seat, TableResult } from '../../core/api.types'
   ],
   template: `
     <a [routerLink]="['/rounds', roundId()]" class="back">
-      <mat-icon>arrow_back</mat-icon> Retour au round
+      <mat-icon>arrow_back</mat-icon> Retour à la manche
     </a>
     <h1>
-      Saisie — Round {{ round()?.round_number }}, Table {{ tableNumber() }}
+      Saisie — Manche {{ round()?.round_number }}, Table {{ tableNumber() }}
     </h1>
 
     @if (loading()) {
@@ -287,7 +287,7 @@ export class ScoringPage implements OnInit {
           });
       },
       error: () => {
-        this.snack.open('Round introuvable', 'Fermer', { duration: 3000 });
+        this.snack.open('Manche introuvable', 'Fermer', { duration: 3000 });
         this.loading.set(false);
       },
     });

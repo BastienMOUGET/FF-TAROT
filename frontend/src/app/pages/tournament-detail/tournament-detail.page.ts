@@ -181,14 +181,14 @@ export class SubTournamentDialog {
                   color="primary"
                   (click)="newRound(sub.id)"
                 >
-                  <mat-icon>add</mat-icon> Nouveau round
+                  <mat-icon>add</mat-icon> Nouvelle manche
                 </button>
               </div>
 
-              <h3>Rounds</h3>
+              <h3>Manches</h3>
               @if (roundsBySub()[sub.id]; as rounds) {
                 @if (rounds.length === 0) {
-                  <p class="empty">Pas encore de round.</p>
+                  <p class="empty">Pas encore de manche.</p>
                 } @else {
                   <div class="rounds">
                     @for (r of rounds; track r.id) {
@@ -197,7 +197,7 @@ export class SubTournamentDialog {
                         [routerLink]="['/rounds', r.id]"
                         class="round-btn"
                       >
-                        Round {{ r.round_number }}
+                        Manche {{ r.round_number }}
                       </a>
                     }
                   </div>
@@ -262,7 +262,7 @@ export class TournamentDetailPage implements OnInit {
         });
       },
       error: () => {
-        this.snack.open('Tournoi introuvable', 'Fermer', { duration: 3000 });
+        this.snack.open('Challenge introuvable', 'Fermer', { duration: 3000 });
         this.loading.set(false);
         this.router.navigate(['/tournaments']);
       },
@@ -280,20 +280,33 @@ export class TournamentDetailPage implements OnInit {
     this.api.createRound(subId).subscribe({
       next: (round) => {
         // Generate placement automatically
-        this.api.generatePlacement(round.id).subscribe(() => {
-          this.snack.open(
-            `Round ${round.round_number} créé + mise en place générée`,
-            'Fermer',
-            { duration: 3000 }
-          );
-          this.api.rounds(subId).subscribe((rounds) => {
-            this.roundsBySub.update((m) => ({ ...m, [subId]: rounds }));
-          });
+        this.api.generatePlacement(round.id).subscribe({
+          next: () => {
+            this.snack.open(
+              `Manche ${round.round_number} créée + mise en place générée`,
+              'Fermer',
+              { duration: 3000 }
+            );
+            this.api.rounds(subId).subscribe((rounds) => {
+              this.roundsBySub.update((m) => ({ ...m, [subId]: rounds }));
+            });
+          },
+          error: (err) => {
+            this.snack.open(
+              `Manche ${round.round_number} créée, mais mise en place impossible : ` +
+                (err?.error?.error || 'erreur inconnue'),
+              'Fermer',
+              { duration: 5000 }
+            );
+            this.api.rounds(subId).subscribe((rounds) => {
+              this.roundsBySub.update((m) => ({ ...m, [subId]: rounds }));
+            });
+          },
         });
       },
       error: (err) =>
         this.snack.open(
-          err?.error?.error || 'Erreur création round',
+          err?.error?.error || 'Erreur création manche',
           'Fermer',
           { duration: 3000 }
         ),

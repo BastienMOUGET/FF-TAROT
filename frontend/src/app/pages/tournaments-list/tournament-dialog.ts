@@ -24,7 +24,7 @@ import { ApiService } from '../../core/api.service';
   ],
   providers: [provideNativeDateAdapter()],
   template: `
-    <h2 mat-dialog-title>Nouveau tournoi</h2>
+    <h2 mat-dialog-title>Nouveau Challenge</h2>
     <mat-dialog-content>
       <form [formGroup]="form" class="form">
         <mat-form-field appearance="outline" class="full">

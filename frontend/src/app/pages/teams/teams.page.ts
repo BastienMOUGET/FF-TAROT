@@ -16,9 +16,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 
 import { ApiService } from '../../core/api.service';
 import { Pair, Player, Team } from '../../core/api.types';
+import { PlayerDialog } from '../admin/dialogs/player-dialog';
 
 @Component({
   selector: 'app-teams-page',
@@ -35,6 +37,7 @@ import { Pair, Player, Team } from '../../core/api.types';
     MatTableModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    MatDialogModule,
   ],
   template: `
     <button type="button" class="back" (click)="goBack()">
@@ -44,11 +47,11 @@ import { Pair, Player, Team } from '../../core/api.types';
 
     <mat-card class="form-card draw-card">
       <mat-card-header>
-        <mat-card-title>Tirage au sort — Round 1</mat-card-title>
+        <mat-card-title>Tirage au sort — Manche 1</mat-card-title>
         <mat-card-subtitle>
           Sélectionne les joueurs présents, l'appli forme des équipes de 4 (et
           de 3 si besoin pour compléter) au hasard et génère la mise en place
-          du round 1.
+          de la manche 1.
         </mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
@@ -57,6 +60,9 @@ import { Pair, Player, Team } from '../../core/api.types';
             Tous les joueurs sont déjà inscrits dans une équipe pour ce
             sous-tournoi.
           </p>
+          <button mat-button type="button" (click)="openNewPlayer()">
+            <mat-icon>person_add</mat-icon> Nouveau joueur
+          </button>
         } @else {
           <mat-form-field appearance="outline" class="full search">
             <mat-label>Filtrer</mat-label>
@@ -74,6 +80,9 @@ import { Pair, Player, Team } from '../../core/api.types';
             </button>
             <button mat-button type="button" (click)="clearDrawSelection()">
               Tout désélectionner
+            </button>
+            <button mat-button type="button" (click)="openNewPlayer()">
+              <mat-icon>person_add</mat-icon> Nouveau joueur
             </button>
             <span class="spacer"></span>
             <span
@@ -123,7 +132,7 @@ import { Pair, Player, Team } from '../../core/api.types';
           [disabled]="!canDraw() || drawing()"
           (click)="randomDraw()"
         >
-          <mat-icon>shuffle</mat-icon> Tirer au sort et générer le round 1
+          <mat-icon>shuffle</mat-icon> Tirer au sort et générer la manche 1
         </button>
       </mat-card-actions>
     </mat-card>
@@ -138,6 +147,14 @@ import { Pair, Player, Team } from '../../core/api.types';
             2 joueurs NS + 1 joueur EO
           }
         </mat-card-subtitle>
+        <button
+          mat-icon-button
+          type="button"
+          (click)="openNewPlayer()"
+          title="Nouveau joueur"
+        >
+          <mat-icon>person_add</mat-icon>
+        </button>
       </mat-card-header>
       <mat-card-content>
         <mat-button-toggle-group
@@ -266,6 +283,7 @@ export class TeamsPage implements OnInit {
   private location = inject(Location);
   private fb = inject(FormBuilder);
   private snack = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
 
   subTournamentId = signal(0);
   players = signal<Player[]>([]);
@@ -389,6 +407,18 @@ export class TeamsPage implements OnInit {
     this.location.back();
   }
 
+  openNewPlayer(): void {
+    const ref = this.dialog.open(PlayerDialog, { data: {} });
+    ref.afterClosed().subscribe((created: Player | undefined) => {
+      if (!created) return;
+      this.players.update((list) => [...list, created]);
+      this.drawSelection.update((s) => new Set(s).add(created.id));
+      this.snack.open(`${created.name} ${created.firstname} ajouté(e)`, 'Fermer', {
+        duration: 2000,
+      });
+    });
+  }
+
   toggleDraw(playerId: number): void {
     this.drawSelection.update((s) => {
       const next = new Set(s);
@@ -437,7 +467,7 @@ export class TeamsPage implements OnInit {
         : `${plan.fours} de 4`;
     if (
       !confirm(
-        `Tirer au sort ${this.drawCount()} joueurs en ${nbTeams} équipe(s) (${detail}) et générer la mise en place du round 1 ?`
+        `Tirer au sort ${this.drawCount()} joueurs en ${nbTeams} équipe(s) (${detail}) et générer la mise en place de la manche 1 ?`
       )
     ) {
       return;
@@ -507,7 +537,7 @@ export class TeamsPage implements OnInit {
             error: (err) => {
               this.drawing.set(false);
               this.snack.open(
-                err?.error?.error || 'Erreur création du round 1',
+                err?.error?.error || 'Erreur création de la manche 1',
                 'Fermer',
                 { duration: 3000 }
               );
@@ -523,7 +553,7 @@ export class TeamsPage implements OnInit {
     this.api.generatePlacement(roundId).subscribe({
       next: () => {
         this.drawing.set(false);
-        this.snack.open('Mise en place du round 1 générée', 'Fermer', {
+        this.snack.open('Mise en place de la manche 1 générée', 'Fermer', {
           duration: 2000,
         });
         this.router.navigate(['/rounds', roundId]);

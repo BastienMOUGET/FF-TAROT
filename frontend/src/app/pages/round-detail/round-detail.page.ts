@@ -10,6 +10,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
 import { Round } from '../../core/api.types';
 
 @Component({
@@ -30,7 +31,7 @@ import { Round } from '../../core/api.types';
     @if (loading()) {
       <mat-progress-spinner mode="indeterminate" diameter="40" />
     } @else if (round(); as r) {
-      <h1>Round {{ r.round_number }}</h1>
+      <h1>Manche {{ r.round_number }}</h1>
       <div class="actions">
         <button
           mat-stroked-button
@@ -40,6 +41,16 @@ import { Round } from '../../core/api.types';
         >
           <mat-icon>shuffle</mat-icon> Régénérer la mise en place
         </button>
+        @if (auth.isAdmin()) {
+          <button
+            mat-stroked-button
+            color="warn"
+            (click)="remove(r.id)"
+            [disabled]="busy()"
+          >
+            <mat-icon>delete</mat-icon> Supprimer cette manche
+          </button>
+        }
       </div>
 
       @if (!r.tables || r.tables.length === 0) {
@@ -117,6 +128,7 @@ export class RoundDetailPage implements OnInit {
   private router = inject(Router);
   private location = inject(Location);
   private snack = inject(MatSnackBar);
+  protected auth = inject(AuthService);
 
   loading = signal(true);
   busy = signal(false);
@@ -135,8 +147,31 @@ export class RoundDetailPage implements OnInit {
         this.loading.set(false);
       },
       error: () => {
-        this.snack.open('Round introuvable', 'Fermer', { duration: 3000 });
+        this.snack.open('Manche introuvable', 'Fermer', { duration: 3000 });
         this.loading.set(false);
+      },
+    });
+  }
+
+  remove(id: number): void {
+    if (
+      !confirm(
+        'Supprimer cette manche ? Les places et scores éventuellement saisis seront perdus.'
+      )
+    ) {
+      return;
+    }
+    this.busy.set(true);
+    this.api.deleteRound(id).subscribe({
+      next: () => {
+        this.snack.open('Manche supprimée', 'Fermer', { duration: 2000 });
+        this.goBack();
+      },
+      error: (err) => {
+        this.snack.open(err?.error?.error || 'Erreur suppression', 'Fermer', {
+          duration: 3000,
+        });
+        this.busy.set(false);
       },
     });
   }

@@ -76,7 +76,7 @@ import { RankingEntry } from '../../core/api.types';
           </td>
         </ng-container>
         <ng-container matColumnDef="rounds">
-          <th mat-header-cell *matHeaderCellDef class="num">Rounds</th>
+          <th mat-header-cell *matHeaderCellDef class="num">Manches</th>
           <td mat-cell *matCellDef="let r" class="num">{{ r.rounds_played }}</td>
         </ng-container>
         <ng-container matColumnDef="total">

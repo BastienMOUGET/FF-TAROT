@@ -32,11 +32,11 @@ import { AuthService } from '../../core/auth.service';
   ],
   template: `
     <div class="header">
-      <h1>Tournois</h1>
+      <h1>Challenges</h1>
       @if (auth.isAuthenticated()) {
         <button mat-flat-button color="primary" (click)="openCreate()">
           <mat-icon>add</mat-icon>
-          Nouveau tournoi
+          Nouveau Challenge
         </button>
       }
     </div>
@@ -44,7 +44,7 @@ import { AuthService } from '../../core/auth.service';
     @if (loading()) {
       <mat-progress-spinner mode="indeterminate" diameter="40" />
     } @else if (tournaments().length === 0) {
-      <p class="empty">Aucun tournoi pour le moment.</p>
+      <p class="empty">Aucun challenge pour le moment.</p>
     } @else {
       <table mat-table [dataSource]="tournaments()" class="mat-elevation-z2">
         <ng-container matColumnDef="code">
@@ -147,7 +147,7 @@ export class TournamentsListPage implements OnInit {
     const ref = this.dialog.open(TournamentDialog, { width: '500px' });
     ref.afterClosed().subscribe((created) => {
       if (created) {
-        this.snack.open('Tournoi créé', 'Fermer', { duration: 2000 });
+        this.snack.open('Challenge créé', 'Fermer', { duration: 2000 });
         this.refresh();
       }
     });

@@ -47,14 +47,14 @@ import { RouteSheet } from '../../core/api.types';
         </header>
 
         @if (s.rounds.length === 0) {
-          <p class="empty">Aucun round généré pour le moment.</p>
+          <p class="empty">Aucune manche générée pour le moment.</p>
         }
 
         @for (r of s.rounds; track r.round_number) {
           <section class="round">
-            <h2>Round {{ r.round_number }}</h2>
+            <h2>Manche {{ r.round_number }}</h2>
             @if (r.tables.length === 0) {
-              <p class="empty">Pas de mise en place sur ce round.</p>
+              <p class="empty">Pas de mise en place sur cette manche.</p>
             } @else {
               <div class="tables">
                 @for (t of r.tables; track t.table_number) {
