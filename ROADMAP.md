@@ -6,6 +6,51 @@
 
 ---
 
+## ✅ v3.0.18–v3.0.19 — Retour terrain (beau-père) *(livré, 2026-09-03)*
+
+Analyse d'un mémo écrit après test réel de l'appli (`feedback/` — non
+versionné, contient des données personnelles de joueurs) : vocabulaire,
+ergonomie de saisie, et un vrai trou fonctionnel (le classement
+"Challenge" trimestriel, cœur de `ChallengeLib214.xls`, l'outil Excel
+FFT encore utilisé au club).
+
+- Vocabulaire Challenge/Manche (au lieu de Tournoi/Round) dans l'UI
+- Ajout d'un joueur directement depuis l'écran d'inscription
+- Orientation à la table par joueur (fixe N/S/E/O ou "non Nord") au
+  tirage au sort
+- Masquage des onglets Ligues/Comités (usage club simple, pas fédéral)
+- Saisie du résultat global d'une table (+ vérification somme = 0) en
+  plus de la saisie détaillée donne par donne, avec auto-calcul du
+  partage preneur/adversaires
+- Bouton "Manche suivante" directement depuis l'écran de la manche en
+  cours (évite l'aller-retour par les menus)
+- Fix fiabilité : régénérer la mise en place d'une manche supprime
+  désormais réellement les scores associés (`table_results`), qui
+  restaient sinon rattachés au n° de table pour d'autres joueurs
+- Suppression d'une manche créée par erreur (admin)
+- Message d'erreur explicite quand la mise en place échoue (ex: aucune
+  équipe inscrite) au lieu d'un échec silencieux
+- Statut "adhérent du club" par joueur + filtre/liste des adhérents
+- **Classement Challenge trimestriel** : agrégation du classement final
+  de tous les sous-tournois d'un tournoi, points par place ou cumul
+  brut au choix (`tournaments.challenge_mode`)
+- Import CSV de liste de joueurs (upsert par licence, doublons de
+  nom/prénom avec licence différente signalés sans fusion automatique)
+- Fix `build.sh` : les chemins d'include des packages venaient d'un
+  scan "dernière version installée sur la machine" au lieu
+  d'`amalgame.lock` — pouvait compiler contre les headers d'une version
+  et linker la lib précompilée d'une autre (décalage ABI silencieux)
+  sur un poste ayant accumulé plusieurs versions d'un même package.
+  N'affecte pas le pipeline de release (runner CI toujours propre).
+
+**Limite connue de l'appli** : `db.sql` n'est appliqué qu'à la première
+init d'une base — pas de migrations. Passer à ces versions sur une
+installation existante demande soit une réinstall (perte des données),
+soit un `ALTER TABLE` manuel pour les 2 colonnes ajoutées
+(`tournaments.challenge_mode`, `players.club_member`).
+
+---
+
 ## ✅ V1.0 — Back complet Libre par 4 *(livré)*
 
 Backend fonctionnellement complet pour gérer un tournoi FFT en mode
