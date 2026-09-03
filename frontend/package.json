@@ -1,6 +1,6 @@
 {
   "name": "pabb90-front",
-  "version": "3.0.18",
+  "version": "3.0.19",
   "description": "PABB90 (Petit Au Bout Belfortain 90) — Front Angular pour gestion de tournois de tarot (mode Libre par 4)",
   "scripts": {
     "ng": "ng",
