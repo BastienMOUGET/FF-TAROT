@@ -1,6 +1,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { from } from 'rxjs';
+import { concatMap, toArray } from 'rxjs/operators';
 
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatTableModule } from '@angular/material/table';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -27,6 +30,7 @@ import { Hand, Round, RoundSeat, Seat, TableResult } from '../../core/api.types'
     MatFormFieldModule,
     MatInputModule,
     MatRadioModule,
+    MatButtonToggleModule,
     MatTableModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
@@ -82,46 +86,126 @@ import { Hand, Round, RoundSeat, Seat, TableResult } from '../../core/api.types'
         </mat-card>
       }
 
-      <mat-card class="hand-form">
-        <mat-card-header>
-          <mat-card-title>Nouvelle donne</mat-card-title>
-          <mat-card-subtitle>
-            Donne n° {{ nextHandNumber() }}
-          </mat-card-subtitle>
-        </mat-card-header>
+      <mat-card class="mode-card">
         <mat-card-content>
-          <form [formGroup]="form" (ngSubmit)="addHand()">
-            <div class="row">
-              <label class="row-label">Preneur</label>
-              <mat-radio-group formControlName="taker_seat" class="radios">
+          <mat-button-toggle-group
+            [value]="entryMode()"
+            (change)="entryMode.set($event.value)"
+          >
+            <mat-button-toggle value="global">
+              Résultat global de la table
+            </mat-button-toggle>
+            <mat-button-toggle value="detail">
+              Détail donne par donne
+            </mat-button-toggle>
+          </mat-button-toggle-group>
+        </mat-card-content>
+      </mat-card>
+
+      @if (entryMode() === 'global') {
+        <mat-card class="global-form">
+          <mat-card-header>
+            <mat-card-title>Résultat global de la table</mat-card-title>
+            <mat-card-subtitle>
+              Un seul résultat par joueur pour toute la manche — la somme
+              doit être égale à 0.
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <form [formGroup]="globalForm" (ngSubmit)="submitGlobal()">
+              <div class="grid">
                 @for (s of ['N','S','E','O']; track s) {
-                  <mat-radio-button [value]="s">{{ s }}</mat-radio-button>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Score {{ s }}</mat-label>
+                    <input
+                      matInput
+                      type="number"
+                      [formControlName]="'score_' + s.toLowerCase()"
+                    />
+                  </mat-form-field>
                 }
-              </mat-radio-group>
-            </div>
-            <div class="grid">
-              @for (s of ['N','S','E','O']; track s) {
-                <mat-form-field appearance="outline">
-                  <mat-label>Score {{ s }}</mat-label>
+              </div>
+              <p
+                class="sum-check"
+                [class.ok]="globalSum() === 0"
+                [class.bad]="globalSum() !== 0"
+              >
+                Somme : {{ globalSum() }}
+                @if (globalSum() !== 0) {
+                  (doit être égale à 0)
+                }
+              </p>
+              <button
+                mat-flat-button
+                color="primary"
+                type="submit"
+                [disabled]="globalForm.invalid || globalSum() !== 0 || saving()"
+              >
+                <mat-icon>check</mat-icon> Valider le résultat de la table
+              </button>
+            </form>
+          </mat-card-content>
+        </mat-card>
+      }
+
+      @if (entryMode() === 'detail') {
+        <mat-card class="hand-form">
+          <mat-card-header>
+            <mat-card-title>Nouvelle donne</mat-card-title>
+            <mat-card-subtitle>
+              Donne n° {{ nextHandNumber() }}
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <form [formGroup]="form" (ngSubmit)="addHand()">
+              <div class="row">
+                <label class="row-label">Preneur</label>
+                <mat-radio-group
+                  formControlName="taker_seat"
+                  class="radios"
+                  (change)="applyAutoCalc()"
+                >
+                  @for (s of ['N','S','E','O']; track s) {
+                    <mat-radio-button [value]="s">{{ s }}</mat-radio-button>
+                  }
+                </mat-radio-group>
+              </div>
+              <div class="row">
+                <label class="row-label">Résultat</label>
+                <mat-form-field appearance="outline" class="donne-result">
+                  <mat-label>Perdu/gagné par le preneur (ex: -50)</mat-label>
                   <input
                     matInput
                     type="number"
-                    [formControlName]="'score_' + s.toLowerCase()"
+                    [formControlName]="'donne_result'"
+                    (input)="applyAutoCalc()"
                   />
                 </mat-form-field>
-              }
-            </div>
-            <button
-              mat-flat-button
-              color="primary"
-              type="submit"
-              [disabled]="form.invalid || saving()"
-            >
-              <mat-icon>add</mat-icon> Ajouter la donne
-            </button>
-          </form>
-        </mat-card-content>
-      </mat-card>
+              </div>
+              <div class="grid">
+                @for (s of ['N','S','E','O']; track s) {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Score {{ s }}</mat-label>
+                    <input
+                      matInput
+                      type="number"
+                      [formControlName]="'score_' + s.toLowerCase()"
+                    />
+                  </mat-form-field>
+                }
+              </div>
+              <button
+                mat-flat-button
+                color="primary"
+                type="submit"
+                [disabled]="form.invalid || saving()"
+              >
+                <mat-icon>add</mat-icon> Ajouter la donne
+              </button>
+            </form>
+          </mat-card-content>
+        </mat-card>
+      }
 
       @if (table()?.hands?.length) {
         <mat-card class="hands-list">
@@ -228,6 +312,11 @@ import { Hand, Round, RoundSeat, Seat, TableResult } from '../../core/api.types'
     .num { text-align: right; }
     .bottom-actions { margin-top: 24px; display: flex; justify-content: flex-end; }
     mat-card-header { justify-content: space-between; }
+    .mode-card, .global-form { margin-bottom: 16px; }
+    .sum-check { font-weight: 600; margin: 0 0 16px; }
+    .sum-check.ok { color: #2e7d32; }
+    .sum-check.bad { color: #c62828; }
+    .donne-result { width: 260px; }
   `,
 })
 export class ScoringPage implements OnInit {
@@ -247,8 +336,18 @@ export class ScoringPage implements OnInit {
 
   handCols = ['num', 'taker', 'sn', 'ss', 'se', 'so', 'actions'];
 
+  entryMode = signal<'global' | 'detail'>('global');
+
   form = this.fb.nonNullable.group({
     taker_seat: ['' as Seat | '', Validators.required],
+    donne_result: [null as number | null],
+    score_n: [0, Validators.required],
+    score_s: [0, Validators.required],
+    score_e: [0, Validators.required],
+    score_o: [0, Validators.required],
+  });
+
+  globalForm = this.fb.nonNullable.group({
     score_n: [0, Validators.required],
     score_s: [0, Validators.required],
     score_e: [0, Validators.required],
@@ -277,11 +376,19 @@ export class ScoringPage implements OnInit {
           .subscribe({
             next: (tr) => {
               this.table.set(tr);
+              this.entryMode.set((tr.hands?.length || 0) > 1 ? 'detail' : 'global');
+              this.globalForm.patchValue({
+                score_n: tr.score_n,
+                score_s: tr.score_s,
+                score_e: tr.score_e,
+                score_o: tr.score_o,
+              });
               this.loading.set(false);
             },
             error: () => {
               // Pas de table_result encore : c'est normal
               this.table.set(null);
+              this.entryMode.set('global');
               this.loading.set(false);
             },
           });
@@ -320,8 +427,9 @@ export class ScoringPage implements OnInit {
       })
       .subscribe({
         next: () => {
-          this.form.patchValue({
+          this.form.reset({
             taker_seat: '',
+            donne_result: null,
             score_n: 0,
             score_s: 0,
             score_e: 0,
@@ -337,6 +445,88 @@ export class ScoringPage implements OnInit {
           this.saving.set(false);
         },
       });
+  }
+
+  // Auto-calcul (facultatif) du partage de la donne : preneur seul contre
+  // les 3 autres, résultat = perte/gain du preneur par adversaire.
+  // preneur = 3×résultat, chaque adversaire = -résultat (somme = 0).
+  applyAutoCalc(): void {
+    const v = this.form.getRawValue();
+    const taker = v.taker_seat;
+    const result = v.donne_result;
+    if (!taker || result === null || result === undefined) return;
+    const seats: Seat[] = ['N', 'S', 'E', 'O'];
+    const patch: Record<string, number> = {};
+    for (const s of seats) {
+      const key = `score_${s.toLowerCase()}`;
+      patch[key] = s === taker ? result * 3 : -result;
+    }
+    this.form.patchValue(patch);
+  }
+
+  globalSum(): number {
+    const v = this.globalForm.getRawValue();
+    return (
+      Number(v.score_n) + Number(v.score_s) + Number(v.score_e) + Number(v.score_o)
+    );
+  }
+
+  submitGlobal(): void {
+    if (this.globalForm.invalid || this.globalSum() !== 0) return;
+    const v = this.globalForm.getRawValue();
+    const scores = {
+      score_n: Number(v.score_n),
+      score_s: Number(v.score_s),
+      score_e: Number(v.score_e),
+      score_o: Number(v.score_o),
+    };
+    const hands = this.table()?.hands || [];
+    if (hands.length > 1) {
+      if (
+        !confirm(
+          `${hands.length} donnes détaillées sont déjà saisies pour cette table. ` +
+            'Les remplacer par ce résultat global unique ?'
+        )
+      ) {
+        return;
+      }
+    }
+    this.saving.set(true);
+    if (hands.length === 0) {
+      this.api
+        .addHand(this.roundId(), this.tableNumber(), {
+          hand_number: 1,
+          taker_seat: null,
+          ...scores,
+        })
+        .subscribe(() => this.afterGlobalSave());
+    } else if (hands.length === 1) {
+      this.api
+        .updateHand(hands[0].id, scores)
+        .subscribe(() => this.afterGlobalSave());
+    } else {
+      from(hands)
+        .pipe(
+          concatMap((h) => this.api.deleteHand(h.id)),
+          toArray(),
+          concatMap(() =>
+            this.api.addHand(this.roundId(), this.tableNumber(), {
+              hand_number: 1,
+              taker_seat: null,
+              ...scores,
+            })
+          )
+        )
+        .subscribe(() => this.afterGlobalSave());
+    }
+  }
+
+  private afterGlobalSave(): void {
+    this.saving.set(false);
+    this.snack.open('Résultat de la table enregistré', 'Fermer', {
+      duration: 2000,
+    });
+    this.loadAll();
   }
 
   deleteHand(id: number): void {
