@@ -28,7 +28,12 @@ jobs:
       - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc libmariadb-dev libgc-dev libssl-dev zlib1g-dev
+          # libnghttp2-dev : amalgame-net-http déclare nghttp2 dans ses libs,
+          # build.sh le passe en -lnghttp2. Le runner n'a que la lib runtime,
+          # pas le lien de dev — d'où un 'cannot find -lnghttp2' à l'édition
+          # de liens, alors que la compilation était passée.
+          sudo apt-get install -y gcc libmariadb-dev libgc-dev libssl-dev zlib1g-dev \
+                                  libnghttp2-dev
 
       - name: Install amc (release tarball)
         env:
