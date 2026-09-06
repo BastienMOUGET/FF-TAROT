@@ -35,9 +35,15 @@ jobs:
           sudo apt-get install -y gcc libmariadb-dev libgc-dev libssl-dev zlib1g-dev \
                                   libnghttp2-dev
 
+      # Doit rester aligné sur AMC_VERSION de release.yml : la CI n'a de sens
+      # que si elle compile avec la toolchain qui produit le binaire livré.
+      # En 0.8.87, Math.Floor (utilisé par modules/ranking/ranking.am) n'est
+      # pas dans la stdlib : le C compilait avec un simple warning de
+      # déclaration implicite, et l'édition de liens tombait sur un
+      # « undefined reference to App_Math_Floor ».
       - name: Install amc (release tarball)
         env:
-          AMC_VERSION: 0.8.87
+          AMC_VERSION: 0.8.88
         run: |
           curl -fsSL "https://github.com/amalgame-lang/Amalgame/releases/download/v${AMC_VERSION}/amc-${AMC_VERSION}-linux-x86_64.tar.gz" | tar -xz -C "$HOME"
           echo "$HOME/amc-${AMC_VERSION}-linux-x86_64/bin" >> "$GITHUB_PATH"
