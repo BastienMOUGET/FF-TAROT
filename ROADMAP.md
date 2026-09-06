@@ -88,6 +88,24 @@ pour net-http/tls : `amalgame.lock` étant clé par **nom**, un paquet
 ajouté ensuite et dépendant d'un `crypto` plus récent écrase l'entrée.
 À signaler en amont à `amc`.
 
+### CI Linux réparée
+
+Elle était rouge depuis plusieurs versions (v3.0.19 comprise), mais le
+job s'arrêtait avant d'atteindre la vraie cause. Deux problèmes
+distincts, tous deux à l'édition de liens :
+
+- `ld: cannot find -lnghttp2` — `amalgame-net-http` v0.26.1 déclare
+  `nghttp2` dans ses `libs`, `build.sh` le passe donc en `-lnghttp2`,
+  mais le runner ne fournit que la lib runtime, pas le paquet `-dev` ;
+  `libnghttp2-dev` est ajouté aux dépendances de build.
+- `undefined reference to App_Math_Floor` — la CI compilait avec amc
+  **0.8.87** alors que `release.yml` livre avec **0.8.88**, et
+  `Math.Floor` (utilisé par `modules/ranking/ranking.am`) n'est pas
+  dans la stdlib de 0.8.87. Le C passait avec un simple warning de
+  déclaration implicite, seul le link tombait. Les deux versions d'amc
+  sont désormais alignées : une CI qui ne compile pas avec la toolchain
+  qui produit le binaire livré ne teste pas grand-chose.
+
 ### Suppression d'un joueur référencé
 
 `DELETE /api/players/:id` renvoyait un « Suppression impossible
