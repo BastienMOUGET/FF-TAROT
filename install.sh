@@ -13,6 +13,11 @@
 # Usage :
 #   sudo ./install.sh                # install complet (apt/dnf, DB, build)
 #   sudo ./install.sh --no-systemd   # idem mais sans service systemd
+#   sudo ./install.sh --with-demo    # + jeu de démo (club/tournoi de test),
+#                                    #   uniquement si la base est vierge
+#
+# Réinstallation : le schéma passe par migrate.sh, qui n'applique que les
+# migrations manquantes. Les données déjà en base sont conservées.
 #
 # Distribs supportées : Debian/Ubuntu (apt), Fedora/RHEL (dnf).
 
@@ -47,11 +52,13 @@ random_password() {
 # ---------------------------- Args ----------------------------
 
 INSTALL_SYSTEMD=1
+WITH_DEMO=0
 for arg in "$@"; do
   case "$arg" in
     --no-systemd) INSTALL_SYSTEMD=0 ;;
+    --with-demo)  WITH_DEMO=1 ;;
     -h|--help)
-      sed -n '2,18p' "$0"; exit 0 ;;
+      sed -n '2,24p' "$0"; exit 0 ;;
     *) die "Argument inconnu : $arg" ;;
   esac
 done
@@ -143,10 +150,13 @@ FLUSH PRIVILEGES;
 EOF
 ok "Base $DB_NAME prête"
 
-log "Application du schéma db.sql + seed.sql..."
-"$MYSQL_BIN" --user=root < "$INSTALL_DIR/db.sql"
-"$MYSQL_BIN" --user=root "$DB_NAME" < "$INSTALL_DIR/seed.sql"
-ok "Schéma + seed appliqués"
+# Migrations : installe le schéma sur une base vierge, applique seulement
+# les migrations manquantes sur une base existante. Réinstaller par-dessus
+# une base qui contient les données du club ne les efface donc plus.
+log "Migration du schéma..."
+MIGRATE_ARGS=(--as-root)
+[[ "$WITH_DEMO" -eq 1 ]] && MIGRATE_ARGS+=(--seed)
+DB_NAME="$DB_NAME" MYSQL_BIN="$MYSQL_BIN" "$INSTALL_DIR/migrate.sh" "${MIGRATE_ARGS[@]}"
 
 # ---------------------------- .env ----------------------------
 

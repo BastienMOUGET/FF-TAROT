@@ -1,67 +1,35 @@
 -- =====================================================
--- FFT TAROT - SCHÉMA DB (mode Libre par 4)
+-- 001 — Schéma de base PABB90 (mode Libre par 4)
 -- =====================================================
--- Notes :
+-- Migration de référence (baseline). Rejouable sans risque :
+--   - CREATE TABLE IF NOT EXISTS  → ne touche pas aux tables existantes
+--   - INSERT IGNORE               → ne duplique pas les données de référence
+-- Elle peut donc s'appliquer aussi bien sur une base vierge que sur une
+-- base PABB90 antérieure au système de migrations (≤ v3.0.19), qui la
+-- verra passer sans effet.
+--
+-- Notes métier :
 --   - 1 tournoi peut contenir plusieurs sous-tournois (parallèles).
 --   - Inscriptions par équipe de 4 (paire NS + paire EO).
 --   - Licence FFT optionnelle (champ texte libre, pas obligatoire).
 -- =====================================================
 
-CREATE DATABASE IF NOT EXISTS fft
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE fft;
-
+-- FOREIGN_KEY_CHECKS désactivé pendant les CREATE pour s'affranchir des
+-- cycles d'ordre (sub_tournaments → donne_sets, déclaré plus bas).
 SET FOREIGN_KEY_CHECKS = 0;
-
--- Suppression (ordre inverse des dépendances, dev only)
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS donne_cards;
-DROP TABLE IF EXISTS donne_sets;
-DROP TABLE IF EXISTS cards;
-DROP TABLE IF EXISTS pp_grids;
-DROP TABLE IF EXISTS rankings;
-DROP TABLE IF EXISTS hand_results;
-DROP TABLE IF EXISTS table_results;
-DROP TABLE IF EXISTS seats;
-DROP TABLE IF EXISTS rounds;
-DROP TABLE IF EXISTS movement_patterns;
-DROP TABLE IF EXISTS movement_steps;
-DROP TABLE IF EXISTS movements;
-DROP TABLE IF EXISTS team_players;
-DROP TABLE IF EXISTS teams;
-DROP TABLE IF EXISTS sub_tournaments;
-DROP TABLE IF EXISTS penalties;
-DROP TABLE IF EXISTS penalty_types;
-DROP TABLE IF EXISTS parameters;
-DROP TABLE IF EXISTS tournaments;
-DROP TABLE IF EXISTS players;
-DROP TABLE IF EXISTS clubs;
-DROP TABLE IF EXISTS comites;
-DROP TABLE IF EXISTS ligues;
-
--- Tables non utilisées par le nouveau schéma (legacy v0)
-DROP TABLE IF EXISTS scores;
-DROP TABLE IF EXISTS table_players;
-DROP TABLE IF EXISTS game_tables;
-DROP TABLE IF EXISTS byes;
-
--- NB : FOREIGN_KEY_CHECKS reste désactivé pendant les CREATE pour
--- s'affranchir des cycles d'ordre. Réactivé à la toute fin du fichier.
 
 -- =====================================================
 -- RÉFÉRENTIEL FFT (ligues > comités > clubs > joueurs)
 -- =====================================================
 
-CREATE TABLE ligues (
+CREATE TABLE IF NOT EXISTS ligues (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   code        VARCHAR(10)  NOT NULL UNIQUE,
   name        VARCHAR(100) NOT NULL,
   created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
-CREATE TABLE comites (
+CREATE TABLE IF NOT EXISTS comites (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   code        VARCHAR(10)  NOT NULL UNIQUE,
   name        VARCHAR(100) NOT NULL,
@@ -72,7 +40,7 @@ CREATE TABLE comites (
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-CREATE TABLE clubs (
+CREATE TABLE IF NOT EXISTS clubs (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   code        VARCHAR(15)  NOT NULL UNIQUE,
   name        VARCHAR(150) NOT NULL,
@@ -83,7 +51,7 @@ CREATE TABLE clubs (
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-CREATE TABLE players (
+CREATE TABLE IF NOT EXISTS players (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   licence     VARCHAR(20)  NULL UNIQUE,    -- numéro FFT optionnel
   name        VARCHAR(100) NOT NULL,
@@ -105,7 +73,7 @@ CREATE TABLE players (
 -- TOURNOIS
 -- =====================================================
 
-CREATE TABLE tournaments (
+CREATE TABLE IF NOT EXISTS tournaments (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   code            VARCHAR(20)  NOT NULL UNIQUE,
   name            VARCHAR(255) NOT NULL,
@@ -131,7 +99,7 @@ CREATE TABLE tournaments (
 ) ENGINE=InnoDB;
 
 -- Sous-tournois parallèles (A/B/Open/Promo…)
-CREATE TABLE sub_tournaments (
+CREATE TABLE IF NOT EXISTS sub_tournaments (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   tournament_id   INT NOT NULL,
   label           VARCHAR(50)  NOT NULL,    -- ex : 'A', 'Open'
@@ -156,7 +124,7 @@ CREATE TABLE sub_tournaments (
 -- 1 équipe = 4 joueurs = 1 paire NS + 1 paire EO
 -- =====================================================
 
-CREATE TABLE teams (
+CREATE TABLE IF NOT EXISTS teams (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
   sub_tournament_id   INT NOT NULL,
   team_number         INT NOT NULL,           -- numéro d'équipe dans le sub-tournoi
@@ -166,7 +134,7 @@ CREATE TABLE teams (
   UNIQUE KEY uniq_team_number (sub_tournament_id, team_number)
 ) ENGINE=InnoDB;
 
-CREATE TABLE team_players (
+CREATE TABLE IF NOT EXISTS team_players (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
   team_id             INT NOT NULL,
   player_id           INT NOT NULL,
@@ -189,7 +157,7 @@ CREATE TABLE team_players (
 -- L'entrée table_count = 0 sert de patron par défaut.
 -- =====================================================
 
-CREATE TABLE movement_patterns (
+CREATE TABLE IF NOT EXISTS movement_patterns (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   table_count INT          NOT NULL UNIQUE,    -- 0 = défaut (toutes tailles)
   offset_n    INT          NOT NULL DEFAULT 0,
@@ -203,7 +171,7 @@ CREATE TABLE movement_patterns (
 -- ROUNDS + MISE EN PLACE
 -- =====================================================
 
-CREATE TABLE rounds (
+CREATE TABLE IF NOT EXISTS rounds (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
   sub_tournament_id   INT NOT NULL,
   round_number        INT NOT NULL,
@@ -217,7 +185,7 @@ CREATE TABLE rounds (
 ) ENGINE=InnoDB;
 
 -- Mise en place : qui est où à chaque round.
-CREATE TABLE seats (
+CREATE TABLE IF NOT EXISTS seats (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   round_id        INT NOT NULL,
   table_number    INT NOT NULL,
@@ -242,7 +210,7 @@ CREATE TABLE seats (
 -- =====================================================
 
 -- Total par table (un par table par round)
-CREATE TABLE table_results (
+CREATE TABLE IF NOT EXISTS table_results (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   round_id        INT NOT NULL,
   table_number    INT NOT NULL,
@@ -264,7 +232,7 @@ CREATE TABLE table_results (
 ) ENGINE=InnoDB;
 
 -- Détail par donne (preneur + score N/S/E/O sur cette donne)
-CREATE TABLE hand_results (
+CREATE TABLE IF NOT EXISTS hand_results (
   id                INT AUTO_INCREMENT PRIMARY KEY,
   table_result_id   INT NOT NULL,
   hand_number       INT NOT NULL,
@@ -283,7 +251,7 @@ CREATE TABLE hand_results (
 -- CLASSEMENT (matérialisé pour live)
 -- =====================================================
 
-CREATE TABLE rankings (
+CREATE TABLE IF NOT EXISTS rankings (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
   sub_tournament_id   INT NOT NULL,
   player_id           INT NOT NULL,
@@ -310,7 +278,7 @@ CREATE TABLE rankings (
 -- Place -> nombre de points PP. Reproduit pp_tournois du legacy.
 -- =====================================================
 
-CREATE TABLE pp_grids (
+CREATE TABLE IF NOT EXISTS pp_grids (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
   sub_tournament_id   INT NOT NULL,
   place               INT NOT NULL,
@@ -325,14 +293,14 @@ CREATE TABLE pp_grids (
 -- PÉNALITÉS
 -- =====================================================
 
-CREATE TABLE penalty_types (
+CREATE TABLE IF NOT EXISTS penalty_types (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   code            VARCHAR(20)  NOT NULL UNIQUE,
   label           VARCHAR(150) NOT NULL,
   default_points  DECIMAL(6,2) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB;
 
-CREATE TABLE penalties (
+CREATE TABLE IF NOT EXISTS penalties (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   tournament_id   INT NOT NULL,
   player_id       INT NOT NULL,
@@ -359,7 +327,7 @@ CREATE TABLE penalties (
 -- PARAMÈTRES (clé/valeur par scope)
 -- =====================================================
 
-CREATE TABLE parameters (
+CREATE TABLE IF NOT EXISTS parameters (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   scope           ENUM('global','tournament') NOT NULL DEFAULT 'global',
   tournament_id   INT NULL,
@@ -375,7 +343,7 @@ CREATE TABLE parameters (
 -- CARTES DU TAROT (référentiel des 78 cartes)
 -- =====================================================
 
-CREATE TABLE cards (
+CREATE TABLE IF NOT EXISTS cards (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   code          VARCHAR(10)  NOT NULL UNIQUE,
   -- 'pique', 'coeur', 'carreau', 'trefle', 'atout', 'excuse'
@@ -392,7 +360,7 @@ CREATE TABLE cards (
 -- Reproduit liste_genedonne / genedonne du legacy.
 -- =====================================================
 
-CREATE TABLE donne_sets (
+CREATE TABLE IF NOT EXISTS donne_sets (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   name        VARCHAR(150) NOT NULL,
   nb_donne    INT          NOT NULL,
@@ -400,7 +368,7 @@ CREATE TABLE donne_sets (
 ) ENGINE=InnoDB;
 
 -- 78 cartes × N donnes, position parmi N/S/E/O/ECART (chien)
-CREATE TABLE donne_cards (
+CREATE TABLE IF NOT EXISTS donne_cards (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   donne_set_id  INT NOT NULL,
   donne_number  INT NOT NULL,
@@ -420,7 +388,7 @@ CREATE TABLE donne_cards (
 -- UTILISATEURS / AUTH
 -- =====================================================
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   username      VARCHAR(50)  NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
@@ -432,18 +400,19 @@ CREATE TABLE users (
 
 -- =====================================================
 -- DONNÉES DE RÉFÉRENCE (toujours présentes)
+-- INSERT IGNORE : chaque ligne a une clé unique, un rejeu est sans effet.
 -- =====================================================
 
 -- Patron de mouvement par défaut (table_count = 0 = "toutes tailles") :
 -- N fixe, S+1, E+2, O-1 modulo nb_table — règle FFT Libre par 4.
-INSERT INTO movement_patterns (table_count, offset_n, offset_s, offset_e, offset_o, label)
+INSERT IGNORE INTO movement_patterns (table_count, offset_n, offset_s, offset_e, offset_o, label)
 VALUES (0, 0, 1, 2, -1, 'Mouvement par défaut Libre par 4');
 
 -- 78 cartes du jeu de Tarot français :
 --   - 4 couleurs (pique, coeur, carreau, trefle) × 14 valeurs (1..10, V, C, D, R) = 56
 --   - 21 atouts (1..21)
 --   - 1 excuse
-INSERT INTO cards (code, suit, rank_label, display_order) VALUES
+INSERT IGNORE INTO cards (code, suit, rank_label, display_order) VALUES
   -- Pique
   ('P_1','pique','1',1),  ('P_2','pique','2',2),  ('P_3','pique','3',3),  ('P_4','pique','4',4),
   ('P_5','pique','5',5),  ('P_6','pique','6',6),  ('P_7','pique','7',7),  ('P_8','pique','8',8),
@@ -476,10 +445,17 @@ INSERT INTO cards (code, suit, rank_label, display_order) VALUES
 
 -- Utilisateur admin par défaut (mot de passe : admin123)
 -- Hash scrypt (amalgame-crypto Password.Hash). Changez immédiatement en prod.
-INSERT INTO users (username, password_hash, role, full_name) VALUES
+INSERT IGNORE INTO users (username, password_hash, role, full_name) VALUES
   ('admin',
    '$scrypt$ln=15,r=8,p=1$lzTnhnClOkY7RcXOaJJS-g$UQLg5juPCb6q3Js07u-_V1woLKtzjBj4dU4yKLtPgkQ',
    'admin',
    'Administrateur');
+
+-- Types de pénalité par défaut (étaient dans seed.sql, donc absents des
+-- installs "propres" ; ce sont des données de référence, pas de la démo).
+INSERT IGNORE INTO penalty_types (code, label, default_points) VALUES
+  ('RETARD', 'Retard',                 -2.00),
+  ('CARTON', 'Carton (avertissement)', -5.00),
+  ('TEL',    'Téléphone à table',      -3.00);
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -68,8 +68,10 @@ Source: "..\server.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; DLL runtime requises par server.exe (libmariadb, openssl, gc…), collectées
 ; par build.ps1 (objdump) → app auto-suffisante, aucune dépendance système.
 Source: "..\windows-dll\*.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\db.sql"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\seed.sql"; DestDir: "{app}"; Flags: ignoreversion
+; Migrations SQL, appliquees dans l'ordre par RunMigrations (voir [Code]).
+; Remplacent l'ancien db.sql, qui commencait par des DROP TABLE et effacait
+; donc les donnees du club a chaque reinstallation.
+Source: "..\migrations\*.sql"; DestDir: "{app}\migrations"; Flags: ignoreversion
 
 ; Front : bundle Angular pré-buildé (servi par le binaire ; plus de npm build)
 Source: "..\frontend\public\*"; DestDir: "{app}\frontend\public"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -346,6 +348,140 @@ begin
   end;
 end;
 
+// ---------------------------------------------------------------------------
+// MIGRATIONS DE SCHÉMA
+// ---------------------------------------------------------------------------
+// Le schéma n'est plus appliqué "en bloc" : l'ancien db.sql commençait par
+// 25 DROP TABLE, donc réinstaller ou mettre à jour par-dessus une base
+// existante effaçait tout le club. On applique désormais, dans l'ordre, les
+// fichiers {app}\migrations\NNN_*.sql absents de la table `schema_migrations`.
+//
+// Conséquences :
+//   - base vierge      -> toutes les migrations sont jouées (= installation)
+//   - base déjà à jour -> rien n'est fait
+//   - base d'une version antérieure -> seules les migrations manquantes sont
+//     jouées, les données déjà saisies sont conservées
+//
+// Une base PABB90 antérieure au système de migrations n'a pas de table
+// `schema_migrations` : 001_baseline.sql lui sera appliqué, mais il est écrit
+// en CREATE TABLE IF NOT EXISTS / INSERT IGNORE et ne touche donc à aucune
+// de ses données.
+
+// Exécute une requête sur la base fft et renvoie la 1re cellule du résultat.
+// Renvoie '' si la requête échoue (table absente, connexion perdue...).
+function SqlScalar(const MysqlExe, RootAuth, Query: String): String;
+var
+  OutFile: String;
+  ExitCode: Integer;
+  Lines: TArrayOfString;
+begin
+  Result := '';
+  OutFile := ExpandConstant('{tmp}\fft-sql-out.txt');
+  DeleteFile(OutFile);
+  if not ExecCmdShell('"' + MysqlExe + '" ' + RootAuth +
+       ' fft --batch --skip-column-names -e "' + Query + '" > "' + OutFile + '" 2>nul',
+       '', ExitCode) then
+    Exit;
+  if ExitCode <> 0 then
+    Exit;
+  if LoadStringsFromFile(OutFile, Lines) and (GetArrayLength(Lines) > 0) then
+    Result := Trim(Lines[0]);
+end;
+
+// Liste triée des migrations présentes dans {app}\migrations.
+// FindFirst ne garantit aucun ordre : c'est le préfixe numérique du nom de
+// fichier (001_, 002_...) qui fixe l'ordre d'application, d'où le Sort.
+function ListMigrations(const MigDir: String): TStringList;
+var
+  FindRec: TFindRec;
+begin
+  Result := TStringList.Create;
+  if FindFirst(MigDir + '\*.sql', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+          Result.Add(FindRec.Name);
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+  Result.Sort;
+end;
+
+// Applique les migrations en attente. False = une migration a échoué ; elle
+// n'est alors PAS enregistrée dans schema_migrations, donc elle sera retentée
+// à la prochaine installation plutôt que d'être silencieusement sautée.
+function RunMigrations(const MysqlExe, RootAuth, DbLog: String): Boolean;
+var
+  Names: TStringList;
+  i, ExitCode, Underscore: Integer;
+  MigDir, MigFile, Version: String;
+begin
+  Result := False;
+  MigDir := ExpandConstant('{app}\migrations');
+
+  SetProgress('Préparation du suivi des migrations...');
+  if not ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' fft -e "' +
+       'CREATE TABLE IF NOT EXISTS schema_migrations (' +
+       'version VARCHAR(64) NOT NULL PRIMARY KEY, ' +
+       'filename VARCHAR(255) NOT NULL, ' +
+       'applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP' +
+       ') ENGINE=InnoDB;" >> "' + DbLog + '" 2>&1', '', ExitCode) then
+    Exit;
+  if ExitCode <> 0 then
+    Exit;
+
+  Names := ListMigrations(MigDir);
+  try
+    if Names.Count = 0 then
+    begin
+      Log('[PABB90] Aucune migration trouvée dans ' + MigDir);
+      Exit;
+    end;
+
+    for i := 0 to Names.Count - 1 do
+    begin
+      MigFile := Names[i];
+      Underscore := Pos('_', MigFile);
+      if Underscore < 2 then
+        Continue;
+      Version := Copy(MigFile, 1, Underscore - 1);
+
+      if SqlScalar(MysqlExe, RootAuth,
+           'SELECT COUNT(*) FROM schema_migrations WHERE version = ''' + Version + '''') = '1' then
+      begin
+        Log('[PABB90] Migration ' + MigFile + ' déjà appliquée');
+        Continue;
+      end;
+
+      SetProgress('Application de la migration ' + MigFile + '...');
+      if not ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' fft < "' +
+           MigDir + '\' + MigFile + '" >> "' + DbLog + '" 2>&1', '', ExitCode) then
+        Exit;
+      if ExitCode <> 0 then
+      begin
+        Log('[PABB90] Échec de la migration ' + MigFile + ' (code ' + IntToStr(ExitCode) + ')');
+        Exit;
+      end;
+
+      if not ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' fft -e "' +
+           'INSERT INTO schema_migrations (version, filename) VALUES (' +
+           '''' + Version + ''', ''' + MigFile + ''');" >> "' + DbLog + '" 2>&1',
+           '', ExitCode) then
+        Exit;
+      if ExitCode <> 0 then
+        Exit;
+
+      Log('[PABB90] Migration ' + MigFile + ' appliquée');
+    end;
+  finally
+    Names.Free;
+  end;
+  Result := True;
+end;
+
 function ConfigureDatabase(const MysqlExe: String): Boolean;
 var
   ExitCode: Integer;
@@ -386,10 +522,17 @@ begin
     Exit;
   end;
 
-  ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' < "' + ExpandConstant('{app}\db.sql') + '" >> "' + DbLog + '" 2>&1',
-               '', ExitCode);
-  ExecCmdShell('"' + MysqlExe + '" ' + RootAuth + ' fft < "' + ExpandConstant('{app}\seed.sql') + '" >> "' + DbLog + '" 2>&1',
-               '', ExitCode);
+  // Migrations : installe le schema sur une base vierge, n'applique que les
+  // migrations manquantes sur une base existante. Plus aucun jeu de demo
+  // n'est pose ici : une installation part sur une base propre.
+  if not RunMigrations(MysqlExe, RootAuth, DbLog) then
+  begin
+    SuppressibleMsgBox('Echec de la migration du schema de la base.'#13#10 +
+           'Voir db-setup.log pour le detail de l''erreur MariaDB.',
+           mbCriticalError, MB_OK, IDOK);
+    Result := False;
+    Exit;
+  end;
 
   EnvFile := ExpandConstant('{app}\.env');
   EnvContent :=

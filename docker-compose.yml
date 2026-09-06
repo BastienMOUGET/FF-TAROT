@@ -40,6 +40,11 @@ services:
       DB_NAME: fft
       JWT_SECRET: change-me-in-production-please
       SOCKET_PORT: 3001
+      # Le conteneur applique les migrations en attente à chaque démarrage :
+      # un volume existant est mis à niveau sans perdre les données du club.
+      # Mettre à 1 pour charger en plus le jeu de démo (club et tournoi de
+      # test) — ignoré si la base contient déjà des données.
+      FFT_SEED_DEMO: 0
     ports:
       - '3000:3000'
       - '3001:3001'   # Socket.IO (classement live)

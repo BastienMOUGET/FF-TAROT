@@ -18,6 +18,7 @@ import {
   Club,
   PenaltyType,
   Player,
+  PlayerReferencedError,
   User,
 } from '../../core/api.types';
 import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
@@ -301,12 +302,73 @@ export class AdminPage implements OnInit {
   editPlayer(player: Player) {
     this.openDialog(PlayerDialog, { player }, () => this.reloadPlayers());
   }
+  // Un joueur inscrit à un tournoi est protégé par des clés étrangères côté
+  // base. Plutôt que d'afficher un « suppression impossible » sans suite, on
+  // montre ce qui bloque et — si aucun résultat n'est en jeu — on propose de
+  // supprimer quand même.
   deletePlayer(p: Player) {
-    this.confirmAndDelete(
-      `Supprimer ${p.name} ${p.firstname} ?`,
-      () => this.api.deletePlayer(p.id),
-      () => this.reloadPlayers()
-    );
+    const who = `${p.firstname} ${p.name}`;
+    this.confirm({
+      title: 'Confirmation',
+      message: `Supprimer ${who} ?`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+    }).subscribe((ok) => {
+      if (!ok) return;
+      this.api.deletePlayer(p.id).subscribe({
+        next: () => this.onPlayerDeleted(),
+        error: (err: any) => this.onPlayerDeleteBlocked(p, who, err),
+      });
+    });
+  }
+
+  private onPlayerDeleteBlocked(p: Player, who: string, err: any) {
+    const detail = err?.error as PlayerReferencedError | undefined;
+    if (err?.status !== 409 || detail?.code !== 'player_referenced') {
+      this.snack.open(detail?.error || 'Suppression impossible', 'Fermer', {
+        duration: 4000,
+      });
+      return;
+    }
+
+    const list = detail.tournaments.map((t) => `  • ${t.name}`).join('\n');
+    const plural = detail.tournaments.length > 1 ? 'ces tournois' : 'ce tournoi';
+
+    // Résultats déjà saisis : la seule issue propre est de supprimer le
+    // tournoi d'abord. On le dit, au lieu de laisser l'utilisateur bloqué.
+    if (!detail.can_force) {
+      this.confirm({
+        title: 'Suppression impossible',
+        message: `${detail.error}\n\nTournoi(s) concerné(s) :\n${list}`,
+        confirmLabel: 'Fermer',
+        hideCancel: true,
+      }).subscribe();
+      return;
+    }
+
+    this.confirm({
+      title: 'Joueur inscrit à un tournoi',
+      message:
+        `${detail.error}\n\nTournoi(s) concerné(s) :\n${list}\n\n` +
+        `Le supprimer retirera aussi son équipe de ${plural}. ` +
+        `Ses coéquipiers ne seront plus inscrits, mais ils ne seront pas supprimés.`,
+      confirmLabel: 'Supprimer quand même',
+      danger: true,
+    }).subscribe((ok) => {
+      if (!ok) return;
+      this.api.deletePlayer(p.id, true).subscribe({
+        next: () => this.onPlayerDeleted(),
+        error: (e: any) =>
+          this.snack.open(e?.error?.error || 'Suppression impossible', 'Fermer', {
+            duration: 4000,
+          }),
+      });
+    });
+  }
+
+  private onPlayerDeleted() {
+    this.snack.open('Supprimé', 'Fermer', { duration: 1500 });
+    this.reloadPlayers();
   }
 
   /* ----- Clubs ----- */
@@ -377,20 +439,21 @@ export class AdminPage implements OnInit {
     });
   }
 
+  private confirm(data: ConfirmDialogData) {
+    return this.dialog.open(ConfirmDialog, { data, width: '520px' }).afterClosed();
+  }
+
   private confirmAndDelete(
     message: string,
     deleteFn: () => any,
     onDone: () => void
   ) {
-    const data: ConfirmDialogData = {
+    this.confirm({
       title: 'Confirmation',
       message,
       confirmLabel: 'Supprimer',
       danger: true,
-    };
-    this.dialog
-      .open(ConfirmDialog, { data })
-      .afterClosed()
+    })
       .subscribe((ok) => {
         if (!ok) return;
         deleteFn().subscribe({

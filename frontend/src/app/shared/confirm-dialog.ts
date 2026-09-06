@@ -13,6 +13,8 @@ export interface ConfirmDialogData {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  // Dialogue purement informatif : un seul bouton, pas de choix à faire.
+  hideCancel?: boolean;
 }
 
 @Component({
@@ -27,9 +29,11 @@ export interface ConfirmDialogData {
     </h2>
     <mat-dialog-content>{{ data.message }}</mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button (click)="ref.close(false)">
-        {{ data.cancelLabel || 'Annuler' }}
-      </button>
+      @if (!data.hideCancel) {
+        <button mat-button (click)="ref.close(false)">
+          {{ data.cancelLabel || 'Annuler' }}
+        </button>
+      }
       <button
         mat-flat-button
         [color]="data.danger ? 'warn' : 'primary'"
@@ -42,6 +46,9 @@ export interface ConfirmDialogData {
   styles: `
     h2 { display: flex; align-items: center; gap: 8px; }
     .warn-icon { color: #f57c00; }
+    /* Les messages détaillés (listes de tournois bloquants) contiennent des
+       retours ligne : sans ceci ils s'affichent en un seul paragraphe. */
+    mat-dialog-content { white-space: pre-line; }
   `,
 })
 export class ConfirmDialog {

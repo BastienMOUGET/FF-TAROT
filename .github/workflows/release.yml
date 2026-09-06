@@ -120,6 +120,20 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "amc package add $p a échoué" }
           }
 
+      # Les entrées ci-dessus épinglent un TAG ; amalgame.lock épingle un REV.
+      # Un tag amont peut être redéplacé sur un autre commit : la release se
+      # construirait alors sur du code que le lock ne décrit pas, sans qu'aucun
+      # fichier du dépôt n'ait changé. amc réécrit le lock avec ce qu'il a
+      # réellement installé — s'il bouge, on arrête tout.
+      - name: Verify locked versions unchanged
+        shell: bash
+        run: |
+          if ! git diff --exit-code -- amalgame.lock amalgame.toml; then
+            echo "::error::Les versions installées diffèrent d'amalgame.lock (voir le diff)."
+            echo "Un tag amont a probablement bougé. Vérifier en local, puis committer le lock." >&2
+            exit 1
+          fi
+
       - name: Build server.exe (build.ps1) + bundle DLL
         shell: pwsh
         run: |

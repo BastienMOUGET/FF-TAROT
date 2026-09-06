@@ -38,9 +38,38 @@ jobs:
           echo "$HOME/amc-${AMC_VERSION}-linux-x86_64/bin" >> "$GITHUB_PATH"
           ls "$HOME/amc-${AMC_VERSION}-linux-x86_64/bin"
 
-      - name: Resolve amalgame packages
+      # Les versions viennent d'amalgame.lock, pas d'une liste en dur : sans
+      # @tag, `amc package add` résout "la dernière compatible" et la CI ne
+      # teste alors plus ce que la release construit.
+      - name: Resolve amalgame packages (versions d'amalgame.lock)
         run: |
-          for p in web net-http crypto mysql threading service; do amc package add "$p"; done
+          awk '/^\[\[package\]\]/{g="";t=""} /^git/{gsub(/"/,"",$3);g=$3} \
+               /^tag/{gsub(/"/,"",$3);t=$3; if (g!="") print g"@"t}' amalgame.lock \
+            | while read -r p; do
+                echo "=== amc package add $p ==="
+                amc package add "$p"
+              done
+          # amalgame-web épingle (dans son propre lock) net-http v0.24.0 +
+          # tls v0.3.3, versions PRÉ-port-Windows. amalgame.lock étant clé par
+          # nom, `add web` rétrograde ces entrées. On les ré-ajoute EN DERNIER,
+          # comme release.yml, pour que le lock garde les versions portées.
+          for p in net-http@v0.26.1 tls@v0.3.5 async@v0.4.0; do
+            amc package add "github.com/amalgame-lang/amalgame-${p}"
+          done
+
+      # amc package add réécrit amalgame.lock/.toml avec ce qu'il a VRAIMENT
+      # installé. S'ils bougent, c'est que le build ne correspond plus à ce qui
+      # est committé : soit un tag amont a été redéplacé sur un autre commit
+      # (un tag n'est pas immuable, contrairement au rev du lock), soit amc a
+      # résolu une autre version. On refuse de builder à l'aveugle.
+      - name: Verify locked versions unchanged
+        run: |
+          if ! git diff --exit-code -- amalgame.lock amalgame.toml; then
+            echo "::error::Les versions installées diffèrent d'amalgame.lock (voir le diff)."
+            echo "Un tag amont a probablement bougé. Relancer 'amc package add' en local," >&2
+            echo "vérifier que le build passe, puis committer le lock mis à jour." >&2
+            exit 1
+          fi
 
       - name: Build back AM (build.sh → server)
         run: |
@@ -58,15 +87,35 @@ jobs:
       - name: Verify front bundle
         run: test -f frontend/dist/frontend/browser/index.html
 
-      # ---- Validation db.sql + scripts ----
-      - name: Validate db.sql sentinels
+      # ---- Validation des migrations + scripts ----
+      - name: Validate migration sentinels
         run: |
-          grep -q 'CREATE TABLE users' db.sql
-          grep -q 'CREATE TABLE players' db.sql
-          grep -q 'scrypt' db.sql
+          grep -q 'CREATE TABLE IF NOT EXISTS users' migrations/001_baseline.sql
+          grep -q 'CREATE TABLE IF NOT EXISTS players' migrations/001_baseline.sql
+          grep -q 'scrypt' migrations/001_baseline.sql
+          # Une migration ne doit jamais détruire une table : c'est ce qui
+          # faisait perdre les données du club à chaque réinstallation.
+          ! grep -riE '^[[:space:]]*(DROP TABLE|DROP DATABASE|TRUNCATE)' migrations/
+          # Chaque migration doit être préfixée d'un numéro d'ordre unique.
+          test "$(ls migrations/*.sql | wc -l)" -eq \
+               "$(ls migrations/*.sql | xargs -n1 basename | cut -d_ -f1 | sort -u | wc -l)"
 
       - name: Lint shell scripts
         run: |
           bash -n install.sh
           bash -n build.sh
           bash -n docker-entrypoint.sh
+          bash -n migrate.sh
+          bash -n update-db.sh
+          bash -n reset-db.sh
+
+      - name: Lint PowerShell scripts
+        shell: pwsh
+        run: |
+          foreach ($f in @('install.ps1', 'migrate.ps1', 'build.ps1')) {
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $f), [ref]$null, [ref]$errs) | Out-Null
+            if ($errs) { Write-Host "$f :"; $errs | ForEach-Object { Write-Host "  $_" }; exit 1 }
+            Write-Host "$f OK"
+          }

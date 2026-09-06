@@ -56,6 +56,25 @@ export interface Player {
   club_member: boolean;
 }
 
+// Réponse 409 de DELETE /api/players/:id quand le joueur est engagé quelque
+// part. Le back détaille ce qui bloque pour qu'on puisse l'expliquer et, si
+// aucun résultat n'est en jeu (can_force), proposer une suppression forcée.
+export interface PlayerReferencedError {
+  error: string;
+  code: 'player_referenced';
+  can_force: boolean;
+  teams: number;
+  seats: number;
+  penalties: number;
+  rankings: number;
+  tournaments: {
+    id: number;
+    name: string;
+    status: 'draft' | 'open' | 'running' | 'closed';
+    erasable: boolean;
+  }[];
+}
+
 export interface PlayerImportRow {
   licence: string | null;
   name: string;

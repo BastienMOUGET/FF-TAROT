@@ -1,7 +1,6 @@
 -- =====================================================
 -- FFT TAROT - SEED minimal pour dev / tests manuels
 -- =====================================================
-USE fft;
 
 -- ----- nettoyage (ordre inverse des FK) -----
 -- NOTE: users n'est pas truncate ici (l'admin par défaut est créé dans db.sql)

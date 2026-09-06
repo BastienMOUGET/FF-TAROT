@@ -94,4 +94,13 @@ public class J {
         o.AppendEntry("error", J.Str(msg))
         return HttpResponse.New().Status(status).Json(Json.Encode(o))
     }
+
+    // Erreur accompagnée d'une charge utile. Le front a besoin du détail
+    // (quoi exactement bloque, l'action est-elle rattrapable) pour proposer
+    // une suite plutôt que d'afficher un message mort.
+    // `o` est complété avec la clé "error" puis sérialisé.
+    public static HttpResponse ErrWith(int status, string msg, JsonValue o) {
+        o.AppendEntry("error", J.Str(msg))
+        return HttpResponse.New().Status(status).Json(Json.Encode(o))
+    }
 }

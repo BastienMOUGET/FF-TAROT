@@ -224,15 +224,119 @@ public class ModPlayers {
         return J.Ok(result)
     }
 
+    // ── Suppression ──────────────────────────────────────
+    // Un joueur engagé dans un tournoi est protégé par des FK RESTRICT
+    // (team_players, seats, penalties). Renvoyer un « référencé » opaque
+    // laissait l'utilisateur sans recours : on explique désormais ce qui
+    // bloque, et on autorise le forçage tant qu'aucun résultat n'est en jeu.
+
+    static int CountRefs(Db db, string sql, string id) {
+        let rows: List<List<string>> = db.Rows(sql, Db.P1(id))
+        if (rows.Count() == 0) { return 0 }
+        let r0: List<string> = rows.Get(0)
+        return Db.CellInt(r0.Get(0))
+    }
+
+    // Tournois où le joueur apparaît, par inscription, placement ou pénalité.
+    static List<List<string>> RefTournaments(Db db, string id) {
+        let sql: string = "SELECT DISTINCT t.id, t.name, t.status FROM tournaments t WHERE t.id IN ("
+            + "SELECT st.tournament_id FROM team_players tp"
+            + " JOIN teams tm ON tm.id = tp.team_id"
+            + " JOIN sub_tournaments st ON st.id = tm.sub_tournament_id"
+            + " WHERE tp.player_id = ?"
+            + " UNION SELECT st2.tournament_id FROM seats s"
+            + " JOIN rounds r ON r.id = s.round_id"
+            + " JOIN sub_tournaments st2 ON st2.id = r.sub_tournament_id"
+            + " WHERE s.player_id = ?"
+            + " UNION SELECT pe.tournament_id FROM penalties pe WHERE pe.player_id = ?"
+            + ") ORDER BY t.name ASC"
+        return db.Rows(sql, Db.P3(id, id, id))
+    }
+
+    static string Plural(int n, string one, string many) {
+        if (n <= 1) { return String.FromInt(n) + " " + one }
+        return String.FromInt(n) + " " + many
+    }
+
+    // DELETE /api/players/:id            → refuse si le joueur est engagé
+    // DELETE /api/players/:id?force=1    → supprime aussi ses engagements,
+    //                                      à condition qu'aucun tournoi
+    //                                      concerné n'ait démarré.
     public static HttpResponse Remove(WebContext ctx, Db db) {
         let rc: int = Auth.CheckRole(ctx, "admin")
         if (rc == 401) { return HttpErr.Unauthorized() }
         if (rc == 403) { return HttpErr.Forbidden() }
 
         let id: string = ctx.Param("id")
-        let ok: bool = db.Exec("DELETE FROM players WHERE id = ?", Db.P1(id))
-        if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        let force: string = ctx.QueryParam("force")
+        let forced: bool = force == "1" || force == "true"
+
+        let ex: List<List<string>> = db.Rows("SELECT name, firstname FROM players WHERE id = ?", Db.P1(id))
+        if (ex.Count() == 0) { return HttpErr.NotFound() }
+        let e0: List<string> = ex.Get(0)
+        let who: string = e0.Get(1) + " " + e0.Get(0)
+
+        let nTeams: int = ModPlayers.CountRefs(db, "SELECT COUNT(*) FROM team_players WHERE player_id = ?", id)
+        let nSeats: int = ModPlayers.CountRefs(db, "SELECT COUNT(*) FROM seats WHERE player_id = ?", id)
+        let nPen:   int = ModPlayers.CountRefs(db, "SELECT COUNT(*) FROM penalties WHERE player_id = ?", id)
+        let nRank:  int = ModPlayers.CountRefs(db, "SELECT COUNT(*) FROM rankings WHERE player_id = ?", id)
+
+        // Joueur jamais engagé : suppression directe, sans confirmation extra.
+        if (nTeams + nSeats + nPen + nRank == 0) {
+            let okDel: bool = db.Exec("DELETE FROM players WHERE id = ?", Db.P1(id))
+            if (!okDel) { return HttpErr.FromDb(db.LastError()) }
+            return J.NoContent()
+        }
+
+        // Un tournoi 'draft'/'open' n'a pas encore de résultat : on peut en
+        // retirer un joueur. 'running'/'closed' portent des scores, qu'une
+        // suppression de joueur n'a pas à réécrire — même en forçant.
+        let tours: List<List<string>> = ModPlayers.RefTournaments(db, id)
+        var locked: string = ""
+        let tArr: JsonValue = J.Arr()
+        for i in 0..tours.Count() {
+            let t: List<string> = tours.Get(i)
+            let status: string = t.Get(2)
+            let erasable: bool = status == "draft" || status == "open"
+            if (!erasable && String.Length(locked) == 0) { locked = t.Get(1) }
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("id", J.CellInt(t.Get(0)))
+            o.AppendEntry("name", J.CellStr(t.Get(1)))
+            o.AppendEntry("status", J.CellStr(status))
+            o.AppendEntry("erasable", J.Bool(erasable))
+            tArr.AppendItem(o)
+        }
+        let canForce: bool = String.Length(locked) == 0
+
+        if (!forced || !canForce) {
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("code", J.Str("player_referenced"))
+            o.AppendEntry("can_force", J.Bool(canForce))
+            o.AppendEntry("teams", J.Int(nTeams))
+            o.AppendEntry("seats", J.Int(nSeats))
+            o.AppendEntry("penalties", J.Int(nPen))
+            o.AppendEntry("rankings", J.Int(nRank))
+            o.AppendEntry("tournaments", tArr)
+            var msg: string = ""
+            if (canForce) {
+                msg = who + " est inscrit dans " + ModPlayers.Plural(tours.Count(), "tournoi", "tournois") + " qui n'a pas encore démarré."
+            } else {
+                msg = who + " a des résultats dans le tournoi « " + locked + " ». Supprimez d'abord ce tournoi si vous voulez supprimer le joueur."
+            }
+            return J.ErrWith(409, msg, o)
+        }
+
+        // Forçage : on retire les engagements avant le joueur. Une équipe
+        // Libre par 4 amputée d'un joueur n'est plus jouable, donc on
+        // supprime l'équipe entière (ses autres team_players suivent en
+        // cascade) plutôt que la seule ligne du joueur.
+        db.Begin()
+        if (!db.Exec("DELETE FROM rankings WHERE player_id = ?", Db.P1(id))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        if (!db.Exec("DELETE FROM penalties WHERE player_id = ?", Db.P1(id))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        if (!db.Exec("DELETE FROM seats WHERE player_id = ?", Db.P1(id))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        if (!db.Exec("DELETE FROM teams WHERE id IN (SELECT team_id FROM team_players WHERE player_id = ?)", Db.P1(id))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        if (!db.Exec("DELETE FROM players WHERE id = ?", Db.P1(id))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        db.Commit()
         return J.NoContent()
     }
 }

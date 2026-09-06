@@ -6,6 +6,92 @@
 
 ---
 
+## ✅ v3.0.20 — Migrations de base + suppression de joueur *(en cours)*
+
+Lève la « limite connue » de v3.0.19 (voir plus bas) et débloque le
+second retour terrain du beau-père : *« je ne peux pas tous les
+supprimer, ça dit suppression impossible (référencé) »*.
+
+### Migrations de schéma
+
+Le schéma n'est plus appliqué en bloc. `db.sql` (qui commençait par 25
+`DROP TABLE`) disparaît au profit de `migrations/NNN_*.sql`, appliqués
+un par un et tracés dans la table `schema_migrations` :
+
+- base vierge → installation complète ;
+- base à jour → rien ;
+- base d'une version antérieure → seules les migrations manquantes,
+  **sans perdre les données du club**.
+
+Les 4 chemins d'installation appliquent les mêmes fichiers `.sql` :
+`install.sh` → `migrate.sh` ; Docker → `migrate.sh` à chaque démarrage
+du conteneur ; l'installeur Windows `.exe` → `RunMigrations()` en Pascal
+natif dans `setup.iss` (il reste sans PowerShell) ; `install.ps1` →
+`migrate.ps1`. Outils dev/ops : `migrate.sh --status`, `update-db.sh`,
+`reset-db.sh`.
+
+`002_reconcile_pre_migration_schema.sql` rattrape les bases installées
+avant ce système : `001_baseline.sql` est en `CREATE TABLE IF NOT
+EXISTS` et ne touche pas une table existante, il n'aurait donc jamais
+ajouté `players.club_member` ni `tournaments.challenge_mode` — les deux
+colonnes précisément identifiées comme manquantes en v3.0.19. Vérifié
+sur une vraie base pré-migrations : la liste des joueurs revenait vide
+(le back sélectionne `p.club_member`, la requête échouait en silence).
+La règle qui en découle est écrite dans `migrations/README.md` : une
+colonne s'ajoute toujours dans un **nouveau** fichier, jamais en
+éditant `001`.
+
+Le jeu de démo (« Club Test FFT », « Tournoi Test FFT ») n'est plus
+installé par défaut — c'est lui qui a créé les données que le beau-père
+essayait de supprimer. Il devient explicite : `install.sh --with-demo`,
+`install.ps1 -WithDemo`, `FFT_SEED_DEMO=1` en Docker, et n'est chargé
+que sur une base vierge. La CI refuse tout `DROP TABLE` / `TRUNCATE`
+dans `migrations/`.
+
+### Comptes bloqués par un hash hérité
+
+`003_legacy_password_hashes.sql` : l'ancien back Node hachait en bcrypt,
+le back Amalgame vérifie en scrypt via `Password.Verify`. Un compte
+bcrypt ne peut plus s'authentifier du tout — et si c'est le seul admin,
+l'application devient inaccessible sans écran de récupération. La
+migration remet ces comptes **admin** sur `admin123`. Elle n'affaiblit
+rien : le hash visé est déjà invérifiable, le compte est mort avant
+comme après, la migration le rend seulement récupérable. Les comptes
+arbitre/viewer hérités restent inactifs volontairement (plutôt que de
+devenir des accès vivants sur un mot de passe connu) ; l'admin les
+réinitialise depuis l'onglet Utilisateurs.
+
+### Dérive de versions des dépendances (CI)
+
+`release.yml` épingle les paquets par **tag**, `amalgame.lock` les
+enregistre par **commit** — et un tag amont n'est pas immuable. Constaté :
+`amalgame-datetime` v0.2.2 et `amalgame-logging` v0.2.0 avaient été
+redéployés sur d'autres commits, donc la release se construisait sur du
+code que le lock ne décrivait pas, sans qu'aucun fichier du dépôt n'ait
+bougé. Les revs du lock sont réalignés, et les deux workflows échouent
+désormais si `amc package add` fait bouger `amalgame.lock`/`.toml`.
+`ci.yml` résout en plus ses paquets **depuis le lock** au lieu d'une
+liste en dur sans version (sans `@tag`, `amc package add` prend « la
+dernière compatible » : la CI ne testait donc pas ce que la release
+construit).
+
+### Suppression d'un joueur référencé
+
+`DELETE /api/players/:id` renvoyait un « Suppression impossible
+(référencé) » sans issue. Il renvoie désormais un 409 détaillé (quels
+tournois, combien d'inscriptions/placements/pénalités, forçage
+possible ou non), et l'admin affiche un dialogue qui nomme les tournois
+bloquants :
+
+- tournoi pas encore démarré (`draft`/`open`) → bouton **« Supprimer
+  quand même »**, qui retire aussi l'équipe du joueur (une équipe Libre
+  par 4 amputée d'un joueur n'est plus jouable ; ses coéquipiers
+  redeviennent non inscrits mais ne sont pas supprimés) ;
+- tournoi `running`/`closed` → refusé même en forçant, avec le nom du
+  tournoi à supprimer d'abord. On ne réécrit pas des résultats.
+
+---
+
 ## ✅ v3.0.18–v3.0.19 — Retour terrain (beau-père) *(livré, 2026-09-03)*
 
 Analyse d'un mémo écrit après test réel de l'appli (`feedback/` — non
@@ -43,11 +129,13 @@ FFT encore utilisé au club).
   sur un poste ayant accumulé plusieurs versions d'un même package.
   N'affecte pas le pipeline de release (runner CI toujours propre).
 
-**Limite connue de l'appli** : `db.sql` n'est appliqué qu'à la première
-init d'une base — pas de migrations. Passer à ces versions sur une
-installation existante demande soit une réinstall (perte des données),
-soit un `ALTER TABLE` manuel pour les 2 colonnes ajoutées
-(`tournaments.challenge_mode`, `players.club_member`).
+**Limite connue de l'appli** *(levée en v3.0.20)* : `db.sql` n'est
+appliqué qu'à la première init d'une base — pas de migrations. Passer à
+ces versions sur une installation existante demande soit une réinstall
+(perte des données), soit un `ALTER TABLE` manuel pour les 2 colonnes
+ajoutées (`tournaments.challenge_mode`, `players.club_member`).
+→ C'est exactement ce que fait désormais
+`migrations/002_reconcile_pre_migration_schema.sql`, automatiquement.
 
 ---
 

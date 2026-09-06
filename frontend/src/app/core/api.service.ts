@@ -61,8 +61,13 @@ export class ApiService {
     this.http.post<Player>(`${this.base}/players`, data);
   updatePlayer = (id: number, data: Partial<Player>): Observable<Player> =>
     this.http.put<Player>(`${this.base}/players/${id}`, data);
-  deletePlayer = (id: number): Observable<void> =>
-    this.http.delete<void>(`${this.base}/players/${id}`);
+  // force = true supprime aussi les engagements du joueur (inscriptions,
+  // placements, pénalités). Le back le refuse si un tournoi concerné a
+  // démarré : on ne réécrit pas des résultats.
+  deletePlayer = (id: number, force = false): Observable<void> =>
+    this.http.delete<void>(`${this.base}/players/${id}`, {
+      params: force ? { force: '1' } : {},
+    });
   importPlayers = (players: PlayerImportRow[]): Observable<PlayerImportResult> =>
     this.http.post<PlayerImportResult>(`${this.base}/players/import`, { players });
 

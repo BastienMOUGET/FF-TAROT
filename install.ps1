@@ -19,6 +19,11 @@
 #                 ses propres raccourcis via [Icons]).
 #   -NoStart      Ne pas lancer le serveur ni ouvrir le navigateur à la fin
 #                 (utilisé par Inno Setup qui gère sa propre étape postinstall).
+#   -WithDemo     Charge le jeu de démo (club/tournoi de test), uniquement si
+#                 la base est vierge.
+#
+# Réinstallation : le schéma passe par migrate.ps1, qui n'applique que les
+# migrations manquantes. Les données déjà en base sont conservées.
 #
 # Si la politique d'exécution refuse, lancer une fois en admin :
 #   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
@@ -27,7 +32,8 @@
 
 param(
     [switch]$NoShortcut,
-    [switch]$NoStart
+    [switch]$NoStart,
+    [switch]$WithDemo
 )
 
 $ErrorActionPreference = 'Stop'
@@ -171,10 +177,15 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Ok "Base $DB_NAME prête"
 
-Write-Step "Application du schéma db.sql + seed.sql..."
-Get-Content (Join-Path $InstallDir 'db.sql')   | & $MysqlBin --user=root
-Get-Content (Join-Path $InstallDir 'seed.sql') | & $MysqlBin --user=root $DB_NAME
-Write-Ok "Schéma + seed appliqués"
+# Migrations : installe le schéma sur une base vierge, applique seulement
+# les migrations manquantes sur une base existante. Réinstaller par-dessus
+# une base qui contient les données du club ne les efface donc plus.
+Write-Step "Migration du schéma..."
+$MigrateArgs = @('-AsRoot', '-MysqlBin', $MysqlBin)
+if ($WithDemo) { $MigrateArgs += '-Seed' }
+$env:DB_NAME = $DB_NAME
+& (Join-Path $InstallDir 'migrate.ps1') @MigrateArgs
+if ($LASTEXITCODE -ne 0) { Write-Err2 "Échec de la migration de la base."; exit 1 }
 
 # ---------------------------- .env ----------------------------
 

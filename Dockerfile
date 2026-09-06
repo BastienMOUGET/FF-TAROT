@@ -24,22 +24,25 @@ RUN npm run build
 FROM debian:12-slim
 
 # Libs runtime du binaire AM : libmariadb (DB), libgc (bdwgc), openssl,
-# zlib. mariadb-client : appliquer db.sql/seed.sql au premier boot.
+# zlib. mariadb-client : appliquer les migrations au boot (migrate.sh).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libmariadb3 libgc1 libssl3 zlib1g mariadb-client ca-certificates bash \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Binaire back AM pré-buildé (./build.sh) + schéma SQL
+# Binaire back AM pré-buildé (./build.sh) + migrations SQL.
+# migrate.sh n'applique que les migrations manquantes : un volume de données
+# existant survit donc à une montée de version de l'image.
 COPY server ./server
-COPY db.sql seed.sql ./
+COPY migrate.sh seed.sql ./
+COPY migrations/ ./migrations/
 
 # Front buildé depuis l'étape précédente
 COPY --from=front-builder /app/frontend/dist /app/frontend/dist
 
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh /app/server
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /app/server /app/migrate.sh
 
 # 3000 = API + front ; 3001 = Socket.IO (classement live)
 EXPOSE 3000 3001

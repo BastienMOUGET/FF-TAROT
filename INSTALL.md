@@ -132,7 +132,9 @@ C'est tout. Le `docker-compose.yml` lance :
 - Un conteneur `db` (MariaDB 11) avec volume persistant
 - Un conteneur `app` (Node + bundle Angular) qui :
   1. attend que la DB soit healthy
-  2. au premier démarrage, applique `db.sql` + `seed.sql`
+  2. applique les migrations en attente (`migrate.sh`) — installation
+     complète sur un volume vierge, mise à niveau sans perte sur un
+     volume qui contient déjà les données du club
   3. sert l'API + le front sur le port 3000
 
 URL : http://localhost:3000 (admin / admin123)
@@ -212,8 +214,17 @@ Aller manuellement sur http://localhost:3000
 - Vérifier que `frontend/dist/frontend/browser/index.html` existe
 - Sinon : `cd frontend && npm run build`
 
-### Réinitialiser la base de zéro
+### Mettre la base à niveau après une mise à jour
+Les installeurs le font tout seuls. Manuellement :
 ```bash
-mysql -u root < db.sql
-mysql -u root fft < seed.sql
+./migrate.sh --status      # ce qui est appliqué / en attente
+sudo ./migrate.sh --as-root
+```
+Aucune donnée n'est perdue : seules les migrations absentes de la table
+`schema_migrations` sont jouées.
+
+### Réinitialiser la base de zéro (DÉTRUIT TOUT — dev uniquement)
+```bash
+./reset-db.sh          # base vide
+./reset-db.sh --seed   # + jeu de démo (club et tournoi de test)
 ```
