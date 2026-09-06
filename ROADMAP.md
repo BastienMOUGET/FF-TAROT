@@ -75,6 +75,19 @@ liste en dur sans version (sans `@tag`, `amc package add` prend « la
 dernière compatible » : la CI ne testait donc pas ce que la release
 construit).
 
+Le garde-fou a immédiatement révélé un troisième écart, invisible
+jusque-là : **`amc package add` n'honore pas le tag épinglé pour
+`crypto`**. Malgré `amalgame-crypto@v0.7.0` en URL complète dans
+`release.yml`, il installe v0.8.0 et réécrit `amalgame.lock`/`.toml`.
+Les releases construisaient donc contre v0.8.0 alors que le dépôt
+affichait v0.7.0. Le lock est aligné sur v0.8.0 (la version réellement
+utilisée — aligner ne change donc rien au binaire produit), et vérifié :
+crypto v0.8.0 valide bien le hash scrypt du compte admin, dont dépendent
+`001` et `003`. La cause probable est la même que celle déjà documentée
+pour net-http/tls : `amalgame.lock` étant clé par **nom**, un paquet
+ajouté ensuite et dépendant d'un `crypto` plus récent écrase l'entrée.
+À signaler en amont à `amc`.
+
 ### Suppression d'un joueur référencé
 
 `DELETE /api/players/:id` renvoyait un « Suppression impossible
