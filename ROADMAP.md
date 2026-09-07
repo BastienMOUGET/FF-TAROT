@@ -6,6 +6,96 @@
 
 ---
 
+## ✅ v3.0.21 — Blocage du lendemain (connexion DB) + retour terrain n°3 *(livré, 2026-09-07)*
+
+### Le vrai « impossible de se connecter le lendemain »
+
+Troisième mémo du beau-père (`feedback/Copie de
+Memo-Analyse-tarot-PABB90.pdf`, v3.0.19, poste **Windows**) : installé le
+vendredi, compte `cclaude` créé et utilisé ; le samedi matin, **ni
+admin/admin123 ni cclaude** ne passent, jusqu'à une désinstallation /
+réinstallation. Un compte créé la veille par le back v3.0.19 est en scrypt :
+le hash bcrypt hérité (migration `003`, v3.0.20) n'explique donc pas ce
+blocage. La migration reste utile mais ne corrige pas ce cas.
+
+Cause reproduite le 2026-09-07 sur une MariaDB jetable (`wait_timeout=5`) :
+le back ouvrait **une** connexion au démarrage et ne la vérifiait plus
+jamais. Deux façons de la perdre, même symptôme :
+
+- MariaDB ferme toute connexion inactive depuis `wait_timeout` (**8 h** par
+  défaut) → le lendemain matin, chaque requête échoue ;
+- au boot Windows, le service PABB90 démarre avant le service MariaDB →
+  `Open()` échoue et le handle reste vide.
+
+Dans les deux cas `Rows()` rend une liste vide, le login répond
+« Identifiants invalides » à tout le monde, et seul un redémarrage du service
+(ou une réinstallation, qui le redémarre) débloque. Le journal du service
+disait bien « DB: connexion impossible », mais personne ne le lit.
+
+Correctifs :
+
+- `lib/db.am` : sur une erreur de connexion (2003/2006/2013 ou handle
+  jamais ouvert), fermeture, réouverture et rejeu de la requête, une fois.
+  Sans coût quand tout va bien (pas de requête de sonde). `Begin` est
+  rejouable, `Commit`/`Rollback` non (la transaction est déjà perdue).
+- `server.am` : au démarrage, 30 tentatives à 1 s d'intervalle avant de
+  servir ; si la base n'est toujours pas là, on sert quand même et la
+  reconnexion à la demande prend le relais.
+- `installer/setup.iss` : `sc config PABB90 depend= MariaDB`, posé
+  seulement si un service `MariaDB` existe (celui de notre MSI). Une
+  dépendance vers un service absent empêcherait PABB90 de démarrer.
+- `migrate.ps1` : `$OutputEncoding` forcé en UTF-8 — Windows PowerShell 5.1
+  pipe en ASCII par défaut et aurait cassé les accents des données de
+  référence (« Téléphone à table »). Le chemin `.exe` (redirection cmd)
+  n'était pas concerné.
+
+Vérifié (binaire Linux, base jetable) : login OK après coupure par
+`wait_timeout` ; serveur lancé avant la base → attend puis sert ; base
+absente plus de 30 s puis disponible → première requête reconnecte.
+
+Piège rencontré pendant ces tests, à connaître : le listener HTTP est en
+`SO_REUSEPORT`, donc **plusieurs instances du back peuvent écouter le même
+port sans erreur** et le noyau répartit les connexions entre elles. Trois
+serveurs de test « tués » avec un simple `kill` étaient encore vivants et
+répondaient à tour de rôle avec des connexions DB mortes — d'où un login
+qui semblait aléatoire. Avant tout test : `ss -ltnp | grep <port>`,
+et `kill -9`.
+
+### Retour terrain n°3 — reste du mémo (backlog, non traité ici)
+
+Vocabulaire : « Sous-tournois » → « Tournois » ; « Cumul brut » → « Par
+points » ; bouton « Équipes » → « Joueurs ».
+
+Page tournoi / challenge : la liste des tournois et « Ajouter » **en haut**,
+le classement trimestriel en bas (dans les deux écrans) ; ouvrir un tournoi
+ajouté sur sa propre page.
+
+Feuille de route : aux tables de 3, la place vide est toujours Nord et
+toujours la même table → choix aléatoire de la table à 3 et de la place
+vide ; mémoriser l'orientation tirée pour l'afficher en colonne des
+classements. Impression : une seule page, tableau dense
+`Table | Nord | Sud | Est | Ouest`, noms en gros et gras, sans la colonne de
+gauche.
+
+Saisie de la manche : pas de « 0 » par défaut ni de flèches ; le 4ᵉ score
+calculé pour que la somme fasse 0 ; afficher les 4 positions même vide ;
+le détail donne par donne sur les 6 donnes d'un coup (correction) ; boutons
+raccourcis « Table 1 … Table n » en haut de l'écran de saisie ; un seul
+bouton « Valider », placé en haut ; pouvoir modifier une table déjà
+validée.
+
+Classement : un classement **par manche** en plus du général ; 1er en
+couleur (et scores positifs au général). À vérifier avec sa base : « seuls
+les 3 premiers et les 3 derniers sont reportés sur 39 joueurs » — le code
+ne tronque rien (ni `ranking.am` ni la page), probablement les tables non
+encore saisies, mais à confirmer sur ses données.
+
+Génération et impression des feuilles de marque par table et par manche
+(4 manches × n tables) — fonction non vue par lui, à confirmer si elle
+existe.
+
+---
+
 ## ✅ v3.0.20 — Migrations de base + suppression de joueur *(en cours)*
 
 Lève la « limite connue » de v3.0.19 (voir plus bas) et débloque le
@@ -61,6 +151,10 @@ arbitre/viewer hérités restent inactifs volontairement (plutôt que de
 devenir des accès vivants sur un mot de passe connu) ; l'admin les
 réinitialise depuis l'onglet Utilisateurs.
 
+*Note du 2026-09-07 : ce rattrapage est correct mais n'explique pas le
+blocage du 6/09 (compte scrypt créé la veille, bloqué aussi). La cause est
+la connexion DB morte après 8 h d'inactivité — voir v3.0.21.*
+
 ### Dérive de versions des dépendances (CI)
 
 `release.yml` épingle les paquets par **tag**, `amalgame.lock` les
@@ -87,6 +181,17 @@ crypto v0.8.0 valide bien le hash scrypt du compte admin, dont dépendent
 pour net-http/tls : `amalgame.lock` étant clé par **nom**, un paquet
 ajouté ensuite et dépendant d'un `crypto` plus récent écrase l'entrée.
 À signaler en amont à `amc`.
+
+Vérifié le 2026-09-07 sur le poste de dev : le cache local
+`~/.amalgame/packages/` est **clé par tag** et `amc package add` réutilise
+un dossier `vX.Y.Z_<rev>` déjà présent sans réinterroger GitHub. Un tag
+redéployé en amont est donc invisible en local tant que l'ancien dossier
+existe : `amc package add datetime@v0.2.2` rendait `1eb9f306` (ancien) et
+réécrivait le lock, alors que `git ls-remote` donne bien `f28d6556`. Pour
+ré-résoudre : retirer le dossier `vX.Y.Z_<ancien rev>` du cache, puis
+relancer `amc package add` — le lock committé est alors reproduit à
+l'identique. `build.sh` n'utilise que les revs du lock, donc sans ce
+rafraîchissement il s'arrête sur « pkg cache missing ».
 
 ### CI Linux réparée
 

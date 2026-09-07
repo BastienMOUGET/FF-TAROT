@@ -24,6 +24,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Les fichiers .sql sont envoyes au client mysql par un pipe. Windows
+# PowerShell 5.1 encode ce pipe en ASCII par defaut ($OutputEncoding) : les
+# accents des donnees de reference ("Telephone a table", "Mouvement par
+# defaut") arriveraient en '?'. PowerShell 7 est deja en UTF-8 ; forcer les
+# deux est sans effet de bord.
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false
+[Console]::OutputEncoding = $OutputEncoding
+
 function Write-Step { param($m) Write-Host "[DB] $m" -ForegroundColor Cyan }
 function Write-Ok2  { param($m) Write-Host "[OK] $m" -ForegroundColor Green }
 function Write-Warn2{ param($m) Write-Host "[!!] $m" -ForegroundColor Yellow }

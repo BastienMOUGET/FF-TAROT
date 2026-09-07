@@ -27,27 +27,82 @@ public class Db {
         return MySQL.IsOpen(this.Conn)
     }
 
+    // ── Reconnexion ──────────────────────────────────────
+    // La connexion est ouverte une fois au démarrage et vit ensuite
+    // aussi longtemps que le processus. Deux cas la rendent morte sans
+    // que le serveur s'en aperçoive :
+    //   - MariaDB ferme toute connexion inactive depuis wait_timeout
+    //     (8 h par défaut) : le lendemain matin, chaque requête échoue ;
+    //   - au boot Windows, le service démarre avant MariaDB : Open()
+    //     échoue et le handle reste vide pour toujours.
+    // Symptôme identique dans les deux cas : Rows() rend une liste vide,
+    // le login répond « Identifiants invalides » à tout le monde, et
+    // seul un redémarrage du service (ou une réinstallation) débloque.
+    // Retour terrain du 2026-09-06 : c'est exactement ce qui est arrivé.
+    //
+    // Correctif : quand une requête échoue sur une erreur de connexion,
+    // on rouvre et on rejoue la requête une fois. Sans coût quand tout
+    // va bien (aucune requête de sonde supplémentaire).
+
+    // Erreurs libmariadb qui signifient « la connexion n'est plus là »,
+    // et non « la requête est fausse » : 2003 Can't connect, 2006 gone
+    // away, 2013 Lost connection, ou handle jamais ouvert.
+    static bool IsConnLost(string err) {
+        if (String.Contains(err, "gone away")) { return true }
+        if (String.Contains(err, "Lost connection")) { return true }
+        if (String.Contains(err, "Can't connect")) { return true }
+        if (String.Contains(err, "connection not open")) { return true }
+        return false
+    }
+
+    // Rouvre si la dernière erreur est une perte de connexion. true si
+    // la requête mérite d'être rejouée.
+    bool Reconnect() {
+        if (!Db.IsConnLost(MySQL.LastError(this.Conn))) { return false }
+        MySQL.Close(this.Conn)
+        let ok: bool = this.Open()
+        if (ok) { Console.WriteLine("DB: reconnecté") }
+        else { Console.WriteError("DB: reconnexion impossible — " + this.LastError()) }
+        return ok
+    }
+
     public string LastError() { return MySQL.LastError(this.Conn) }
     public int LastInsertId() { return MySQL.LastInsertId(this.Conn) }
     public int Changes() { return MySQL.Changes(this.Conn) }
 
     // SELECT paramétré → lignes (List<List<string>>).
+    // Une liste vide est aussi un résultat légitime : on ne rejoue que si
+    // la dernière erreur enregistrée est une perte de connexion.
     public List<List<string>> Rows(string sql, List<string> params) {
+        let rows: List<List<string>> = MySQL.QueryBindAll(this.Conn, sql, params)
+        if (rows.Count() > 0) { return rows }
+        if (!this.Reconnect()) { return rows }
         return MySQL.QueryBindAll(this.Conn, sql, params)
     }
 
     // INSERT/UPDATE/DELETE paramétré → true si OK.
     public bool Exec(string sql, List<string> params) {
+        if (MySQL.ExecBind(this.Conn, sql, params)) { return true }
+        if (!this.Reconnect()) { return false }
         return MySQL.ExecBind(this.Conn, sql, params)
     }
 
     // DDL / commandes sans paramètres.
     public bool ExecRaw(string sql) {
+        if (MySQL.Exec(this.Conn, sql)) { return true }
+        if (!this.Reconnect()) { return false }
         return MySQL.Exec(this.Conn, sql)
     }
 
     // ── Transactions ─────────────────────────────────────
-    public bool Begin() { return MySQL.Begin(this.Conn) }
+    // Begin est le premier ordre d'une transaction : rejouable. Commit et
+    // Rollback ne le sont pas (une connexion perdue en cours de
+    // transaction l'a déjà annulée côté serveur).
+    public bool Begin() {
+        if (MySQL.Begin(this.Conn)) { return true }
+        if (!this.Reconnect()) { return false }
+        return MySQL.Begin(this.Conn)
+    }
     public bool Commit() { return MySQL.Commit(this.Conn) }
     public bool Rollback() { return MySQL.Rollback(this.Conn) }
 

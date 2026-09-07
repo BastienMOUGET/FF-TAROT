@@ -596,6 +596,20 @@ begin
 
   Exec(Sc, 'create PABB90 binPath= "' + ExePath + '" start= auto DisplayName= "PABB90"',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  // Au boot, le SCM doit démarrer MariaDB AVANT PABB90 : sinon le back
+  // démarre sur une base injoignable. Il se reconnecte désormais tout seul
+  // (lib/db.am), mais autant ne pas partir en erreur. La dépendance n'est
+  // posée que si un service nommé MariaDB existe (celui que notre MSI
+  // installe, SERVICENAME=MariaDB) : une dépendance vers un service absent
+  // empêcherait PABB90 de démarrer du tout (erreur 1075).
+  if Exec(Sc, 'query MariaDB', '', SW_HIDE, ewWaitUntilTerminated, ExitCode)
+     and (ExitCode = 0) then
+  begin
+    Exec(Sc, 'config PABB90 depend= MariaDB', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+    Log('[PABB90] Service PABB90 dépendant de MariaDB');
+  end
+  else
+    Log('[PABB90] Pas de service "MariaDB" : dépendance de service non posée');
   Exec(Sc, 'description PABB90 "PABB90 - Gestion de tournois FFT"',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   // Restart automatique en cas de crash (3 essais : 5s, 5s, 15s)

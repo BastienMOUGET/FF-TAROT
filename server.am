@@ -4,6 +4,7 @@ import Amalgame.Web
 import Amalgame.Net.Http
 import Amalgame.Json
 import Amalgame.Service
+import Amalgame.Threading
 
 // Point d'entrée PABB90 (Amalgame/Mosaic). Ouvre la DB, monte les
 // routes, sert. amalgame-service installe SIGINT/SIGTERM (Ctrl+C) et
@@ -17,9 +18,20 @@ public class Program {
         let db: Db = new Db()
         let io: SocketIO = new SocketIO()
         db.Io = io
-        let ok: bool = db.Open()
+        // Au boot (service Windows), MariaDB peut n'être pas encore prêt :
+        // on réessaie pendant 30 s avant de servir. Et si la base tombe
+        // plus tard (ou se ferme après wait_timeout), lib/db.am se
+        // reconnecte à la requête suivante — on ne s'arrête donc jamais ici.
+        var ok: bool = db.Open()
+        var attempt: int = 1
+        while (!ok && attempt < 30) {
+            Console.WriteError("DB: connexion impossible (" + String.FromInt(attempt) + "/30) — " + db.LastError())
+            Threading.ThreadSleep(1000)
+            ok = db.Open()
+            attempt = attempt + 1
+        }
         if (!ok) {
-            Console.WriteError("DB: connexion impossible — " + db.LastError())
+            Console.WriteError("DB: toujours injoignable, démarrage quand même (reconnexion à la demande) — " + db.LastError())
         } else {
             Console.WriteLine("DB: connecté")
         }
