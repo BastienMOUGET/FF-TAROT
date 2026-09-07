@@ -152,3 +152,6 @@ old/
 # Amalgame build artifacts
 /server
 /server.c
+
+# Retours terrain (mémos, fichiers Excel du club) : données personnelles de joueurs, jamais versionnés (voir ROADMAP.md)
+/feedback/
