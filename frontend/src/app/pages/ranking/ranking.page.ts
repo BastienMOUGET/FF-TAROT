@@ -39,7 +39,7 @@ import { RankingEntry } from '../../core/api.types';
 
     <mat-card class="head">
       <mat-card-header>
-        <mat-card-title>Classement live</mat-card-title>
+        <mat-card-title>Classement général du tournoi</mat-card-title>
         <mat-card-subtitle>
           <mat-chip [color]="socket.connected() ? 'primary' : 'warn'">
             <mat-icon>{{
@@ -102,8 +102,7 @@ import { RankingEntry } from '../../core/api.types';
           mat-row
           *matRowDef="let row; columns: cols"
           [class.podium-1]="row.place === 1"
-          [class.podium-2]="row.place === 2"
-          [class.podium-3]="row.place === 3"
+          [class.positive]="row.place !== 1 && +row.total_general > 0"
         ></tr>
       </table>
     }
@@ -126,9 +125,14 @@ import { RankingEntry } from '../../core/api.types';
     .strong { font-weight: 600; }
     .lic { color: #757575; }
     .empty { color: #757575; }
-    .podium-1 { background: rgba(255, 215, 0, 0.15) !important; }
-    .podium-2 { background: rgba(192, 192, 192, 0.2) !important; }
-    .podium-3 { background: rgba(205, 127, 50, 0.15) !important; }
+    /* Retour terrain : le 1er en couleur, et tous les scores positifs. */
+    .podium-1 { background: rgba(255, 215, 0, 0.35) !important; font-weight: 700; }
+    .positive { background: rgba(129, 199, 132, 0.18) !important; }
+    @media print {
+      .back, .head { display: none !important; }
+      .podium-1 { background: #ffe082 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .positive { background: #dcedc8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   `,
 })
 export class RankingPage implements OnInit, OnDestroy {

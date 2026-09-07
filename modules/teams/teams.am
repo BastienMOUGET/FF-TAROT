@@ -9,7 +9,7 @@ public class ModTeams {
     // Joueurs d'une équipe → tableau JSON (jointure team_players + players).
     static JsonValue PlayersJson(Db db, string teamId) {
         let rows: List<List<string>> = db.Rows(
-            "SELECT tp.player_id, tp.pair, tp.player_number, p.licence, p.name, p.firstname, p.club_id, p.category FROM team_players tp JOIN players p ON p.id = tp.player_id WHERE tp.team_id = ? ORDER BY tp.player_number",
+            "SELECT tp.player_id, tp.pair, tp.player_number, p.licence, p.name, p.firstname, p.club_id, p.category, tp.seat FROM team_players tp JOIN players p ON p.id = tp.player_id WHERE tp.team_id = ? ORDER BY tp.player_number",
             Db.P1(teamId))
         let arr: JsonValue = J.Arr()
         for i in 0..rows.Count() {
@@ -18,6 +18,7 @@ public class ModTeams {
             o.AppendEntry("player_id", J.CellInt(r.Get(0)))
             o.AppendEntry("pair", J.CellStr(r.Get(1)))
             o.AppendEntry("player_number", J.CellInt(r.Get(2)))
+            o.AppendEntry("seat", J.CellStrN(r.Get(8)))
             o.AppendEntry("licence", J.CellStrN(r.Get(3)))
             o.AppendEntry("name", J.CellStr(r.Get(4)))
             o.AppendEntry("firstname", J.CellStr(r.Get(5)))
@@ -80,7 +81,12 @@ public class ModTeams {
         // Validation NS / EO + pas de doublon ; collecte ordonnée NS puis EO.
         let nsIds: List<string> = new List<string>()
         let eoIds: List<string> = new List<string>()
+        // Siège explicite (optionnel) par joueur, aligné sur nsIds puis eoIds.
+        // "" = non fourni : la mise en place retombe sur l'ordre des joueurs.
+        let nsSeats: List<string> = new List<string>()
+        let eoSeats: List<string> = new List<string>()
         let seen: List<string> = new List<string>()
+        let seenSeats: List<string> = new List<string>()
         for i in 0..n {
             let p: JsonValue = playersV.At(i)
             let pidV: JsonValue = p.Get("player_id")
@@ -91,8 +97,18 @@ public class ModTeams {
             let pair: string = pairV.AsString()
             for s in seen { if (s == pid) { return HttpErr.BadRequest("Doublon de joueur dans l'équipe") } }
             seen.Add(pid)
-            if (pair == "NS") { nsIds.Add(pid) }
-            else { if (pair == "EO") { eoIds.Add(pid) } else { return HttpErr.BadRequest("pair doit être NS ou EO") } }
+            var seat: string = ""
+            if (Fld.HasStr(p, "seat")) {
+                seat = Fld.Str(p, "seat")
+                if (seat != "N" && seat != "S" && seat != "E" && seat != "O") { return HttpErr.BadRequest("seat doit être N, S, E ou O") }
+                for ss in seenSeats { if (ss == seat) { return HttpErr.BadRequest("Deux joueurs sur le même siège (" + seat + ")") } }
+                seenSeats.Add(seat)
+                // Cohérence paire/siège : N et S sont la paire NS, E et O la paire EO.
+                if ((seat == "N" || seat == "S") && pair != "NS") { return HttpErr.BadRequest("Le siège " + seat + " appartient à la paire NS") }
+                if ((seat == "E" || seat == "O") && pair != "EO") { return HttpErr.BadRequest("Le siège " + seat + " appartient à la paire EO") }
+            }
+            if (pair == "NS") { nsIds.Add(pid) nsSeats.Add(seat) }
+            else { if (pair == "EO") { eoIds.Add(pid) eoSeats.Add(seat) } else { return HttpErr.BadRequest("pair doit être NS ou EO") } }
         }
         if (n == 4) {
             if (nsIds.Count() != 2 || eoIds.Count() != 2) { return HttpErr.BadRequest("Une équipe de 4 doit avoir exactement 2 joueurs NS et 2 joueurs EO") }
@@ -116,12 +132,12 @@ public class ModTeams {
 
         // NS d'abord (player_number 1,2) puis EO (3,4)
         var num: int = 1
-        for ns in nsIds {
-            if (!ModTeams.InsTp(db, teamIdS, ns, "NS", num)) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        for k in 0..nsIds.Count() {
+            if (!ModTeams.InsTp(db, teamIdS, nsIds.Get(k), "NS", num, nsSeats.Get(k))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
             num = num + 1
         }
-        for eo in eoIds {
-            if (!ModTeams.InsTp(db, teamIdS, eo, "EO", num)) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        for k in 0..eoIds.Count() {
+            if (!ModTeams.InsTp(db, teamIdS, eoIds.Get(k), "EO", num, eoSeats.Get(k))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
             num = num + 1
         }
         db.Commit()
@@ -132,13 +148,17 @@ public class ModTeams {
         return resp.Status(201)
     }
 
-    static bool InsTp(Db db, string teamId, string playerId, string pair, int num) {
+    static bool InsTp(Db db, string teamId, string playerId, string pair, int num, string seat) {
         let ps: List<string> = new List<string>()
         ps.Add(teamId)
         ps.Add(playerId)
         ps.Add(pair)
         ps.Add(String.FromInt(num))
-        return db.Exec("INSERT INTO team_players (team_id, player_id, pair, player_number) VALUES (?, ?, ?, ?)", ps)
+        if (String.Length(seat) == 0) {
+            return db.Exec("INSERT INTO team_players (team_id, player_id, pair, player_number, seat) VALUES (?, ?, ?, ?, NULL)", ps)
+        }
+        ps.Add(seat)
+        return db.Exec("INSERT INTO team_players (team_id, player_id, pair, player_number, seat) VALUES (?, ?, ?, ?, ?)", ps)
     }
 
     // DELETE /api/teams/:id (admin)

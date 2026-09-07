@@ -45,7 +45,7 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     <button type="button" class="back" (click)="goBack()">
       <mat-icon>arrow_back</mat-icon> Retour
     </button>
-    <h1>Inscriptions</h1>
+    <h1>Joueurs présents</h1>
 
     <mat-card class="form-card draw-card">
       <mat-card-header>
@@ -60,7 +60,7 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
         @if (availablePlayers().length === 0) {
           <p class="empty">
             Tous les joueurs sont déjà inscrits dans une équipe pour ce
-            sous-tournoi.
+            tournoi.
           </p>
           <button mat-button type="button" (click)="openNewPlayer()">
             <mat-icon>person_add</mat-icon> Nouveau joueur
@@ -536,15 +536,18 @@ export class TeamsPage implements OnInit {
   // Reconstruit le tableau player_id/pair attendu par l'API dans l'ordre
   // N,S,E,O — cet ordre détermine le player_number (1..4) donc le siège
   // final (cf modules/teams/teams.am : NS d'abord, EO ensuite).
+  // Le siège est aussi envoyé explicitement (team_players.seat, v3.0.22) :
+  // la mise en place de la manche 1 le respecte tel quel, y compris la
+  // place vide d'une table de 3.
   private toPayload(
     assigned: { id: number; seat: Seat }[]
-  ): { player_id: number; pair: Pair }[] {
+  ): { player_id: number; pair: Pair; seat: Seat }[] {
     const bySeat = new Map(assigned.map((a) => [a.seat, a.id]));
-    const payload: { player_id: number; pair: Pair }[] = [];
+    const payload: { player_id: number; pair: Pair; seat: Seat }[] = [];
     for (const seat of ['N', 'S', 'E', 'O'] as Seat[]) {
       const id = bySeat.get(seat);
       if (id === undefined) continue;
-      payload.push({ player_id: id, pair: seat === 'N' || seat === 'S' ? 'NS' : 'EO' });
+      payload.push({ player_id: id, pair: seat === 'N' || seat === 'S' ? 'NS' : 'EO', seat });
     }
     return payload;
   }
@@ -566,7 +569,7 @@ export class TeamsPage implements OnInit {
     }
 
     const ids = this.shuffle(Array.from(this.drawSelection()));
-    const payloads: { player_id: number; pair: Pair }[][] = [];
+    const payloads: { player_id: number; pair: Pair; seat: Seat }[][] = [];
     let cursor = 0;
     let unmetOrientations = 0;
     for (let i = 0; i < plan.fours; i++) {
@@ -579,8 +582,13 @@ export class TeamsPage implements OnInit {
     for (let i = 0; i < plan.threes; i++) {
       const group = ids.slice(cursor, cursor + 3);
       cursor += 3;
-      // Table de 3 : sièges N, S, E occupés (pas de 4ème joueur/Ouest).
-      const { assigned, unmet } = this.assignSeats(group, ['N', 'S', 'E']);
+      // Table de 3 : la place vide est tirée au sort parmi S, E, O — jamais
+      // Nord, qui est le responsable de la table (feuille de marque). Et
+      // comme S/E/O bougent d'une manche à l'autre, la table à 3 change de
+      // numéro à chaque manche au lieu de rester figée.
+      const empty = (['S', 'E', 'O'] as Seat[])[Math.floor(Math.random() * 3)];
+      const pool = (['N', 'S', 'E', 'O'] as Seat[]).filter((x) => x !== empty);
+      const { assigned, unmet } = this.assignSeats(group, pool);
       unmetOrientations += unmet;
       payloads.push(this.toPayload(assigned));
     }

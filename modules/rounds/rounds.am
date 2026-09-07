@@ -153,12 +153,13 @@ public class ModRounds {
                 let team: TeamIn = new TeamIn()
                 team.Id = Db.CellInt(tidS)
                 team.Players = new List<TeamPlayerIn>()
-                let prows: List<List<string>> = db.Rows("SELECT player_id, player_number FROM team_players WHERE team_id = ? ORDER BY player_number", Db.P1(tidS))
+                let prows: List<List<string>> = db.Rows("SELECT player_id, player_number, COALESCE(seat, '') FROM team_players WHERE team_id = ? ORDER BY player_number", Db.P1(tidS))
                 for k in 0..prows.Count() {
                     let prow: List<string> = prows.Get(k)
                     let tp: TeamPlayerIn = new TeamPlayerIn()
                     tp.PlayerId = Db.CellInt(prow.Get(0))
                     tp.PlayerNumber = Db.CellInt(prow.Get(1))
+                    tp.Seat = prow.Get(2)
                     team.Players.Add(tp)
                 }
                 if (team.Players.Count() != 3 && team.Players.Count() != 4) { return HttpErr.BadRequest("Équipe incomplète : " + tidS) }

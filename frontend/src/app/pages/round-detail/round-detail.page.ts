@@ -1,5 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Location } from '@angular/common';
 
 import { MatCardModule } from '@angular/material/card';
@@ -16,6 +16,7 @@ import { Round } from '../../core/api.types';
 @Component({
   selector: 'app-round-detail-page',
   imports: [
+    RouterLink,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -24,15 +25,23 @@ import { Round } from '../../core/api.types';
     MatSnackBarModule,
   ],
   template: `
-    <button type="button" class="back" (click)="goBack()">
-      <mat-icon>arrow_back</mat-icon> Retour
-    </button>
+    @if (round(); as r0) {
+      <a class="back" [routerLink]="['/sub-tournaments', r0.sub_tournament_id]">
+        <mat-icon>arrow_back</mat-icon> Retour au tournoi
+      </a>
+    }
 
     @if (loading()) {
       <mat-progress-spinner mode="indeterminate" diameter="40" />
     } @else if (round(); as r) {
       <h1>Manche {{ r.round_number }}</h1>
       <div class="actions">
+        <a mat-flat-button color="primary" [routerLink]="['/rounds', r.id, 'ranking']">
+          <mat-icon>format_list_numbered</mat-icon> Classement de la manche
+        </a>
+        <a mat-stroked-button [routerLink]="['/sub-tournaments', r.sub_tournament_id, 'route-sheet']">
+          <mat-icon>print</mat-icon> Placement
+        </a>
         <button
           mat-stroked-button
           color="primary"
@@ -104,7 +113,7 @@ import { Round } from '../../core/api.types';
       margin-bottom: 16px; text-decoration: none; color: #1976d2;
       background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
-    .actions { margin-bottom: 24px; }
+    .actions { margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; }
     .empty { color: #757575; }
     .tables {
       display: grid;

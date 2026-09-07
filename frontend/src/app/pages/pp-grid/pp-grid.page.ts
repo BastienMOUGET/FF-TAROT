@@ -35,7 +35,7 @@ import { PpEntry } from '../../core/api.types';
     <h1>Grille PP (Palmarès des Points)</h1>
     <p class="hint">
       <mat-icon>info</mat-icon>
-      Définit le nombre de PP attribués à chaque place du sous-tournoi.
+      Définit le nombre de PP attribués à chaque place du tournoi.
       Le classement est recalculé après l'enregistrement.
     </p>
 

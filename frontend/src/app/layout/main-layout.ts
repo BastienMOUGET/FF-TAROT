@@ -41,7 +41,7 @@ import { environment } from '../../environments/environment';
             routerLinkActive="active"
           >
             <mat-icon matListItemIcon>emoji_events</mat-icon>
-            <span matListItemTitle>Tournois</span>
+            <span matListItemTitle>Challenges</span>
           </a>
           @if (auth.isAdmin()) {
             <a mat-list-item routerLink="/admin" routerLinkActive="active">

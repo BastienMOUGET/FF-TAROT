@@ -30,6 +30,27 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'sub-tournaments/:id',
+        loadComponent: () =>
+          import('./pages/sub-tournament-detail/sub-tournament-detail.page').then(
+            (m) => m.SubTournamentDetailPage
+          ),
+      },
+      {
+        path: 'sub-tournaments/:id/score-sheets',
+        loadComponent: () =>
+          import('./pages/score-sheets/score-sheets.page').then(
+            (m) => m.ScoreSheetsPage
+          ),
+      },
+      {
+        path: 'rounds/:id/ranking',
+        loadComponent: () =>
+          import('./pages/round-ranking/round-ranking.page').then(
+            (m) => m.RoundRankingPage
+          ),
+      },
+      {
         path: 'sub-tournaments/:id/teams',
         loadComponent: () =>
           import('./pages/teams/teams.page').then((m) => m.TeamsPage),

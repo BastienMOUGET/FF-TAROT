@@ -6,7 +6,7 @@ import { environment } from '../../environments/environment';
 import {
   ChallengeRanking, Club, Comite, DonneSet, Hand, Ligue, MovementPattern, Pair,
   Penalty, PenaltyType, Player, PlayerImportResult, PlayerImportRow, PpEntry,
-  RankingEntry, Round, RouteSheet, Seat, SubTournament, TableResult, Team,
+  RankingEntry, Round, RoundRanking, RouteSheet, Seat, SubTournament, TableResult, Team,
   Tournament, User,
 } from './api.types';
 
@@ -92,6 +92,8 @@ export class ApiService {
     this.http.get<SubTournament[]>(
       `${this.base}/tournaments/${tournamentId}/sub-tournaments`
     );
+  subTournament = (id: number): Observable<SubTournament> =>
+    this.http.get<SubTournament>(`${this.base}/sub-tournaments/${id}`);
   createSubTournament = (
     tournamentId: number,
     data: Partial<SubTournament>
@@ -108,7 +110,7 @@ export class ApiService {
     );
   createTeam = (
     subTournamentId: number,
-    players: { player_id: number; pair: Pair }[]
+    players: { player_id: number; pair: Pair; seat?: Seat }[]
   ): Observable<Team> =>
     this.http.post<Team>(
       `${this.base}/sub-tournaments/${subTournamentId}/teams`,
@@ -182,6 +184,8 @@ export class ApiService {
     this.http.get<RankingEntry[]>(
       `${this.base}/sub-tournaments/${subTournamentId}/ranking`
     );
+  roundRanking = (roundId: number): Observable<RoundRanking> =>
+    this.http.get<RoundRanking>(`${this.base}/rounds/${roundId}/ranking`);
   recomputeRanking = (subTournamentId: number): Observable<RankingEntry[]> =>
     this.http.post<RankingEntry[]>(
       `${this.base}/sub-tournaments/${subTournamentId}/ranking/recompute`,

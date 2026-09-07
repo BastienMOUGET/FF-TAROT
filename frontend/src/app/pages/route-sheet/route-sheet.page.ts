@@ -7,21 +7,31 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 import { ApiService } from '../../core/api.service';
-import { RouteSheet } from '../../core/api.types';
+import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
 
+// Feuille de placement : affichée / imprimée en début de tournoi pour que
+// chaque joueur trouve sa table et son orientation de départ. Une seule
+// page, un tableau dense « Table | Nord | Sud | Est | Ouest », noms en gros
+// et en gras (retour terrain).
 @Component({
   selector: 'app-route-sheet-page',
-  imports: [
-    DatePipe,
-    MatButtonModule,
-    MatIconModule,
-    MatProgressSpinnerModule,
-  ],
+  imports: [DatePipe, MatButtonModule, MatIconModule, MatProgressSpinnerModule],
   template: `
     <div class="no-print toolbar">
       <button type="button" class="back" (click)="goBack()">
         <mat-icon>arrow_back</mat-icon> Retour
       </button>
+      @if (sheet()?.rounds?.length ?? 0 > 1) {
+        <label class="pick">
+          Manche :
+          <select [value]="roundFilter()" (change)="roundFilter.set(+$any($event.target).value)">
+            <option [value]="0">toutes</option>
+            @for (r of sheet()!.rounds; track r.round_number) {
+              <option [value]="r.round_number">{{ r.round_number }}</option>
+            }
+          </select>
+        </label>
+      }
       <span class="spacer"></span>
       <button mat-flat-button color="primary" (click)="print()">
         <mat-icon>print</mat-icon> Imprimer
@@ -33,15 +43,11 @@ import { RouteSheet } from '../../core/api.types';
     } @else if (sheet(); as s) {
       <div class="sheet">
         <header>
-          <h1>{{ s.tournament.name }}</h1>
+          <h1>{{ s.tournament.name }} — {{ s.sub_tournament.label }}</h1>
           <p class="meta">
-            <strong>{{ s.tournament.code }}</strong>
+            Placement de départ
             @if (s.tournament.date) {
               · {{ s.tournament.date | date: 'dd/MM/yyyy' }}
-            }
-            · Sous-tournoi : <strong>{{ s.sub_tournament.label }}</strong>
-            @if (s.sub_tournament.color_name) {
-              ({{ s.sub_tournament.color_name }})
             }
           </p>
         </header>
@@ -50,123 +56,81 @@ import { RouteSheet } from '../../core/api.types';
           <p class="empty">Aucune manche générée pour le moment.</p>
         }
 
-        @for (r of s.rounds; track r.round_number) {
+        @for (r of visibleRounds(); track r.round_number) {
           <section class="round">
             <h2>Manche {{ r.round_number }}</h2>
             @if (r.tables.length === 0) {
               <p class="empty">Pas de mise en place sur cette manche.</p>
             } @else {
-              <div class="tables">
-                @for (t of r.tables; track t.table_number) {
-                  <div class="table-card">
-                    <div class="table-header">Table {{ t.table_number }}</div>
-                    <table>
-                      <tbody>
-                        @for (seat of t.seats; track seat.seat) {
-                          <tr>
-                            <td class="seat" [attr.data-seat]="seat.seat">
-                              {{ seat.seat }}
-                            </td>
-                            <td class="player">
-                              {{ seat.name }} {{ seat.firstname }}
-                              @if (seat.licence) {
-                                <small class="licence">({{ seat.licence }})</small>
-                              }
-                            </td>
-                          </tr>
-                        }
-                      </tbody>
-                    </table>
-                  </div>
-                }
-              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th class="tnum">Table</th>
+                    @for (seat of seats; track seat) {
+                      <th><span class="seat" [attr.data-seat]="seat">{{ seatLabel(seat) }}</span></th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (t of r.tables; track t.table_number) {
+                    <tr>
+                      <td class="tnum">{{ t.table_number }}</td>
+                      @for (seat of seats; track seat) {
+                        <td class="player" [class.empty-seat]="!playerAt(t.seats, seat)">
+                          {{ playerAt(t.seats, seat) || '—' }}
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
             }
           </section>
         }
 
         <footer class="no-print">
-          <small>
-            Imprimé le {{ now() | date: 'dd/MM/yyyy à HH:mm' }} via PABB90
-          </small>
+          <small>Imprimé le {{ now() | date: 'dd/MM/yyyy à HH:mm' }} via PABB90</small>
         </footer>
       </div>
     }
   `,
   styles: `
-    .toolbar {
-      display: flex; align-items: center; gap: 16px; margin-bottom: 24px;
-    }
+    .toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
     .back {
-      display: inline-flex; align-items: center; gap: 4px;
-      text-decoration: none; color: #1976d2;
+      display: inline-flex; align-items: center; gap: 4px; color: #1976d2;
       background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
+    .pick select { margin-left: 6px; font-size: 1em; }
     .spacer { flex: 1 1 auto; }
     .empty { color: #757575; }
-
-    .sheet {
-      background: #fff;
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-
-    header h1 {
-      margin: 0 0 4px;
-      font-size: 1.6em;
-      color: #0d47a1;
-    }
-    header .meta { margin: 0 0 24px; color: #424242; }
-
+    .sheet { background: #fff; max-width: 1100px; margin: 0 auto; padding: 16px 24px; }
+    header h1 { margin: 0 0 2px; font-size: 1.5em; color: #0d47a1; }
+    header .meta { margin: 0 0 12px; color: #424242; }
     .round h2 {
-      margin: 24px 0 12px;
-      padding-bottom: 4px;
-      border-bottom: 2px solid #1976d2;
-      color: #0d47a1;
+      margin: 16px 0 8px; padding-bottom: 2px;
+      border-bottom: 2px solid #1976d2; color: #0d47a1; font-size: 1.2em;
     }
-
-    .tables {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 12px;
-    }
-    .table-card {
-      border: 1px solid #bdbdbd;
-      border-radius: 4px;
-      page-break-inside: avoid;
-    }
-    .table-header {
-      background: #1976d2;
-      color: #fff;
-      padding: 6px 12px;
-      font-weight: 600;
-    }
-    .table-card table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .table-card td {
-      padding: 6px 8px;
-      border-bottom: 1px solid #eee;
-    }
-    .table-card tr:last-child td { border-bottom: none; }
-    .seat {
-      width: 30px;
-      text-align: center;
-      font-weight: 700;
-      color: #fff;
-    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #9e9e9e; padding: 5px 8px; text-align: left; }
+    th { background: #f5f5f5; }
+    .tnum { width: 60px; text-align: center; font-weight: 700; font-size: 1.2em; }
+    .player { font-weight: 700; font-size: 1.15em; }
+    .empty-seat { color: #9e9e9e; font-weight: 400; text-align: center; }
+    .seat { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
     .seat[data-seat='N'] { background: #ffb74d; color: #4e342e; }
     .seat[data-seat='S'] { background: #4fc3f7; color: #01579b; }
     .seat[data-seat='E'] { background: #ff8a65; color: #4e342e; }
     .seat[data-seat='O'] { background: #aed581; color: #33691e; }
-    .player .licence { color: #757575; }
-
     @media print {
       .no-print { display: none !important; }
-      .sheet { padding: 0; }
+      .sheet { padding: 0; max-width: none; }
+      header h1 { font-size: 16pt; }
+      .round h2 { font-size: 13pt; margin-top: 10px; }
+      table { font-size: 12pt; }
+      .player { font-size: 13pt; }
+      th, td { padding: 3px 6px; }
       .round { page-break-inside: avoid; }
-      .tables { gap: 8px; }
+      .seat { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   `,
 })
@@ -177,6 +141,9 @@ export class RouteSheetPage implements OnInit {
 
   loading = signal(true);
   sheet = signal<RouteSheet | null>(null);
+  // 0 = toutes les manches ; par défaut la 1re (placement de départ).
+  roundFilter = signal(1);
+  seats: Seat[] = ['N', 'S', 'E', 'O'];
   now = () => new Date();
 
   ngOnInit(): void {
@@ -184,10 +151,27 @@ export class RouteSheetPage implements OnInit {
     this.api.routeSheet(id).subscribe({
       next: (s) => {
         this.sheet.set(s);
+        if (!s.rounds.some((r) => r.round_number === 1)) this.roundFilter.set(0);
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
     });
+  }
+
+  visibleRounds() {
+    const s = this.sheet();
+    if (!s) return [];
+    const f = this.roundFilter();
+    return f === 0 ? s.rounds : s.rounds.filter((r) => r.round_number === f);
+  }
+
+  seatLabel(seat: Seat): string {
+    return { N: 'Nord', S: 'Sud', E: 'Est', O: 'Ouest' }[seat];
+  }
+
+  playerAt(seats: RouteSheetSeat[], seat: Seat): string {
+    const s = seats.find((x) => x.seat === seat);
+    return s ? `${s.name} ${s.firstname}` : '';
   }
 
   print(): void {

@@ -340,6 +340,98 @@ public class ModRanking {
     // (1er = N points si N joueurs, dernier = 1 point), soit cumul brut
     // des points de chaque sous-tournoi — mode choisi via
     // tournaments.challenge_mode.
+    // GET /api/rounds/:id/ranking — classement d'UNE manche.
+    // Une ligne par joueur placé : table, siège (orientation tirée au sort,
+    // demandée en colonne des classements), score de la manche × coef, et
+    // si la table est validée. Les joueurs d'une table non encore saisie ou
+    // non validée sont listés sans place, en fin de liste.
+    public static HttpResponse GetRoundRanking(WebContext ctx, Db db) {
+        let roundId: string = ctx.Param("id")
+        let rrows: List<List<string>> = db.Rows("SELECT id, sub_tournament_id, round_number, coef FROM rounds WHERE id = ?", Db.P1(roundId))
+        if (rrows.Count() == 0) { return HttpErr.NotFound() }
+        let rr: List<string> = rrows.Get(0)
+        var coef: float = Db.CellFloat(rr.Get(3))
+        if (coef == 0.0) { coef = 1.0 }
+
+        let rows: List<List<string>> = db.Rows(
+            "SELECT s.player_id, p.licence, p.name, p.firstname, s.table_number, s.seat, tr.score_n, tr.score_s, tr.score_e, tr.score_o, COALESCE(tr.validated, 0), (tr.id IS NOT NULL) FROM seats s JOIN players p ON p.id = s.player_id LEFT JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number WHERE s.round_id = ? ORDER BY s.table_number ASC, FIELD(s.seat, 'N','S','E','O')",
+            Db.P1(roundId))
+
+        let entries: List<RankEntry> = new List<RankEntry>()
+        let pending: List<RankEntry> = new List<RankEntry>()
+        let tableOf: Map<string, int> = new Map<string, int>()
+        let seatOf: Map<string, string> = new Map<string, string>()
+        let licOf: Map<string, string> = new Map<string, string>()
+        let validatedOf: Map<string, int> = new Map<string, int>()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let pid: string = r.Get(0)
+            let seat: string = r.Get(5)
+            let e: RankEntry = new RankEntry()
+            e.PlayerId = Db.CellInt(pid)
+            e.Name = r.Get(2)
+            e.Firstname = r.Get(3)
+            e.RoundsPlayed = 1
+            tableOf.Set(pid, Db.CellInt(r.Get(4)))
+            seatOf.Set(pid, seat)
+            licOf.Set(pid, r.Get(1))
+            let validated: bool = Db.CellBool(r.Get(10))
+            let hasResult: bool = Db.CellBool(r.Get(11))
+            var cell: string = ""
+            if (seat == "N") { cell = r.Get(6) }
+            if (seat == "S") { cell = r.Get(7) }
+            if (seat == "E") { cell = r.Get(8) }
+            if (seat == "O") { cell = r.Get(9) }
+            if (hasResult && !Db.IsNull(cell)) {
+                e.Total = Db.CellFloat(cell) * coef
+                e.TotalGeneral = e.Total
+            } else {
+                e.Total = 0.0
+                e.TotalGeneral = 0.0
+            }
+            if (validated) { validatedOf.Set(pid, 1) } else { validatedOf.Set(pid, 0) }
+            if (hasResult) { entries.Add(e) } else { pending.Add(e) }
+        }
+        ModRanking.SortDesc(entries)
+        var place: int = 0
+        var prev: float = 0.0
+        for i in 0..entries.Count() {
+            let e: RankEntry = entries.Get(i)
+            if (i == 0 || e.TotalGeneral != prev) { place = i + 1 }
+            e.Place = place
+            prev = e.TotalGeneral
+        }
+        for e in pending { e.Place = 0 entries.Add(e) }
+
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("round_id", J.CellInt(rr.Get(0)))
+        o.AppendEntry("sub_tournament_id", J.CellInt(rr.Get(1)))
+        o.AppendEntry("round_number", J.CellInt(rr.Get(2)))
+        o.AppendEntry("coef", J.Float(coef))
+        let arr: JsonValue = J.Arr()
+        for e in entries {
+            let pid: string = String.FromInt(e.PlayerId)
+            let eo: JsonValue = J.Obj()
+            eo.AppendEntry("player_id", J.Int(e.PlayerId))
+            eo.AppendEntry("licence", J.CellStrN(ModRanking.MapGetS(licOf, pid)))
+            eo.AppendEntry("name", J.Str(e.Name))
+            eo.AppendEntry("firstname", J.Str(e.Firstname))
+            eo.AppendEntry("table_number", J.Int(ModRanking.MapGetI(tableOf, pid)))
+            eo.AppendEntry("seat", J.Str(ModRanking.MapGetS(seatOf, pid)))
+            if (e.Place > 0) { eo.AppendEntry("score", J.Float(e.TotalGeneral)) } else { eo.AppendEntry("score", J.Null()) }
+            eo.AppendEntry("place", J.Int(e.Place))
+            eo.AppendEntry("validated", J.Bool(ModRanking.MapGetI(validatedOf, pid) == 1))
+            arr.AppendItem(eo)
+        }
+        o.AppendEntry("ranking", arr)
+        return J.Ok(o)
+    }
+
+    static string MapGetS(Map<string, string> m, string k) {
+        if (!m.Has(k)) { return "" }
+        return m.Get(k)
+    }
+
     public static HttpResponse GetChallengeRanking(WebContext ctx, Db db) {
         let tid: string = ctx.Param("tournamentId")
         let trows: List<List<string>> = db.Rows("SELECT id, challenge_mode FROM tournaments WHERE id = ?", Db.P1(tid))

@@ -9,6 +9,7 @@ import Amalgame.Random
 public class TeamPlayerIn {
     public PlayerId:     int
     public PlayerNumber: int
+    public Seat:         string   // "" = non précisé
     public TeamPlayerIn() {}
 }
 
@@ -71,17 +72,58 @@ public class Placement {
             let team: TeamIn = teams.Get(ti)
             let tableNumber: int = tableNumbers.Get(ti)
             let ordered: List<TeamPlayerIn> = Placement.SortByPlayerNumber(team.Players)
+            let assigned: List<string> = Placement.SeatsFor(ordered)
             for idx in 0..ordered.Count() {
                 let p: TeamPlayerIn = ordered.Get(idx)
                 let row: SeatRow = new SeatRow()
                 row.TableNumber = tableNumber
-                row.Seat = Placement.SeatAt(idx)
+                row.Seat = assigned.Get(idx)
                 row.PlayerId = p.PlayerId
                 row.TeamId = team.Id
                 seats.Add(row)
             }
         }
         return seats
+    }
+
+    // Sièges d'une équipe, dans l'ordre de `ordered`.
+    //   - Sièges explicites (team_players.seat) tous renseignés et
+    //     distincts : on les respecte tels quels.
+    //   - Sinon, ordre des joueurs → N, S, E, O. Pour une table de 3, la
+    //     place vide est tirée au sort parmi S/E/O : jamais Nord, qui est
+    //     le responsable de la table (il tient la feuille de marque). Et
+    //     comme S, E et O bougent d'une manche à l'autre (patron de
+    //     mouvement), la table à 3 change de numéro à chaque manche au lieu
+    //     de rester figée comme quand la place vide était Nord.
+    public static List<string> SeatsFor(List<TeamPlayerIn> ordered) {
+        let n: int = ordered.Count()
+        let out: List<string> = new List<string>()
+        var explicit: bool = n > 0
+        for p in ordered {
+            if (String.Length(p.Seat) == 0) { explicit = false }
+        }
+        if (explicit) {
+            for i in 0..n {
+                let pi: TeamPlayerIn = ordered.Get(i)
+                for j in 0..i {
+                    let pj: TeamPlayerIn = ordered.Get(j)
+                    if (pj.Seat == pi.Seat) { explicit = false }
+                }
+            }
+        }
+        if (explicit) {
+            for p in ordered { out.Add(p.Seat) }
+            return out
+        }
+        var skip: int = -1
+        if (n == 3) { skip = 1 + Placement.Below(3) }   // 1=S, 2=E, 3=O
+        var idx: int = 0
+        for i in 0..n {
+            if (idx == skip) { idx = idx + 1 }
+            out.Add(Placement.SeatAt(idx))
+            idx = idx + 1
+        }
+        return out
     }
 
     // Places du round suivant : offset par siège sur le numéro de table.

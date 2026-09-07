@@ -7,7 +7,6 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import {
@@ -16,19 +15,22 @@ import {
   MatDialogModule,
   MatDialogRef,
 } from '@angular/material/dialog';
-import {
-  MatFormFieldModule,
-} from '@angular/material/form-field';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
-import {
-  ChallengeRanking,
-  Round,
-  SubTournament,
-  Tournament,
-} from '../../core/api.types';
+import { ChallengeRanking, SubTournament, Tournament } from '../../core/api.types';
+
+// Vocabulaire du club (retour terrain) : un "Challenge" (tournament) regroupe
+// des "Tournois" hebdomadaires (sub_tournaments). Le libellé par défaut d'un
+// tournoi est la date du jour, c'est ainsi que le club les nomme.
+function todayLabel(): string {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
 
 @Component({
   selector: 'app-sub-tournament-dialog',
@@ -40,12 +42,12 @@ import {
     MatButtonModule,
   ],
   template: `
-    <h2 mat-dialog-title>Nouveau sous-tournoi</h2>
+    <h2 mat-dialog-title>Nouveau tournoi</h2>
     <mat-dialog-content>
       <form [formGroup]="form" class="form">
         <mat-form-field appearance="outline" class="full">
-          <mat-label>Libellé</mat-label>
-          <input matInput formControlName="label" placeholder="ex: Open" />
+          <mat-label>Nom du tournoi (ex : date de la soirée)</mat-label>
+          <input matInput formControlName="label" />
         </mat-form-field>
         <mat-form-field appearance="outline" class="full">
           <mat-label>Indice PCN (0 = pas de PCN)</mat-label>
@@ -67,7 +69,7 @@ export class SubTournamentDialog {
   api = inject(ApiService);
 
   form = this.fb.nonNullable.group({
-    label: ['Open', Validators.required],
+    label: [todayLabel(), Validators.required],
     indice_pcn: [0],
   });
 
@@ -96,13 +98,12 @@ export class SubTournamentDialog {
     MatButtonToggleModule,
     MatIconModule,
     MatChipsModule,
-    MatExpansionModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
   ],
   template: `
     <a routerLink="/tournaments" class="back">
-      <mat-icon>arrow_back</mat-icon> Retour
+      <mat-icon>arrow_back</mat-icon> Retour aux challenges
     </a>
 
     @if (loading()) {
@@ -110,7 +111,7 @@ export class SubTournamentDialog {
     } @else if (tournament(); as t) {
       <mat-card class="head">
         <mat-card-header>
-          <mat-card-title>{{ t.name }}</mat-card-title>
+          <mat-card-title>Challenge {{ t.name }}</mat-card-title>
           <mat-card-subtitle>
             {{ t.code }} ·
             @if (t.date) {
@@ -118,26 +119,56 @@ export class SubTournamentDialog {
             } @else {
               date à définir
             }
+            @if (t.club_name) {
+              · {{ t.club_name }}
+            }
           </mat-card-subtitle>
         </mat-card-header>
-        <mat-card-content>
-          <div class="meta">
-            <mat-chip>statut : {{ t.status }}</mat-chip>
-            <mat-chip>round courant : {{ t.current_round }}</mat-chip>
-            <mat-chip>coef : {{ t.coef_default }}</mat-chip>
-            @if (t.club_name) {
-              <mat-chip>{{ t.club_name }}</mat-chip>
-            }
-          </div>
-        </mat-card-content>
       </mat-card>
 
-      <mat-card class="head challenge-card">
+      <!-- 1. Les tournois hebdomadaires : c'est ce qu'on gère le soir même,
+           donc en haut, avec le bouton d'ajout. -->
+      <div class="section-head">
+        <h2>Tournois ({{ subs().length }})</h2>
+        <button mat-flat-button color="primary" (click)="addSub()">
+          <mat-icon>add</mat-icon> Ajouter un tournoi
+        </button>
+      </div>
+
+      @if (subs().length === 0) {
+        <p class="empty">
+          Aucun tournoi pour l'instant. Clique sur « Ajouter un tournoi » pour
+          créer la soirée du jour.
+        </p>
+      } @else {
+        <div class="subs">
+          @for (sub of subs(); track sub.id) {
+            <a class="sub-card" [routerLink]="['/sub-tournaments', sub.id]">
+              <mat-card>
+                <mat-card-content>
+                  <div class="sub-title">
+                    <mat-icon>event</mat-icon>
+                    <span>{{ sub.label }}</span>
+                    @if (+sub.indice_pcn > 0) {
+                      <mat-chip class="ml">PCN {{ sub.indice_pcn }}</mat-chip>
+                    }
+                  </div>
+                  <div class="sub-open">Ouvrir <mat-icon>chevron_right</mat-icon></div>
+                </mat-card-content>
+              </mat-card>
+            </a>
+          }
+        </div>
+      }
+
+      <!-- 2. Le classement trimestriel, en bas : on le consulte, on ne le
+           manipule pas pendant la soirée. -->
+      <mat-card class="challenge-card">
         <mat-card-header>
-          <mat-card-title>Classement Challenge</mat-card-title>
+          <mat-card-title>Classement du Challenge</mat-card-title>
           <mat-card-subtitle>
             Cumul sur {{ challengeRanking()?.sub_tournaments_count ?? 0 }}
-            tournoi(s) hebdomadaire(s)
+            tournoi(s)
           </mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
@@ -146,7 +177,7 @@ export class SubTournamentDialog {
             (change)="setChallengeMode(t.id, $event.value)"
           >
             <mat-button-toggle value="place">Par place</mat-button-toggle>
-            <mat-button-toggle value="raw">Cumul brut</mat-button-toggle>
+            <mat-button-toggle value="raw">Par points</mat-button-toggle>
           </mat-button-toggle-group>
 
           @if (challengeLoading()) {
@@ -155,8 +186,7 @@ export class SubTournamentDialog {
             !challengeRanking() || challengeRanking()!.ranking.length === 0
           ) {
             <p class="empty">
-              Pas encore de classement Challenge (aucun résultat de
-              sous-tournoi validé).
+              Pas encore de classement (aucun résultat de tournoi validé).
             </p>
           } @else {
             <table class="challenge-table">
@@ -170,7 +200,7 @@ export class SubTournamentDialog {
               </thead>
               <tbody>
                 @for (e of challengeRanking()!.ranking; track e.player_id) {
-                  <tr>
+                  <tr [class.first]="e.place === 1">
                     <td>{{ e.place }}</td>
                     <td>{{ e.name }} {{ e.firstname }}</td>
                     <td>{{ e.sub_tournaments_played }}</td>
@@ -182,87 +212,6 @@ export class SubTournamentDialog {
           }
         </mat-card-content>
       </mat-card>
-
-      <div class="section-head">
-        <h2>Sous-tournois</h2>
-        <button mat-flat-button color="primary" (click)="addSub()">
-          <mat-icon>add</mat-icon> Ajouter
-        </button>
-      </div>
-
-      @if (subs().length === 0) {
-        <p class="empty">Aucun sous-tournoi. Ajoute un "Open" pour commencer.</p>
-      } @else {
-        <mat-accordion>
-          @for (sub of subs(); track sub.id) {
-            <mat-expansion-panel (opened)="loadRoundsFor(sub.id)">
-              <mat-expansion-panel-header>
-                <mat-panel-title>
-                  {{ sub.label }}
-                  @if (+sub.indice_pcn > 0) {
-                    <mat-chip class="ml">PCN {{ sub.indice_pcn }}</mat-chip>
-                  }
-                </mat-panel-title>
-              </mat-expansion-panel-header>
-
-              <div class="actions">
-                <a
-                  mat-stroked-button
-                  [routerLink]="['/sub-tournaments', sub.id, 'teams']"
-                >
-                  <mat-icon>groups</mat-icon> Équipes
-                </a>
-                <a
-                  mat-stroked-button
-                  [routerLink]="['/sub-tournaments', sub.id, 'ranking']"
-                >
-                  <mat-icon>leaderboard</mat-icon> Classement
-                </a>
-                <a
-                  mat-stroked-button
-                  [routerLink]="['/sub-tournaments', sub.id, 'route-sheet']"
-                >
-                  <mat-icon>description</mat-icon> Feuille de route
-                </a>
-                <a
-                  mat-stroked-button
-                  [routerLink]="['/sub-tournaments', sub.id, 'pp-grid']"
-                >
-                  <mat-icon>military_tech</mat-icon> Grille PP
-                </a>
-                <button
-                  mat-flat-button
-                  color="primary"
-                  (click)="newRound(sub.id)"
-                >
-                  <mat-icon>add</mat-icon> Nouvelle manche
-                </button>
-              </div>
-
-              <h3>Manches</h3>
-              @if (roundsBySub()[sub.id]; as rounds) {
-                @if (rounds.length === 0) {
-                  <p class="empty">Pas encore de manche.</p>
-                } @else {
-                  <div class="rounds">
-                    @for (r of rounds; track r.id) {
-                      <a
-                        mat-stroked-button
-                        [routerLink]="['/rounds', r.id]"
-                        class="round-btn"
-                      >
-                        Manche {{ r.round_number }}
-                      </a>
-                    }
-                  </div>
-                }
-              } @else {
-                <em>Chargement…</em>
-              }
-            </mat-expansion-panel>
-          }
-        </mat-accordion>
-      }
     }
   `,
   styles: `
@@ -275,7 +224,6 @@ export class SubTournamentDialog {
       color: #1976d2;
     }
     .head { margin-bottom: 24px; }
-    .meta { display: flex; flex-wrap: wrap; gap: 8px; }
     .ml { margin-left: 8px; }
     .section-head {
       display: flex;
@@ -284,18 +232,27 @@ export class SubTournamentDialog {
       margin: 24px 0 12px;
     }
     .empty { color: #757575; }
-    .actions {
-      display: flex;
+    .subs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: 12px;
-      margin: 8px 0 16px;
-      flex-wrap: wrap;
+      margin-bottom: 32px;
     }
-    .rounds { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sub-card { text-decoration: none; color: inherit; }
+    .sub-card mat-card { cursor: pointer; transition: box-shadow 0.15s; }
+    .sub-card mat-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+    .sub-card mat-card-content {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 16px;
+    }
+    .sub-title { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 500; }
+    .sub-open { display: flex; align-items: center; color: #1976d2; font-size: 0.9em; }
     .challenge-card mat-card-content { display: flex; flex-direction: column; gap: 12px; }
     .challenge-table { width: 100%; border-collapse: collapse; }
     .challenge-table th, .challenge-table td {
       text-align: left; padding: 6px 12px; border-bottom: 1px solid #eee;
     }
+    .challenge-table tr.first td { background: rgba(255, 215, 0, 0.18); font-weight: 600; }
   `,
 })
 export class TournamentDetailPage implements OnInit {
@@ -308,7 +265,6 @@ export class TournamentDetailPage implements OnInit {
   loading = signal(true);
   tournament = signal<Tournament | null>(null);
   subs = signal<SubTournament[]>([]);
-  roundsBySub = signal<Record<number, Round[]>>({});
   challengeRanking = signal<ChallengeRanking | null>(null);
   challengeLoading = signal(false);
 
@@ -318,7 +274,8 @@ export class TournamentDetailPage implements OnInit {
       next: (t) => {
         this.tournament.set(t);
         this.api.subTournaments(id).subscribe((subs) => {
-          this.subs.set(subs);
+          // Le plus récent en premier : c'est celui de la soirée.
+          this.subs.set([...subs].sort((a, b) => b.id - a.id));
           this.loading.set(false);
         });
         this.loadChallengeRanking(id);
@@ -357,50 +314,6 @@ export class TournamentDetailPage implements OnInit {
     });
   }
 
-  loadRoundsFor(subId: number) {
-    if (this.roundsBySub()[subId]) return;
-    this.api.rounds(subId).subscribe((rounds) => {
-      this.roundsBySub.update((m) => ({ ...m, [subId]: rounds }));
-    });
-  }
-
-  newRound(subId: number) {
-    this.api.createRound(subId).subscribe({
-      next: (round) => {
-        // Generate placement automatically
-        this.api.generatePlacement(round.id).subscribe({
-          next: () => {
-            this.snack.open(
-              `Manche ${round.round_number} créée + mise en place générée`,
-              'Fermer',
-              { duration: 3000 }
-            );
-            this.api.rounds(subId).subscribe((rounds) => {
-              this.roundsBySub.update((m) => ({ ...m, [subId]: rounds }));
-            });
-          },
-          error: (err) => {
-            this.snack.open(
-              `Manche ${round.round_number} créée, mais mise en place impossible : ` +
-                (err?.error?.error || 'erreur inconnue'),
-              'Fermer',
-              { duration: 5000 }
-            );
-            this.api.rounds(subId).subscribe((rounds) => {
-              this.roundsBySub.update((m) => ({ ...m, [subId]: rounds }));
-            });
-          },
-        });
-      },
-      error: (err) =>
-        this.snack.open(
-          err?.error?.error || 'Erreur création manche',
-          'Fermer',
-          { duration: 3000 }
-        ),
-    });
-  }
-
   addSub() {
     const t = this.tournament();
     if (!t) return;
@@ -408,10 +321,10 @@ export class TournamentDetailPage implements OnInit {
       width: '450px',
       data: { tournamentId: t.id },
     });
-    ref.afterClosed().subscribe((created) => {
-      if (created) {
-        this.api.subTournaments(t.id).subscribe((subs) => this.subs.set(subs));
-      }
+    ref.afterClosed().subscribe((created: SubTournament | undefined) => {
+      // Un tournoi créé s'ouvre directement sur sa page : la suite
+      // (joueurs présents, tirage au sort) se fait là.
+      if (created) this.router.navigate(['/sub-tournaments', created.id]);
     });
   }
 }

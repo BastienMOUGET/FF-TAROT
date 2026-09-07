@@ -146,6 +146,7 @@ export interface SubTournament {
 export type Pair = 'NS' | 'EO';
 
 export interface TeamPlayer {
+  seat?: Seat | null;
   team_id?: number;
   player_id: number;
   pair: Pair;
@@ -235,6 +236,27 @@ export interface RankingEntry {
   pp: string;
   eliminated: 0 | 1 | boolean;
   updated_at: string;
+}
+
+// Classement d'une manche (GET /api/rounds/:id/ranking)
+export interface RoundRankingEntry {
+  player_id: number;
+  licence: string | null;
+  name: string;
+  firstname: string;
+  table_number: number;
+  seat: Seat;
+  score: number | null; // null = table pas encore saisie
+  place: number; // 0 = pas encore classé
+  validated: boolean;
+}
+
+export interface RoundRanking {
+  round_id: number;
+  sub_tournament_id: number;
+  round_number: number;
+  coef: number;
+  ranking: RoundRankingEntry[];
 }
 
 export interface PenaltyType {

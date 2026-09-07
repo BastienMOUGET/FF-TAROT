@@ -41,6 +41,20 @@ done
 [ -z "$LIBAMALGAME" ] && { echo "error: libamalgame.a not found"; exit 1; }
 
 echo "→ amc          $AMC"
+
+# Garde-fou : la release est produite par la version d'amc épinglée dans
+# release.yml (AMC_VERSION). Constaté le 2026-09-07 : un binaire construit
+# ici avec amc 0.8.90 + le cache local répondait 401 à TOUTE requête
+# authentifiée (en-têtes HTTP illisibles côté AM), alors que le même code
+# construit par la CI (0.8.88, cache vierge) fonctionne. On prévient, sans
+# bloquer : pour tester localement, utiliser la même version que la CI
+# (tarball GitHub) avec un HOME dédié, cf. ROADMAP v3.0.22.
+RELEASE_AMC=$(grep -oE 'AMC_VERSION: *"?[0-9.]+' .github/workflows/release.yml 2>/dev/null | head -1 | grep -oE '[0-9.]+$' || true)
+LOCAL_AMC=$("$AMC" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+if [ -n "$RELEASE_AMC" ] && [ -n "$LOCAL_AMC" ] && [ "$RELEASE_AMC" != "$LOCAL_AMC" ]; then
+    echo "!! amc local $LOCAL_AMC ≠ amc de la release $RELEASE_AMC : ce binaire n'est pas" >&2
+    echo "!! représentatif (auth potentiellement cassée). Voir ROADMAP v3.0.22." >&2
+fi
 echo "→ amc runtime  $AMC_RUNTIME"
 echo "→ libamalgame  $LIBAMALGAME"
 

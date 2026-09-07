@@ -6,6 +6,90 @@
 
 ---
 
+## ✅ v3.0.22 — Retour terrain n°3 : la soirée de A à Z *(livré, 2026-09-07)*
+
+Le backlog du mémo n°3 (voir v3.0.21), traité en un lot. Le vocabulaire
+suit celui du club : un **Challenge** (trimestre) contient des **Tournois**
+(soirées hebdomadaires), chacun découpé en **manches**.
+
+### Navigation
+
+- Page Challenge (`/tournaments/:id`) réordonnée : la liste des tournois et
+  « Ajouter un tournoi » **en haut**, le classement du Challenge en bas.
+  Un tournoi créé s'ouvre directement sur sa page ; son nom par défaut est
+  la date du jour. « Cumul brut » devient « Par points ».
+- Nouvelle page Tournoi (`/sub-tournaments/:id`) : le déroulé de la soirée
+  en 4 étapes — Joueurs présents → impressions (placement, feuilles de
+  marque) → manches (avec l'avancement « n/m tables validées », saisie et
+  classement de la manche) → classement général. « Équipes » devient
+  « Joueurs ».
+
+### Tables de 3
+
+- `team_players.seat` (migration `004`) : le tirage au sort envoie le siège
+  choisi pour chaque joueur, la mise en place de la manche 1 le respecte.
+  Avant, seule la paire NS/EO et l'ordre étaient transmis : sur une table de
+  3 le siège réel était perdu.
+- La place vide d'une table de 3 est tirée au sort parmi **S, E, O — jamais
+  Nord**, qui tient la feuille de marque. Comme S/E/O bougent d'une manche
+  à l'autre, la table à 3 change de numéro au lieu de rester figée (c'est
+  ce qu'il observait avec la place vide en Nord, dont l'offset est 0).
+  Même règle côté back pour une équipe sans siège explicite.
+
+### Impressions
+
+- Feuille de placement refaite : une page, tableau `Table | Nord | Sud |
+  Est | Ouest`, noms en gros et gras, choix de la manche.
+- Nouvelles feuilles de marque (`/sub-tournaments/:id/score-sheets`) : une
+  par table et par manche, avec les noms par orientation, 6 donnes par
+  défaut (réglable) et une ligne Total. À imprimer en début de tournoi
+  pour toutes les manches générées.
+
+### Saisie de la manche
+
+- Écran refait : raccourcis « Table 1 … n » en haut (cochés quand validés),
+  les 4 orientations toujours affichées (place vide grisée), plus de 0 par
+  défaut ni de flèches, **le dernier score se calcule** pour que la somme
+  fasse 0 (sur 3 sièges pour une table de 3), un seul bouton « Valider le
+  résultat de la table », en haut.
+- Mode détail : les 6 donnes visibles d'un coup dans une grille, preneur
+  par donne, ligne de totaux ; « Ajouter une donne » au-delà.
+- Une table validée reste modifiable : le bouton devient « Enregistrer les
+  corrections » et la table reste validée. Après validation, lien direct
+  vers la prochaine table non validée, puis vers le classement de la manche.
+
+### Classements
+
+- **Classement par manche** (`GET /api/rounds/:id/ranking`, page
+  `/rounds/:id/ranking`) : place, joueur, table, orientation (le siège tiré
+  au sort, demandé en colonne), score × coef, égalités = même place. Les
+  joueurs d'une table non validée sont listés en fin, sans place, et la
+  page signale que le classement est provisoire. Imprimable.
+- Classement général : le 1er en jaune, tous les scores positifs en vert
+  (écran et impression).
+
+### Chaîne de build locale : amc 0.8.90 ≠ amc 0.8.88
+
+Découvert en testant : le binaire construit sur ce poste (amc **0.8.90**,
+cache `~/.amalgame/packages` accumulé depuis des mois) répond
+« Authentification requise » à **toute** requête portant un JWT — les
+en-têtes HTTP n'arrivent pas au code AM. Le même code construit avec la
+chaîne de la release (amc **0.8.88**, cache vierge, `HOME` dédié)
+fonctionne, et c'est ce que le beau-père utilise. Le login et la liste des
+joueurs sont publics, d'où des tests locaux faussement verts jusqu'ici.
+`build.sh` compare désormais la version d'amc à celle de `release.yml` et
+prévient. Pour tester en local : télécharger le tarball amc de la version
+de `release.yml`, `HOME=<dossier vide>`, rejouer `amc package add` depuis
+le lock (le lock doit ressortir identique), puis `build.sh`.
+
+Vérifié (binaire 0.8.88, base jetable) : sièges explicites respectés,
+place vide d'une table de 3 hors Nord sur 8 tirages, refus des sièges
+incohérents (doublon, E en paire NS), saisie et validation d'une table de
+4 et d'une table de 3, classement de manche avec égalités et table en
+attente, classement général.
+
+---
+
 ## ✅ v3.0.21 — Blocage du lendemain (connexion DB) + retour terrain n°3 *(livré, 2026-09-07)*
 
 ### Le vrai « impossible de se connecter le lendemain »
