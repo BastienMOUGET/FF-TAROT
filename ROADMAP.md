@@ -6,6 +6,16 @@
 
 ---
 
+## ✅ v3.0.26 — Logo du club en bas du bandeau *(livré, 2026-09-08)*
+
+Retour n°7 (`feedback/2026-09-08-3/`) : le logo du club par défaut
+s'affiche en bas de la colonne de gauche, sous la minuterie, en grand
+(jusqu'à 190 px). Le nom du club reste en tête du bandeau. Toujours le logo
+du club par défaut (Administration → Paramètres), rien d'embarqué dans
+l'application.
+
+---
+
 ## ✅ v3.0.25 — Retour terrain n°6 : manches prévues, PDF, club par défaut, bug « Introuvable » *(livré, 2026-09-08)*
 
 Retour WhatsApp du 08/09 au soir, sur la v3.0.24.

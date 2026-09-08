@@ -42,9 +42,6 @@ import { RoundTimer } from './round-timer';
           <!-- Club par défaut (Administration → Paramètres) : le nom du club
                en tête du bandeau, avec son logo s'il en a un. -->
           <a class="club-head" routerLink="/tournaments" [title]="c.name">
-            @if (c.logo) {
-              <img [src]="c.logo" alt="" class="club-head-logo" />
-            }
             <span class="club-head-name">{{ c.name }}</span>
           </a>
         }
@@ -65,6 +62,12 @@ import { RoundTimer } from './round-timer';
           }
         </mat-nav-list>
         <app-round-timer />
+        <!-- Logo du club par défaut, en bas du bandeau (retour terrain n°7). -->
+        @if (club()?.logo; as logo) {
+          <div class="club-foot">
+            <img [src]="logo" [alt]="club()?.name || 'logo du club'" class="club-foot-logo" />
+          </div>
+        }
       </mat-sidenav>
       <mat-sidenav-content>
         <mat-toolbar color="primary" class="topbar">
@@ -101,6 +104,12 @@ import { RoundTimer } from './round-timer';
       background: #f5f5f5;
       border-right: 1px solid #e0e0e0;
     }
+    /* Colonne : marque, nav, minuterie, puis le logo poussé en bas. */
+    .sidenav ::ng-deep .mat-drawer-inner-container { display: flex; flex-direction: column; }
+    .club-foot {
+      margin-top: auto; padding: 12px 16px 16px; text-align: center;
+    }
+    .club-foot-logo { max-width: 100%; max-height: 190px; object-fit: contain; border-radius: 6px; }
     .brand {
       display: flex;
       align-items: center;
@@ -119,7 +128,6 @@ import { RoundTimer } from './round-timer';
       background: #1976d2; color: #fff; text-decoration: none;
       font-weight: 600; line-height: 1.2;
     }
-    .club-head-logo { height: 36px; max-width: 48px; object-fit: contain; background: #fff; border-radius: 4px; }
     .club-head-name { flex: 1 1 auto; }
     .topbar {
       position: sticky;
