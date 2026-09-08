@@ -33,9 +33,15 @@ import { RankingEntry } from '../../core/api.types';
     MatProgressSpinnerModule,
   ],
   template: `
-    <button type="button" class="back" (click)="goBack()">
-      <mat-icon>arrow_back</mat-icon> Retour
-    </button>
+    <div class="toolbar no-print">
+      <button type="button" class="back" (click)="goBack()">
+        <mat-icon>arrow_back</mat-icon> Retour
+      </button>
+      <span class="spacer"></span>
+      <button mat-flat-button color="primary" (click)="print()">
+        <mat-icon>print</mat-icon> Imprimer
+      </button>
+    </div>
 
     <mat-card class="head">
       <mat-card-header>
@@ -102,7 +108,7 @@ import { RankingEntry } from '../../core/api.types';
           mat-row
           *matRowDef="let row; columns: cols"
           [class.podium-1]="row.place === 1"
-          [class.positive]="row.place !== 1 && +row.total_general > 0"
+          [class.positive]="row.place !== 1 && +row.total_general >= 0"
         ></tr>
       </table>
     }
@@ -117,6 +123,8 @@ import { RankingEntry } from '../../core/api.types';
       color: #1976d2;
       background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
+    .toolbar { display: flex; align-items: center; margin-bottom: 16px; }
+    .spacer { flex: 1 1 auto; }
     .head { margin-bottom: 24px; }
     .updated { margin-left: 12px; color: #757575; font-size: 0.85em; }
     table { width: 100%; }
@@ -125,7 +133,7 @@ import { RankingEntry } from '../../core/api.types';
     .strong { font-weight: 600; }
     .lic { color: #757575; }
     .empty { color: #757575; }
-    /* Retour terrain : le 1er en couleur, et tous les scores positifs. */
+    /* Retour terrain : le 1er en couleur, et tous les scores >= 0. */
     .podium-1 { background: rgba(255, 215, 0, 0.35) !important; font-weight: 700; }
     .positive { background: rgba(129, 199, 132, 0.18) !important; }
     @media print {
@@ -176,6 +184,10 @@ export class RankingPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     // Keep socket alive for other pages — don't disconnect here.
+  }
+
+  print(): void {
+    window.print();
   }
 
   goBack(): void {

@@ -22,7 +22,7 @@ interface ParsedRow {
 // (délimiteur détecté automatiquement : ';' si majoritaire sur la
 // ligne d'en-tête, ',' sinon — format observé côté club : virgules +
 // champs entre guillemets, à la LibreOffice/Excel).
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const headerLine = text.split(/\r\n|\n/, 1)[0] || '';
   const delimiter =
     (headerLine.match(/;/g) || []).length > (headerLine.match(/,/g) || []).length
@@ -74,7 +74,7 @@ function parseCsv(text: string): string[][] {
 // Découpe sur le DERNIER espace : "MAZIMANN FRANCK" → NOM=MAZIMANN,
 // prénom=FRANCK. Un mot seul (ex: "MARECHAL") → prénom vide, à
 // compléter manuellement après import.
-function splitFullName(full: string): { name: string; firstname: string } {
+export function splitFullName(full: string): { name: string; firstname: string } {
   const trimmed = full.trim().replace(/\s+/g, ' ');
   const idx = trimmed.lastIndexOf(' ');
   if (idx === -1) return { name: trimmed, firstname: '' };

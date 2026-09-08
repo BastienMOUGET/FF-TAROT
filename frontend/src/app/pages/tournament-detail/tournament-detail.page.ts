@@ -21,6 +21,8 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
 import { ChallengeRanking, SubTournament, Tournament } from '../../core/api.types';
+import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
+import { RankingImportDialog } from './ranking-import-dialog';
 
 // Vocabulaire du club (retour terrain) : un "Challenge" (tournament) regroupe
 // des "Tournois" hebdomadaires (sub_tournaments). Le libellé par défaut d'un
@@ -130,9 +132,14 @@ export class SubTournamentDialog {
            donc en haut, avec le bouton d'ajout. -->
       <div class="section-head">
         <h2>Tournois ({{ subs().length }})</h2>
-        <button mat-flat-button color="primary" (click)="addSub()">
-          <mat-icon>add</mat-icon> Ajouter un tournoi
-        </button>
+        <div class="section-actions">
+          <button mat-stroked-button (click)="importSub()">
+            <mat-icon>upload</mat-icon> Importer un tournoi (CSV)
+          </button>
+          <button mat-flat-button color="primary" (click)="addSub()">
+            <mat-icon>add</mat-icon> Ajouter un tournoi
+          </button>
+        </div>
       </div>
 
       @if (subs().length === 0) {
@@ -143,20 +150,26 @@ export class SubTournamentDialog {
       } @else {
         <div class="subs">
           @for (sub of subs(); track sub.id) {
-            <a class="sub-card" [routerLink]="['/sub-tournaments', sub.id]">
-              <mat-card>
-                <mat-card-content>
+            <mat-card class="sub-card">
+              <mat-card-content>
+                <a class="sub-link" [routerLink]="subLink(sub)">
                   <div class="sub-title">
-                    <mat-icon>event</mat-icon>
+                    <mat-icon>{{ sub.imported ? 'upload_file' : 'event' }}</mat-icon>
                     <span>{{ sub.label }}</span>
+                    @if (sub.imported) {
+                      <mat-chip class="ml">importé</mat-chip>
+                    }
                     @if (+sub.indice_pcn > 0) {
                       <mat-chip class="ml">PCN {{ sub.indice_pcn }}</mat-chip>
                     }
                   </div>
-                  <div class="sub-open">Ouvrir <mat-icon>chevron_right</mat-icon></div>
-                </mat-card-content>
-              </mat-card>
-            </a>
+                  <div class="sub-open">{{ sub.imported ? 'Classement' : 'Ouvrir' }} <mat-icon>chevron_right</mat-icon></div>
+                </a>
+                <button mat-icon-button color="warn" class="sub-delete" (click)="removeSub(sub)" title="Retirer ce tournoi du challenge">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </mat-card-content>
+            </mat-card>
           }
         </div>
       }
@@ -165,20 +178,26 @@ export class SubTournamentDialog {
            manipule pas pendant la soirée. -->
       <mat-card class="challenge-card">
         <mat-card-header>
-          <mat-card-title>Classement du Challenge</mat-card-title>
+          <mat-card-title>Classement du Challenge {{ t.name }}</mat-card-title>
           <mat-card-subtitle>
             Cumul sur {{ challengeRanking()?.sub_tournaments_count ?? 0 }}
             tournoi(s)
           </mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
-          <mat-button-toggle-group
-            [value]="t.challenge_mode"
-            (change)="setChallengeMode(t.id, $event.value)"
-          >
-            <mat-button-toggle value="place">Par place</mat-button-toggle>
-            <mat-button-toggle value="raw">Par points</mat-button-toggle>
-          </mat-button-toggle-group>
+          <div class="challenge-bar no-print">
+            <mat-button-toggle-group
+              [value]="t.challenge_mode"
+              (change)="setChallengeMode(t.id, $event.value)"
+            >
+              <mat-button-toggle value="place">Par place</mat-button-toggle>
+              <mat-button-toggle value="raw">Par points</mat-button-toggle>
+            </mat-button-toggle-group>
+            <span class="spacer"></span>
+            <button mat-stroked-button (click)="print()">
+              <mat-icon>print</mat-icon> Imprimer le classement
+            </button>
+          </div>
 
           @if (challengeLoading()) {
             <mat-progress-spinner mode="indeterminate" diameter="30" />
@@ -238,12 +257,20 @@ export class SubTournamentDialog {
       gap: 12px;
       margin-bottom: 32px;
     }
-    .sub-card { text-decoration: none; color: inherit; }
-    .sub-card mat-card { cursor: pointer; transition: box-shadow 0.15s; }
-    .sub-card mat-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
-    .sub-card mat-card-content {
-      display: flex; align-items: center; justify-content: space-between;
-      padding-top: 16px;
+    .section-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sub-card { transition: box-shadow 0.15s; }
+    .sub-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+    .sub-card mat-card-content { display: flex; align-items: center; gap: 8px; padding-top: 16px; }
+    .sub-link {
+      flex: 1 1 auto; display: flex; align-items: center; justify-content: space-between;
+      text-decoration: none; color: inherit; cursor: pointer;
+    }
+    .sub-delete { flex: 0 0 auto; }
+    .challenge-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .spacer { flex: 1 1 auto; }
+    @media print {
+      .back, .head, .section-head, .subs { display: none !important; }
+      .challenge-card { box-shadow: none !important; }
     }
     .sub-title { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 500; }
     .sub-open { display: flex; align-items: center; color: #1976d2; font-size: 0.9em; }
@@ -311,6 +338,62 @@ export class TournamentDetailPage implements OnInit {
         this.snack.open('Erreur changement de mode', 'Fermer', {
           duration: 3000,
         }),
+    });
+  }
+
+  subLink(sub: SubTournament): (string | number)[] {
+    return sub.imported
+      ? ['/sub-tournaments', sub.id, 'ranking']
+      : ['/sub-tournaments', sub.id];
+  }
+
+  print(): void {
+    window.print();
+  }
+
+  private reloadSubs(tid: number): void {
+    this.api.subTournaments(tid).subscribe((subs) => {
+      this.subs.set([...subs].sort((a, b) => b.id - a.id));
+    });
+    this.loadChallengeRanking(tid);
+  }
+
+  importSub(): void {
+    const t = this.tournament();
+    if (!t) return;
+    const ref = this.dialog.open(RankingImportDialog, {
+      width: '760px',
+      data: { tournamentId: t.id },
+    });
+    ref.afterClosed().subscribe((done) => {
+      if (done) this.reloadSubs(t.id);
+    });
+  }
+
+  removeSub(sub: SubTournament): void {
+    const t = this.tournament();
+    if (!t) return;
+    const data: ConfirmDialogData = {
+      title: `Retirer le tournoi ${sub.label} ?`,
+      message: sub.imported
+        ? 'Le classement importé est supprimé et sort du classement du Challenge.'
+        : 'Ses inscriptions, manches et scores sont supprimés définitivement, et il sort du classement du Challenge.',
+      confirmLabel: 'Retirer',
+      danger: true,
+    };
+    const ref = this.dialog.open(ConfirmDialog, { data });
+    ref.afterClosed().subscribe((ok) => {
+      if (!ok) return;
+      this.api.deleteSubTournament(sub.id).subscribe({
+        next: () => {
+          this.snack.open('Tournoi retiré du challenge', 'Fermer', { duration: 2000 });
+          this.reloadSubs(t.id);
+        },
+        error: (err) =>
+          this.snack.open(err?.error?.error || 'Suppression impossible', 'Fermer', {
+            duration: 3000,
+          }),
+      });
     });
   }
 

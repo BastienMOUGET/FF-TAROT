@@ -46,6 +46,20 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
         }
       </h1>
 
+      @if (s.imported) {
+        <mat-card class="steps">
+          <mat-card-content>
+            <p class="imported">
+              Tournoi importé depuis un classement externe : pas de manches ni
+              de saisie ici, seulement son classement, qui compte dans le
+              Challenge.
+            </p>
+            <a mat-flat-button color="primary" [routerLink]="['/sub-tournaments', s.id, 'ranking']">
+              <mat-icon>leaderboard</mat-icon> Voir le classement
+            </a>
+          </mat-card-content>
+        </mat-card>
+      } @else {
       <mat-card class="steps">
         <mat-card-content>
           <div class="step">
@@ -148,6 +162,7 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
           </div>
         </mat-card-content>
       </mat-card>
+      }
     }
   `,
   styles: `
@@ -158,6 +173,7 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
     h1 { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
     .ml { margin-left: 4px; }
     .empty { color: #757575; margin: 0 0 8px 56px; }
+    .imported { color: #616161; margin: 0 0 12px; }
     .steps mat-card-content { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; }
     .step {
       display: flex; align-items: center; gap: 16px;

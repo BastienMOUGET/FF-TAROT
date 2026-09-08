@@ -37,3 +37,14 @@ body {
   height: 100%;
 }
 /* You can add global styles to this file, and also import other style files */
+
+/* Impression (retour terrain n°4) : ni bandeau latéral, ni barre du haut,
+   le contenu prend toute la largeur. `.no-print` masque les commandes
+   d'écran des pages imprimables. */
+@media print {
+  .mat-sidenav, .mat-drawer, mat-sidenav, .topbar, .no-print { display: none !important; }
+  .mat-sidenav-content, .mat-drawer-content { margin-left: 0 !important; }
+  .mat-sidenav-container, mat-sidenav-container { height: auto !important; }
+  main.content { padding: 0 !important; max-width: none !important; }
+  body { background: #fff !important; }
+}

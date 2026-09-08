@@ -43,6 +43,7 @@ export interface Club {
 }
 
 export interface Player {
+  is_relais?: boolean;
   id: number;
   licence: string | null;
   name: string;
@@ -141,6 +142,25 @@ export interface SubTournament {
   donne_set_id: number | null;
   tournament_code?: string;
   tournament_name?: string;
+  // Classement importé (CSV Excel FFT) : ni équipes ni manches, seulement
+  // des lignes de rankings figées.
+  imported?: boolean;
+}
+
+export interface RankingImportRow {
+  place: number;
+  licence: string | null;
+  name: string;
+  firstname: string;
+  points: number;
+  pcn: number;
+}
+
+export interface RankingImportResult {
+  sub_tournament_id: number;
+  label: string;
+  imported: number;
+  created_players: number;
 }
 
 export type Pair = 'NS' | 'EO';

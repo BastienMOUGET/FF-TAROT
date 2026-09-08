@@ -51,9 +51,9 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
       <mat-card-header>
         <mat-card-title>Tirage au sort — Manche 1</mat-card-title>
         <mat-card-subtitle>
-          Sélectionne les joueurs présents, l'appli forme des équipes de 4 (et
-          de 3 si besoin pour compléter) au hasard et génère la mise en place
-          de la manche 1.
+          Sélectionne les joueurs présents, l'appli forme des tables de 4 (et
+          de 3 si besoin, avec un « Relais » fixe en Nord) au hasard et génère
+          la mise en place de la manche 1.
         </mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
@@ -582,13 +582,10 @@ export class TeamsPage implements OnInit {
     for (let i = 0; i < plan.threes; i++) {
       const group = ids.slice(cursor, cursor + 3);
       cursor += 3;
-      // Table de 3 : la place vide est tirée au sort parmi S, E, O — jamais
-      // Nord, qui est le responsable de la table (feuille de marque). Et
-      // comme S/E/O bougent d'une manche à l'autre, la table à 3 change de
-      // numéro à chaque manche au lieu de rester figée.
-      const empty = (['S', 'E', 'O'] as Seat[])[Math.floor(Math.random() * 3)];
-      const pool = (['N', 'S', 'E', 'O'] as Seat[]).filter((x) => x !== empty);
-      const { assigned, unmet } = this.assignSeats(group, pool);
+      // Table de 3 : Nord est occupé par le joueur virtuel « Relais », fixe
+      // à sa table toute la soirée (règle du club, retour terrain n°4). Les
+      // 3 vrais joueurs se répartissent S, E, O ; le back pose le relais.
+      const { assigned, unmet } = this.assignSeats(group, ['S', 'E', 'O']);
       unmetOrientations += unmet;
       payloads.push(this.toPayload(assigned));
     }

@@ -7,7 +7,7 @@ import Amalgame.Json
 public class ModSubTournaments {
 
     static string SELECT_BASE() {
-        return "SELECT st.id, st.tournament_id, st.label, st.color, st.color_name, st.indice_pcn, st.championnat, st.donne_set_id, t.code AS tournament_code, t.name AS tournament_name FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id"
+        return "SELECT st.id, st.tournament_id, st.label, st.color, st.color_name, st.indice_pcn, st.championnat, st.donne_set_id, t.code AS tournament_code, t.name AS tournament_name, st.imported FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id"
     }
 
     public static JsonValue Row(List<string> r) {
@@ -22,6 +22,7 @@ public class ModSubTournaments {
         o.AppendEntry("donne_set_id", J.CellIntN(r.Get(7)))
         o.AppendEntry("tournament_code", J.CellStrN(r.Get(8)))
         o.AppendEntry("tournament_name", J.CellStrN(r.Get(9)))
+        o.AppendEntry("imported", J.CellBool(r.Get(10)))
         return o
     }
 

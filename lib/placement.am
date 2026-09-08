@@ -55,7 +55,10 @@ public class Placement {
     }
 
     // Places du round 1 : tables tirées au sort, 4 joueurs N/S/E/O.
-    public static List<SeatRow> GenerateInitialSeats(List<TeamIn> teams) {
+    // `relaisIds` : joueurs virtuels « Relais 1/2/3 » posés en Nord des
+    // tables de 3, dans l'ordre (retour terrain n°4 : Nord est fixe toute
+    // la soirée et marque des points comme les autres).
+    public static List<SeatRow> GenerateInitialSeats(List<TeamIn> teams, List<int> relaisIds) {
         let nb: int = teams.Count()
         // Pool [1..nb] mélangé par Fisher-Yates (tirage sans remise).
         let pool: List<int> = new List<int>()
@@ -68,6 +71,7 @@ public class Placement {
         }
 
         let seats: List<SeatRow> = new List<SeatRow>()
+        var relaisUsed: int = 0
         for ti in 0..nb {
             let team: TeamIn = teams.Get(ti)
             let tableNumber: int = tableNumbers.Get(ti)
@@ -82,25 +86,32 @@ public class Placement {
                 row.TeamId = team.Id
                 seats.Add(row)
             }
+            // Table de 3 : le relais occupe Nord.
+            if (ordered.Count() == 3 && relaisUsed < relaisIds.Count()) {
+                let rr: SeatRow = new SeatRow()
+                rr.TableNumber = tableNumber
+                rr.Seat = "N"
+                rr.PlayerId = relaisIds.Get(relaisUsed)
+                rr.TeamId = team.Id
+                seats.Add(rr)
+                relaisUsed = relaisUsed + 1
+            }
         }
         return seats
     }
 
     // Sièges d'une équipe, dans l'ordre de `ordered`.
-    //   - Sièges explicites (team_players.seat) tous renseignés et
-    //     distincts : on les respecte tels quels.
-    //   - Sinon, ordre des joueurs → N, S, E, O. Pour une table de 3, la
-    //     place vide est tirée au sort parmi S/E/O : jamais Nord, qui est
-    //     le responsable de la table (il tient la feuille de marque). Et
-    //     comme S, E et O bougent d'une manche à l'autre (patron de
-    //     mouvement), la table à 3 change de numéro à chaque manche au lieu
-    //     de rester figée comme quand la place vide était Nord.
+    //   - 4 joueurs : sièges explicites (team_players.seat) tous renseignés
+    //     et distincts → respectés ; sinon ordre des joueurs → N, S, E, O.
+    //   - 3 joueurs : Nord est réservé au relais. Sièges explicites
+    //     respectés s'ils sont distincts et hors Nord ; sinon S, E, O.
     public static List<string> SeatsFor(List<TeamPlayerIn> ordered) {
         let n: int = ordered.Count()
         let out: List<string> = new List<string>()
         var explicit: bool = n > 0
         for p in ordered {
             if (String.Length(p.Seat) == 0) { explicit = false }
+            if (n == 3 && p.Seat == "N") { explicit = false }
         }
         if (explicit) {
             for i in 0..n {
@@ -115,11 +126,9 @@ public class Placement {
             for p in ordered { out.Add(p.Seat) }
             return out
         }
-        var skip: int = -1
-        if (n == 3) { skip = 1 + Placement.Below(3) }   // 1=S, 2=E, 3=O
         var idx: int = 0
+        if (n == 3) { idx = 1 }   // S, E, O
         for i in 0..n {
-            if (idx == skip) { idx = idx + 1 }
             out.Add(Placement.SeatAt(idx))
             idx = idx + 1
         }

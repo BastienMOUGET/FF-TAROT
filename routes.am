@@ -127,6 +127,7 @@ public class Routes {
         app.Post("/api/sub-tournaments/:subTournamentId/recompute", ctx => ModRanking.Recompute(ctx, db))
         app.Get("/api/sub-tournaments/:subTournamentId/export-pcn.csv", ctx => ModRanking.ExportPcn(ctx, db))
         app.Get("/api/tournaments/:tournamentId/challenge-ranking", ctx => ModRanking.GetChallengeRanking(ctx, db))
+        app.Post("/api/tournaments/:tournamentId/import-ranking", ctx => ModRanking.ImportRanking(ctx, db))
 
         // Feuille de route (imprimable)
         app.Get("/api/sub-tournaments/:subTournamentId/route-sheet", ctx => ModRouteSheet.Get(ctx, db))

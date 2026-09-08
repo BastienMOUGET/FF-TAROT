@@ -127,6 +127,25 @@ public class ModRounds {
         return J.NoContent()
     }
 
+    // Ids des joueurs virtuels « Relais », triés 1, 2, 3… ; en crée au
+    // besoin pour en avoir `needed`.
+    static List<int> RelaisIds(Db db, int needed) {
+        let out: List<int> = new List<int>()
+        let rows: List<List<string>> = db.Rows("SELECT id FROM players WHERE is_relais = TRUE ORDER BY CAST(firstname AS UNSIGNED) ASC, id ASC", Db.NoParams())
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            out.Add(Db.CellInt(r.Get(0)))
+        }
+        var k: int = out.Count()
+        while (out.Count() < needed) {
+            k = k + 1
+            let ok: bool = db.Exec("INSERT INTO players (name, firstname, is_relais) VALUES ('Relais', ?, TRUE)", Db.P1(String.FromInt(k)))
+            if (!ok) { return out }
+            out.Add(db.LastInsertId())
+        }
+        return out
+    }
+
     // POST /api/rounds/:id/generate (admin) — (re)génère le placement.
     public static HttpResponse Generate(WebContext ctx, Db db) {
         let rc: int = Auth.CheckRole(ctx, "admin")
@@ -165,7 +184,12 @@ public class ModRounds {
                 if (team.Players.Count() != 3 && team.Players.Count() != 4) { return HttpErr.BadRequest("Équipe incomplète : " + tidS) }
                 teams.Add(team)
             }
-            seats = Placement.GenerateInitialSeats(teams)
+            // Relais pour les tables de 3 : un par équipe de 3, créés si
+            // la base n'en a pas assez (migration 005 en pose 3).
+            var nbThrees: int = 0
+            for t in teams { if (t.Players.Count() == 3) { nbThrees = nbThrees + 1 } }
+            let relaisIds: List<int> = ModRounds.RelaisIds(db, nbThrees)
+            seats = Placement.GenerateInitialSeats(teams, relaisIds)
         } else {
             let prevRows: List<List<string>> = db.Rows("SELECT id FROM rounds WHERE sub_tournament_id = ? AND round_number = ?", Db.P2(subId, String.FromInt(roundNumber - 1)))
             if (prevRows.Count() == 0) { return HttpErr.BadRequest("Round précédent introuvable") }

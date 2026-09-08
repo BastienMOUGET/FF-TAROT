@@ -6,6 +6,65 @@
 
 ---
 
+## ✅ v3.0.23 — Retour terrain n°4 : relais, import CSV, impressions, minuterie *(livré, 2026-09-08)*
+
+Mémo n°4 (`feedback/2026-09-08/`, sur la v3.0.22) et le fichier
+`Classement 02092026.csv` de l'Excel FFT.
+
+### Tables de 3 : le « Relais », à l'inverse de la 3.0.22
+
+Le club joue avec un joueur virtuel **Relais 1/2/3** assis en **Nord, fixe
+à sa table toute la soirée**, qui marque des points comme les autres (Sud
+prend et gagne 25 : Nord relais, Est, Ouest à -25, Sud à +75). La 3.0.22
+tirait la place vide hors Nord et la faisait tourner : c'était à l'envers.
+
+- Migration `005` : `players.is_relais` + 3 joueurs Relais. Ils
+  n'apparaissent ni dans la liste des joueurs, ni dans les classements
+  (manche et général), ni dans l'import. `rounds.am` en crée d'autres si
+  une soirée a plus de 3 tables de 3.
+- Mise en place : une équipe de 3 place ses joueurs en S, E, O (sièges du
+  tirage respectés, jamais Nord) et le back pose « Relais k » en Nord. Le
+  patron de mouvement laisse Nord à 0 : le relais ne bouge pas.
+- La saisie est donc à nouveau une somme à 0 sur 4 sièges, relais compris,
+  avec le dernier score calculé — ce qu'il demande au point 3.
+
+### Import d'un tournoi joué hors PABB90
+
+`POST /api/tournaments/:id/import-ranking` + bouton « Importer un tournoi
+(CSV) » sur la page Challenge. Le CSV de l'Excel FFT (séparateur « ; »,
+lignes d'en-tête, puis `Place;N° Licence;Nom Prénom;Départ;Points;Pcn`)
+est lu côté front : ligne de titres repérée par « Place » + « Points »,
+codes parasites en fin de nom retirés (« 0 », « NR », « 2C »), licence
+« 0 » = aucune, nom du tournoi déduit du fichier (`Classement 02092026`
+→ `02/09/2026`). Joueur reconnu par licence, sinon par nom + prénom, sinon
+créé. Le tournoi est marqué `sub_tournaments.imported` (migration `005`) :
+`Compute()` l'ignore, sans quoi le premier recalcul l'aurait effacé. Vérifié
+sur le fichier du club : 39 joueurs importés, présents au Challenge, intacts
+après un recalcul, suppression propre.
+
+Un tournoi se retire du Challenge depuis sa carte (corbeille + confirmation).
+
+### Impressions et classements
+
+- Le bandeau latéral et la barre du haut disparaissent à l'impression sur
+  toutes les pages (règle globale dans `styles.scss`).
+- Bouton Imprimer sur le classement général et sur le classement du
+  Challenge (la page n'imprime alors que ce classement).
+- Relief étendu aux scores **égaux à 0** (général et manche).
+
+### Minuterie de manche
+
+Dans le bandeau latéral : durée réglable (50 min par défaut, mémorisée
+dans le navigateur), Démarrer / Pause / Remise à zéro, sonnerie
+synthétisée à la fin (3 séries de 3 bips) et cadre clignotant. Elle
+survit à la navigation.
+
+Vérifié (chaîne CI reproduite en local, base jetable) : relais en Nord sur
+les deux manches, exclu des classements, saisie d'une table de 3, import
+CSV réel, recalcul, suppression. Rendu visuel non testé ici.
+
+---
+
 ## ✅ v3.0.22 — Retour terrain n°3 : la soirée de A à Z *(livré, 2026-09-07)*
 
 Le backlog du mémo n°3 (voir v3.0.21), traité en un lot. Le vocabulaire

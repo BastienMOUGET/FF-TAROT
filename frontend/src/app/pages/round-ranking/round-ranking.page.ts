@@ -65,7 +65,7 @@ import { RoundRanking } from '../../core/api.types';
             @for (e of r.ranking; track e.player_id) {
               <tr
                 [class.first]="e.place === 1"
-                [class.positive]="e.score !== null && e.score > 0"
+                [class.positive]="e.score !== null && e.score >= 0"
                 [class.pending]="e.place === 0"
               >
                 <td class="num">{{ e.place > 0 ? e.place : '—' }}</td>
@@ -98,6 +98,7 @@ import { RoundRanking } from '../../core/api.types';
     .num { text-align: right; width: 70px; }
     .score { font-weight: 600; }
     tr.first td { background: rgba(255, 215, 0, 0.3); font-weight: 700; }
+    tr.positive td { background: rgba(129, 199, 132, 0.18); }
     tr.pending td { color: #9e9e9e; font-style: italic; }
     .tag { color: #e65100; margin-left: 6px; }
     .seat {

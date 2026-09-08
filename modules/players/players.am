@@ -35,6 +35,9 @@ public class ModPlayers {
 
         let conds: List<string> = new List<string>()
         let params: List<string> = new List<string>()
+        // Les joueurs virtuels « Relais » (tables de 3) ne sont pas des
+        // joueurs du club : jamais dans la liste, l'import ou le tirage.
+        conds.Add("p.is_relais = FALSE")
         if (String.Length(licence) > 0) {
             conds.Add("p.licence = ?")
             params.Add(licence)

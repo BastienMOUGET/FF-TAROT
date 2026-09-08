@@ -76,9 +76,12 @@ public class ModRanking {
     // Calcule + persiste le classement. Renvoie false si sous-tournoi absent.
     public static bool Compute(Db db, string subId) {
         let subt: List<List<string>> = db.Rows(
-            "SELECT st.id, st.tournament_id, st.indice_pcn, st.championnat, t.coef_default FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id WHERE st.id = ?", Db.P1(subId))
+            "SELECT st.id, st.tournament_id, st.indice_pcn, st.championnat, t.coef_default, st.imported FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id WHERE st.id = ?", Db.P1(subId))
         if (subt.Count() == 0) { return false }
         let s0: List<string> = subt.Get(0)
+        // Tournoi importé (classement externe) : ses lignes de rankings sont
+        // la seule donnée, on ne les recalcule jamais.
+        if (Db.CellBool(s0.Get(5))) { return true }
         let tournamentId: string = s0.Get(1)
         var coef: float = Db.CellFloat(s0.Get(4))
         if (coef == 0.0) { coef = 1.0 }
@@ -354,7 +357,7 @@ public class ModRanking {
         if (coef == 0.0) { coef = 1.0 }
 
         let rows: List<List<string>> = db.Rows(
-            "SELECT s.player_id, p.licence, p.name, p.firstname, s.table_number, s.seat, tr.score_n, tr.score_s, tr.score_e, tr.score_o, COALESCE(tr.validated, 0), (tr.id IS NOT NULL) FROM seats s JOIN players p ON p.id = s.player_id LEFT JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number WHERE s.round_id = ? ORDER BY s.table_number ASC, FIELD(s.seat, 'N','S','E','O')",
+            "SELECT s.player_id, p.licence, p.name, p.firstname, s.table_number, s.seat, tr.score_n, tr.score_s, tr.score_e, tr.score_o, COALESCE(tr.validated, 0), (tr.id IS NOT NULL) FROM seats s JOIN players p ON p.id = s.player_id LEFT JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number WHERE s.round_id = ? AND p.is_relais = FALSE ORDER BY s.table_number ASC, FIELD(s.seat, 'N','S','E','O')",
             Db.P1(roundId))
 
         let entries: List<RankEntry> = new List<RankEntry>()
@@ -430,6 +433,95 @@ public class ModRanking {
     static string MapGetS(Map<string, string> m, string k) {
         if (!m.Has(k)) { return "" }
         return m.Get(k)
+    }
+
+    // POST /api/tournaments/:tournamentId/import-ranking (admin)
+    // Importe un classement de tournoi tenu hors PABB90 (CSV de l'Excel FFT)
+    // dans le Challenge : crée un tournoi marqué `imported` et ses lignes de
+    // `rankings`. Corps : { label, rows: [{place, licence, name, firstname,
+    // points, pcn}] }. Joueur reconnu par licence, sinon par nom + prénom
+    // (insensible à la casse), sinon créé.
+    public static HttpResponse ImportRanking(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let tid: string = ctx.Param("tournamentId")
+        let trows: List<List<string>> = db.Rows("SELECT id FROM tournaments WHERE id = ?", Db.P1(tid))
+        if (trows.Count() == 0) { return HttpErr.NotFound() }
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasStr(b, "label")) { return HttpErr.BadRequest("label requis") }
+        let label: string = Fld.Str(b, "label")
+        let rowsV: JsonValue = b.Get("rows")
+        if (!rowsV.IsArray()) { return HttpErr.BadRequest("rows doit être un tableau") }
+        if (rowsV.Length() == 0) { return HttpErr.BadRequest("Aucune ligne à importer") }
+
+        db.Begin()
+        let insOk: bool = db.Exec("INSERT INTO sub_tournaments (tournament_id, label, imported) VALUES (?, ?, TRUE)", Db.P2(tid, label))
+        if (!insOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        let subId: string = String.FromInt(db.LastInsertId())
+
+        var imported: int = 0
+        var createdPlayers: int = 0
+        let seen: List<string> = new List<string>()
+        for i in 0..rowsV.Length() {
+            let r: JsonValue = rowsV.At(i)
+            if (!Fld.HasStr(r, "name")) { continue }
+            let name: string = Fld.Str(r, "name")
+            if (String.Length(name) == 0) { continue }
+            var firstname: string = ""
+            if (Fld.HasStr(r, "firstname")) { firstname = Fld.Str(r, "firstname") }
+            var licence: string = ""
+            if (Fld.HasStr(r, "licence")) { licence = Fld.Str(r, "licence") }
+            if (licence == "0") { licence = "" }
+
+            var pid: string = ""
+            if (String.Length(licence) > 0) {
+                let byLic: List<List<string>> = db.Rows("SELECT id FROM players WHERE licence = ?", Db.P1(licence))
+                if (byLic.Count() > 0) { let l0: List<string> = byLic.Get(0) pid = l0.Get(0) }
+            }
+            if (String.Length(pid) == 0) {
+                let byName: List<List<string>> = db.Rows("SELECT id FROM players WHERE is_relais = FALSE AND LOWER(name) = LOWER(?) AND LOWER(firstname) = LOWER(?) ORDER BY id ASC", Db.P2(name, firstname))
+                if (byName.Count() > 0) { let n0: List<string> = byName.Get(0) pid = n0.Get(0) }
+            }
+            if (String.Length(pid) == 0) {
+                var okP: bool = false
+                if (String.Length(licence) > 0) {
+                    okP = db.Exec("INSERT INTO players (licence, name, firstname) VALUES (?, ?, ?)", Db.P3(licence, name, firstname))
+                } else {
+                    okP = db.Exec("INSERT INTO players (name, firstname) VALUES (?, ?)", Db.P2(name, firstname))
+                }
+                if (!okP) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+                pid = String.FromInt(db.LastInsertId())
+                createdPlayers = createdPlayers + 1
+            }
+            var dup: bool = false
+            for sp in seen { if (sp == pid) { dup = true } }
+            if (dup) { continue }
+            seen.Add(pid)
+
+            let ps: List<string> = new List<string>()
+            ps.Add(subId)
+            ps.Add(pid)
+            ps.Add(Fld.NumOr(r, "points", "0"))
+            ps.Add(Fld.NumOr(r, "points", "0"))
+            ps.Add(Fld.IntOr(r, "place", "0"))
+            ps.Add(Fld.NumOr(r, "pcn", "0"))
+            let okR: bool = db.Exec("INSERT INTO rankings (sub_tournament_id, player_id, rounds_played, total, total_general, place, pcn, pp, eliminated) VALUES (?, ?, 0, ?, ?, ?, ?, 0, FALSE)", ps)
+            if (!okR) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+            imported = imported + 1
+        }
+        if (imported == 0) { db.Rollback() return HttpErr.BadRequest("Aucune ligne exploitable (nom manquant)") }
+        db.Commit()
+
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("sub_tournament_id", J.CellInt(subId))
+        o.AppendEntry("label", J.Str(label))
+        o.AppendEntry("imported", J.Int(imported))
+        o.AppendEntry("created_players", J.Int(createdPlayers))
+        let resp: HttpResponse = J.Ok(o)
+        return resp.Status(201)
     }
 
     public static HttpResponse GetChallengeRanking(WebContext ctx, Db db) {

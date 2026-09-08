@@ -58,6 +58,7 @@ par tous les installeurs du projet.
 | `002_reconcile_pre_migration_schema.sql` | ajoute `players.club_member` et `tournaments.challenge_mode` aux bases antérieures au système de migrations |
 | `003_legacy_password_hashes.sql` | remet sur `admin123` les comptes admin dont le hash est hérité de l'ancien back Node (bcrypt), donc invérifiable par le back Amalgame |
 | `004_team_player_seat.sql` | ajoute `team_players.seat` : le siège N/S/E/O choisi au tirage au sort, respecté par la mise en place de la manche 1 (tables de 3) |
+| `005_relais_and_imported.sql` | `players.is_relais` + 3 joueurs « Relais » (Nord fixe des tables de 3) ; `sub_tournaments.imported` (classement importé, jamais recalculé) |
 
 ### Interdit dans une migration
 

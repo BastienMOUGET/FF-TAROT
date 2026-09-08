@@ -10,6 +10,7 @@ import { MatMenuModule } from '@angular/material/menu';
 
 import { AuthService } from '../core/auth.service';
 import { environment } from '../../environments/environment';
+import { RoundTimer } from './round-timer';
 
 @Component({
   selector: 'app-main-layout',
@@ -23,6 +24,7 @@ import { environment } from '../../environments/environment';
     MatIconModule,
     MatButtonModule,
     MatMenuModule,
+    RoundTimer,
   ],
   template: `
     <mat-sidenav-container class="container">
@@ -50,6 +52,7 @@ import { environment } from '../../environments/environment';
             </a>
           }
         </mat-nav-list>
+        <app-round-timer />
       </mat-sidenav>
       <mat-sidenav-content>
         <mat-toolbar color="primary" class="topbar">

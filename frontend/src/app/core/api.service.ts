@@ -6,7 +6,7 @@ import { environment } from '../../environments/environment';
 import {
   ChallengeRanking, Club, Comite, DonneSet, Hand, Ligue, MovementPattern, Pair,
   Penalty, PenaltyType, Player, PlayerImportResult, PlayerImportRow, PpEntry,
-  RankingEntry, Round, RoundRanking, RouteSheet, Seat, SubTournament, TableResult, Team,
+  RankingEntry, RankingImportResult, RankingImportRow, Round, RoundRanking, RouteSheet, Seat, SubTournament, TableResult, Team,
   Tournament, User,
 } from './api.types';
 
@@ -94,6 +94,17 @@ export class ApiService {
     );
   subTournament = (id: number): Observable<SubTournament> =>
     this.http.get<SubTournament>(`${this.base}/sub-tournaments/${id}`);
+  deleteSubTournament = (id: number): Observable<void> =>
+    this.http.delete<void>(`${this.base}/sub-tournaments/${id}`);
+  importRanking = (
+    tournamentId: number,
+    label: string,
+    rows: RankingImportRow[]
+  ): Observable<RankingImportResult> =>
+    this.http.post<RankingImportResult>(
+      `${this.base}/tournaments/${tournamentId}/import-ranking`,
+      { label, rows }
+    );
   createSubTournament = (
     tournamentId: number,
     data: Partial<SubTournament>
