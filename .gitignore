@@ -155,3 +155,4 @@ old/
 
 # Retours terrain (mémos, fichiers Excel du club) : données personnelles de joueurs, jamais versionnés (voir ROADMAP.md)
 /feedback/
+/server-ci	server-ci

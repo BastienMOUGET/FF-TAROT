@@ -38,6 +38,10 @@ export class ApiService {
   /* ----- Clubs (admin) ----- */
   clubs = (): Observable<Club[]> =>
     this.http.get<Club[]>(`${this.base}/clubs`);
+  club = (id: number): Observable<Club> =>
+    this.http.get<Club>(`${this.base}/clubs/${id}`);
+  setClubLogo = (id: number, logo: string | null): Observable<Club> =>
+    this.http.put<Club>(`${this.base}/clubs/${id}/logo`, { logo });
   createClub = (data: Partial<Club>): Observable<Club> =>
     this.http.post<Club>(`${this.base}/clubs`, data);
   updateClub = (id: number, data: Partial<Club>): Observable<Club> =>

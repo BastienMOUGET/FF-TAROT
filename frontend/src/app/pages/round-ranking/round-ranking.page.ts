@@ -8,6 +8,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 import { ApiService } from '../../core/api.service';
 import { RoundRanking } from '../../core/api.types';
+import { ClubLogo } from '../../shared/club-logo';
 
 // Classement d'UNE manche : ce que le club affiche / imprime après chaque
 // manche (4 par soirée). Le 1er est mis en relief. Les tables pas encore
@@ -20,6 +21,7 @@ import { RoundRanking } from '../../core/api.types';
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    ClubLogo,
   ],
   template: `
     <div class="no-print toolbar">
@@ -44,7 +46,10 @@ import { RoundRanking } from '../../core/api.types';
       <mat-progress-spinner mode="indeterminate" diameter="40" />
     } @else if (rk(); as r) {
       <div class="sheet">
-        <h1>Classement de la manche {{ r.round_number }}</h1>
+        <div class="print-head">
+          <app-club-logo [subTournamentId]="r.sub_tournament_id" [size]="56" />
+          <h1>Classement de la manche {{ r.round_number }}</h1>
+        </div>
         @if (pendingCount() > 0) {
           <p class="warn no-print">
             {{ pendingCount() }} joueur(s) sur une table non validée : le
@@ -86,6 +91,8 @@ import { RoundRanking } from '../../core/api.types';
     }
   `,
   styles: `
+    .print-head { display: flex; align-items: center; gap: 16px; margin: 0 0 12px; }
+    .print-head h1 { margin: 0; }
     .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
     .back { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; color: #1976d2; }
     .spacer { flex: 1 1 auto; }

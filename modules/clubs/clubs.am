@@ -39,12 +39,48 @@ public class ModClubs {
         return J.Ok(arr)
     }
 
+    // Le détail d'un club porte aussi son logo (data URL, absent de la
+    // liste pour ne pas l'alourdir).
     public static HttpResponse GetById(WebContext ctx, Db db) {
         let id: string = ctx.Param("id")
         let rows: List<List<string>> = db.Rows(ModClubs.SELECT_BASE() + " WHERE c.id = ?", Db.P1(id))
         if (rows.Count() == 0) { return HttpErr.NotFound() }
         let r0: List<string> = rows.Get(0)
-        return J.Ok(ModClubs.Row(r0))
+        let o: JsonValue = ModClubs.Row(r0)
+        let lrows: List<List<string>> = db.Rows("SELECT logo FROM clubs WHERE id = ?", Db.P1(id))
+        var logo: string = ""
+        if (lrows.Count() > 0) { let l0: List<string> = lrows.Get(0) logo = l0.Get(0) }
+        o.AppendEntry("logo", J.CellStrN(logo))
+        return J.Ok(o)
+    }
+
+    // PUT /api/clubs/:id/logo (admin) — { logo: "data:image/jpeg;base64,…" }
+    // ou { logo: null } pour le retirer. Séparé de la mise à jour du club :
+    // le formulaire d'édition ne renvoie pas l'image à chaque enregistrement.
+    public static HttpResponse SetLogo(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let id: string = ctx.Param("id")
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        var ok: bool = false
+        if (Fld.HasStr(b, "logo")) {
+            let logo: string = Fld.Str(b, "logo")
+            if (!String.StartsWith(logo, "data:image/")) { return HttpErr.BadRequest("logo doit être une image en data URL") }
+            if (String.Length(logo) > 400000) { return HttpErr.BadRequest("Image trop lourde (max 400 Ko)") }
+            ok = db.Exec("UPDATE clubs SET logo = ? WHERE id = ?", Db.P2(logo, id))
+        } else {
+            ok = db.Exec("UPDATE clubs SET logo = NULL WHERE id = ?", Db.P1(id))
+        }
+        if (!ok) { return HttpErr.FromDb(db.LastError()) }
+        let rows: List<List<string>> = db.Rows(ModClubs.SELECT_BASE() + " WHERE c.id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        let o: JsonValue = ModClubs.Row(r0)
+        if (Fld.HasStr(b, "logo")) { o.AppendEntry("logo", J.Str(Fld.Str(b, "logo"))) } else { o.AppendEntry("logo", J.Null()) }
+        return J.Ok(o)
     }
 
     static HttpResponse Refetch(Db db, int id) {

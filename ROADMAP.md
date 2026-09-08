@@ -6,6 +6,40 @@
 
 ---
 
+## ✅ v3.0.24 — Retour terrain n°5 : club du challenge, classement Challenge détaillé, logo *(livré, 2026-09-08)*
+
+Mémo n°5 (`feedback/2026-09-08-2/` : capture, classeur Excel
+`Challenge-Belfort-2025-2026_2ème Trimestre.xls`, logo `PABB.jpg`).
+
+- **Club à la création d'un Challenge** : liste déroulante des clubs dans
+  le dialogue « Nouveau Challenge », présélectionnée s'il n'y a qu'un club
+  en base. Le nom du club apparaît dans la liste et sur les classements.
+- **Classement du Challenge au format du classeur Excel** (feuille
+  « Général ») : une colonne par tournoi, totaux Points / Pcn / PC et
+  nombre de participations, licence en colonne. Deux vues : « PC par
+  tournoi » (compacte) ou « Points / Pcn / PC » (les triplets du classeur).
+  Impression en paysage. `GET …/challenge-ranking` renvoie désormais la
+  liste des tournois et, par joueur, `details[]` (points, pcn, pc par
+  tournoi, null si absent), `total_points`, `total_pcn`. Vérifié : PC =
+  nombre de joueurs − place + 1, comme la feuille T1 du classeur.
+- **Logo de club** (migration `006`, `clubs.logo`) : image choisie dans le
+  dialogue Club de l'administration, réduite à 240 px côté navigateur et
+  stockée en data URL (≈ 40 Ko), `PUT /api/clubs/:id/logo`. Affichée en
+  miniature en tête des classements de manche, de tournoi et de Challenge,
+  jamais en page d'accueil : l'application reste neutre pour un autre club.
+  Le détail d'un club porte le logo, la liste non.
+- `build-ci.sh` : reproduit la chaîne de la release en local (amc de
+  `release.yml` dans `~/.cache/pabb90-ci/`, HOME dédié, packages depuis le
+  lock, lock vérifié identique) → `./server-ci`. C'est le binaire à utiliser
+  pour tester l'API sur ce poste (voir v3.0.22).
+
+Vérifié (server-ci, base jetable) : création d'un challenge avec club,
+logo envoyé / lu / refusé si non image / retiré, deux imports du CSV réel
+et classement détaillé cohérent (FREYBURGER 39 + 39 = 78 PC, 2
+participations). Rendu visuel non testé ici.
+
+---
+
 ## ✅ v3.0.23 — Retour terrain n°4 : relais, import CSV, impressions, minuterie *(livré, 2026-09-08)*
 
 Mémo n°4 (`feedback/2026-09-08/`, sur la v3.0.22) et le fichier

@@ -35,6 +35,7 @@ public class Routes {
         app.Get("/api/clubs/:id", ctx => ModClubs.GetById(ctx, db))
         app.Post("/api/clubs", ctx => ModClubs.Create(ctx, db))
         app.Put("/api/clubs/:id", ctx => ModClubs.Update(ctx, db))
+        app.Put("/api/clubs/:id/logo", ctx => ModClubs.SetLogo(ctx, db))
         app.Delete("/api/clubs/:id", ctx => ModClubs.Remove(ctx, db))
 
         // Référentiel — types de pénalité

@@ -22,6 +22,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { ChallengeRanking, SubTournament, Tournament } from '../../core/api.types';
 import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
+import { ClubLogo } from '../../shared/club-logo';
 import { RankingImportDialog } from './ranking-import-dialog';
 
 // Vocabulaire du club (retour terrain) : un "Challenge" (tournament) regroupe
@@ -102,6 +103,7 @@ export class SubTournamentDialog {
     MatChipsModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    ClubLogo,
   ],
   template: `
     <a routerLink="/tournaments" class="back">
@@ -178,10 +180,12 @@ export class SubTournamentDialog {
            manipule pas pendant la soirée. -->
       <mat-card class="challenge-card">
         <mat-card-header>
+          <app-club-logo [clubId]="t.club_id" [size]="48" class="head-logo" />
           <mat-card-title>Classement du Challenge {{ t.name }}</mat-card-title>
           <mat-card-subtitle>
+            @if (t.club_name) { {{ t.club_name }} · }
             Cumul sur {{ challengeRanking()?.sub_tournaments_count ?? 0 }}
-            tournoi(s)
+            tournoi(s) · PC = points Challenge
           </mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
@@ -192,6 +196,10 @@ export class SubTournamentDialog {
             >
               <mat-button-toggle value="place">Par place</mat-button-toggle>
               <mat-button-toggle value="raw">Par points</mat-button-toggle>
+            </mat-button-toggle-group>
+            <mat-button-toggle-group [value]="detailMode()" (change)="detailMode.set($event.value)">
+              <mat-button-toggle value="pc">PC par tournoi</mat-button-toggle>
+              <mat-button-toggle value="full">Points / Pcn / PC</mat-button-toggle>
             </mat-button-toggle-group>
             <span class="spacer"></span>
             <button mat-stroked-button (click)="print()">
@@ -208,26 +216,60 @@ export class SubTournamentDialog {
               Pas encore de classement (aucun résultat de tournoi validé).
             </p>
           } @else {
-            <table class="challenge-table">
+            <!-- Format du classeur Excel du club (feuille « Général ») : une
+                 colonne par tournoi, puis les totaux et le nombre de
+                 participations. -->
+            <div class="table-wrap">
+            <table class="challenge-table" [class.full]="detailMode() === 'full'">
               <thead>
                 <tr>
-                  <th>Place</th>
-                  <th>Joueur</th>
-                  <th>Tournois joués</th>
-                  <th>Points</th>
+                  <th rowspan="2" class="num">Place</th>
+                  <th rowspan="2">Licence</th>
+                  <th rowspan="2">Joueur</th>
+                  @for (st of challengeRanking()!.sub_tournaments; track st.id) {
+                    <th class="tour" [attr.colspan]="detailMode() === 'full' ? 3 : 1" [title]="st.players + ' joueurs'">
+                      {{ st.label }}
+                    </th>
+                  }
+                  <th rowspan="2" class="num total">Points</th>
+                  <th rowspan="2" class="num total">Pcn</th>
+                  <th rowspan="2" class="num total pc">PC</th>
+                  <th rowspan="2" class="num total">Particip.</th>
+                </tr>
+                <tr>
+                  @for (st of challengeRanking()!.sub_tournaments; track st.id) {
+                    @if (detailMode() === 'full') {
+                      <th class="num sub">Pts</th><th class="num sub">Pcn</th><th class="num sub">PC</th>
+                    } @else {
+                      <th class="num sub">PC</th>
+                    }
+                  }
                 </tr>
               </thead>
               <tbody>
                 @for (e of challengeRanking()!.ranking; track e.player_id) {
                   <tr [class.first]="e.place === 1">
-                    <td>{{ e.place }}</td>
-                    <td>{{ e.name }} {{ e.firstname }}</td>
-                    <td>{{ e.sub_tournaments_played }}</td>
-                    <td>{{ e.points }}</td>
+                    <td class="num">{{ e.place }}</td>
+                    <td class="lic">{{ e.licence || '' }}</td>
+                    <td class="name">{{ e.name }} {{ e.firstname }}</td>
+                    @for (d of e.details; track $index) {
+                      @if (detailMode() === 'full') {
+                        <td class="num">{{ d ? d.points : '' }}</td>
+                        <td class="num">{{ d ? d.pcn : '' }}</td>
+                        <td class="num pc">{{ d ? d.pc : '' }}</td>
+                      } @else {
+                        <td class="num pc">{{ d ? d.pc : '' }}</td>
+                      }
+                    }
+                    <td class="num total">{{ e.total_points }}</td>
+                    <td class="num total">{{ e.total_pcn }}</td>
+                    <td class="num total pc strong">{{ e.points }}</td>
+                    <td class="num total">{{ e.sub_tournaments_played }}</td>
                   </tr>
                 }
               </tbody>
             </table>
+            </div>
           }
         </mat-card-content>
       </mat-card>
@@ -269,17 +311,33 @@ export class SubTournamentDialog {
     .challenge-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .spacer { flex: 1 1 auto; }
     @media print {
+      @page { size: landscape; margin: 10mm; }
       .back, .head, .section-head, .subs { display: none !important; }
       .challenge-card { box-shadow: none !important; }
+      .table-wrap { overflow: visible; }
+      .challenge-table { font-size: 9pt; }
+      .challenge-table th, .challenge-table td { padding: 2px 5px; }
+      .challenge-table tr.first td { background: #ffe082 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
     .sub-title { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 500; }
     .sub-open { display: flex; align-items: center; color: #1976d2; font-size: 0.9em; }
     .challenge-card mat-card-content { display: flex; flex-direction: column; gap: 12px; }
-    .challenge-table { width: 100%; border-collapse: collapse; }
+    .head-logo { margin-right: 12px; }
+    .table-wrap { overflow-x: auto; }
+    .challenge-table { border-collapse: collapse; white-space: nowrap; font-size: 0.92em; }
     .challenge-table th, .challenge-table td {
-      text-align: left; padding: 6px 12px; border-bottom: 1px solid #eee;
+      text-align: left; padding: 4px 8px; border-bottom: 1px solid #eee;
     }
-    .challenge-table tr.first td { background: rgba(255, 215, 0, 0.18); font-weight: 600; }
+    .challenge-table th { background: #f5f5f5; vertical-align: bottom; }
+    .challenge-table th.tour { text-align: center; border-left: 1px solid #ddd; font-weight: 500; }
+    .challenge-table th.sub { font-size: 0.8em; color: #757575; font-weight: 500; }
+    .challenge-table .num { text-align: right; }
+    .challenge-table .lic { color: #757575; font-size: 0.85em; }
+    .challenge-table .name { white-space: nowrap; }
+    .challenge-table .pc { font-weight: 600; }
+    .challenge-table .total { border-left: 2px solid #bdbdbd; background: #fafafa; }
+    .challenge-table .strong { font-weight: 700; }
+    .challenge-table tr.first td { background: rgba(255, 215, 0, 0.25); font-weight: 600; }
   `,
 })
 export class TournamentDetailPage implements OnInit {
@@ -294,6 +352,7 @@ export class TournamentDetailPage implements OnInit {
   subs = signal<SubTournament[]>([]);
   challengeRanking = signal<ChallengeRanking | null>(null);
   challengeLoading = signal(false);
+  detailMode = signal<'pc' | 'full'>('pc');
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));

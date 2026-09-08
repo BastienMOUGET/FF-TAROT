@@ -40,6 +40,8 @@ export interface Club {
   comite_code?: string | null;
   comite_name?: string | null;
   ligue_id?: number | null;
+  // Data URL de l'image du club (détail seulement, jamais dans la liste).
+  logo?: string | null;
 }
 
 export interface Player {
@@ -115,19 +117,38 @@ export interface Tournament {
   challenge_mode: 'place' | 'raw';
 }
 
+// Détail d'un joueur sur un tournoi du challenge (format Excel du club :
+// Points / Pcn / PC). null si le joueur n'y a pas participé.
+export interface ChallengeDetail {
+  points: number;
+  pcn: number;
+  pc: number;
+}
+
 export interface ChallengeRankingEntry {
   player_id: number;
   licence: string | null;
   name: string;
   firstname: string;
   sub_tournaments_played: number;
-  points: number;
+  points: number; // points challenge (PC) cumulés
+  total_points: number; // points de jeu cumulés
+  total_pcn: number;
   place: number;
+  details: (ChallengeDetail | null)[]; // même ordre que sub_tournaments
+}
+
+export interface ChallengeSubTournament {
+  id: number;
+  label: string;
+  imported: boolean;
+  players: number;
 }
 
 export interface ChallengeRanking {
   challenge_mode: 'place' | 'raw';
   sub_tournaments_count: number;
+  sub_tournaments: ChallengeSubTournament[];
   ranking: ChallengeRankingEntry[];
 }
 

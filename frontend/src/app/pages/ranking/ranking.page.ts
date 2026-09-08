@@ -20,6 +20,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ApiService } from '../../core/api.service';
 import { SocketService } from '../../core/socket.service';
 import { RankingEntry } from '../../core/api.types';
+import { ClubLogo } from '../../shared/club-logo';
 
 @Component({
   selector: 'app-ranking-page',
@@ -31,6 +32,7 @@ import { RankingEntry } from '../../core/api.types';
     MatIconModule,
     MatChipsModule,
     MatProgressSpinnerModule,
+    ClubLogo,
   ],
   template: `
     <div class="toolbar no-print">
@@ -61,6 +63,11 @@ import { RankingEntry } from '../../core/api.types';
         </mat-card-subtitle>
       </mat-card-header>
     </mat-card>
+
+    <div class="print-head">
+      <app-club-logo [subTournamentId]="subTournamentId()" [size]="56" />
+      <h1>Classement général du tournoi</h1>
+    </div>
 
     @if (loading()) {
       <mat-progress-spinner mode="indeterminate" diameter="40" />
@@ -114,6 +121,8 @@ import { RankingEntry } from '../../core/api.types';
     }
   `,
   styles: `
+    .print-head { display: flex; align-items: center; gap: 16px; margin: 0 0 12px; }
+    .print-head h1 { margin: 0; }
     .back {
       display: inline-flex;
       align-items: center;

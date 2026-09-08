@@ -531,26 +531,35 @@ public class ModRanking {
         let t0: List<string> = trows.Get(0)
         let mode: string = t0.Get(1)
 
-        let subs: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE tournament_id = ? ORDER BY id ASC", Db.P1(tid))
+        let subs: List<List<string>> = db.Rows("SELECT id, label, imported FROM sub_tournaments WHERE tournament_id = ? ORDER BY id ASC", Db.P1(tid))
 
         let pointsByPlayer: Map<string, string> = new Map<string, string>()
+        let rawByPlayer: Map<string, string> = new Map<string, string>()
+        let pcnByPlayer: Map<string, string> = new Map<string, string>()
         let playedByPlayer: Map<string, int> = new Map<string, int>()
         let licenceByPlayer: Map<string, string> = new Map<string, string>()
         let nameByPlayer: Map<string, string> = new Map<string, string>()
         let firstnameByPlayer: Map<string, string> = new Map<string, string>()
+        // Détail par tournoi (format Excel du club : Points / Pcn / PC par
+        // colonne), clé "pid|subId" → "points|pcn|pc".
+        let detail: Map<string, string> = new Map<string, string>()
+        let playersBySub: Map<string, int> = new Map<string, int>()
 
         for si in 0..subs.Count() {
             let srow: List<string> = subs.Get(si)
             let subId: string = srow.Get(0)
             let rows: List<List<string>> = db.Rows(
-                "SELECT r.player_id, p.licence, p.name, p.firstname, r.total_general, r.place FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? ORDER BY r.place ASC", Db.P1(subId))
+                "SELECT r.player_id, p.licence, p.name, p.firstname, r.total_general, r.place, r.pcn FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND p.is_relais = FALSE ORDER BY r.place ASC", Db.P1(subId))
             let n: int = rows.Count()
+            playersBySub.Set(subId, n)
             for i in 0..n {
                 let row: List<string> = rows.Get(i)
                 let pid: string = row.Get(0)
+                let raw: float = Db.CellFloat(row.Get(4))
+                let pcn: float = Db.CellFloat(row.Get(6))
                 var pts: float = 0.0
                 if (mode == "raw") {
-                    pts = Db.CellFloat(row.Get(4))
+                    pts = raw
                 } else {
                     let place: int = Db.CellInt(row.Get(5))
                     var p: int = n - place + 1
@@ -559,10 +568,13 @@ public class ModRanking {
                 }
                 let cur: float = ModRanking.MapGetF(pointsByPlayer, pid)
                 pointsByPlayer.Set(pid, String.FromFloat(cur + pts))
+                rawByPlayer.Set(pid, String.FromFloat(ModRanking.MapGetF(rawByPlayer, pid) + raw))
+                pcnByPlayer.Set(pid, String.FromFloat(ModRanking.MapGetF(pcnByPlayer, pid) + pcn))
                 playedByPlayer.Set(pid, ModRanking.MapGetI(playedByPlayer, pid) + 1)
                 licenceByPlayer.Set(pid, row.Get(1))
                 nameByPlayer.Set(pid, row.Get(2))
                 firstnameByPlayer.Set(pid, row.Get(3))
+                detail.Set(pid + "|" + subId, String.FromFloat(raw) + "|" + String.FromFloat(pcn) + "|" + String.FromFloat(pts))
             }
         }
 
@@ -594,6 +606,7 @@ public class ModRanking {
         let arr: JsonValue = J.Arr()
         for i in 0..entries.Count() {
             let e: ChallengeEntry = entries.Get(i)
+            let pid: string = String.FromInt(e.PlayerId)
             let o: JsonValue = J.Obj()
             o.AppendEntry("player_id", J.Int(e.PlayerId))
             o.AppendEntry("licence", J.CellStrN(e.Licence))
@@ -601,12 +614,42 @@ public class ModRanking {
             o.AppendEntry("firstname", J.Str(e.Firstname))
             o.AppendEntry("sub_tournaments_played", J.Int(e.Played))
             o.AppendEntry("points", J.Float(e.Points))
+            o.AppendEntry("total_points", J.Float(ModRanking.MapGetF(rawByPlayer, pid)))
+            o.AppendEntry("total_pcn", J.Float(ModRanking.MapGetF(pcnByPlayer, pid)))
             o.AppendEntry("place", J.Int(e.Place))
+            // Une entrée par tournoi du challenge, null si le joueur n'y était pas.
+            let det: JsonValue = J.Arr()
+            for si in 0..subs.Count() {
+                let srow: List<string> = subs.Get(si)
+                let key: string = pid + "|" + srow.Get(0)
+                if (detail.Has(key)) {
+                    let parts: List<string> = String.Split(detail.Get(key), "|")
+                    let d: JsonValue = J.Obj()
+                    d.AppendEntry("points", J.Float(String.ToFloat(parts.Get(0))))
+                    d.AppendEntry("pcn", J.Float(String.ToFloat(parts.Get(1))))
+                    d.AppendEntry("pc", J.Float(String.ToFloat(parts.Get(2))))
+                    det.AppendItem(d)
+                } else {
+                    det.AppendItem(J.Null())
+                }
+            }
+            o.AppendEntry("details", det)
             arr.AppendItem(o)
+        }
+        let subsArr: JsonValue = J.Arr()
+        for si in 0..subs.Count() {
+            let srow: List<string> = subs.Get(si)
+            let so: JsonValue = J.Obj()
+            so.AppendEntry("id", J.CellInt(srow.Get(0)))
+            so.AppendEntry("label", J.CellStr(srow.Get(1)))
+            so.AppendEntry("imported", J.CellBool(srow.Get(2)))
+            so.AppendEntry("players", J.Int(ModRanking.MapGetI(playersBySub, srow.Get(0))))
+            subsArr.AppendItem(so)
         }
         let result: JsonValue = J.Obj()
         result.AppendEntry("challenge_mode", J.Str(mode))
         result.AppendEntry("sub_tournaments_count", J.Int(subs.Count()))
+        result.AppendEntry("sub_tournaments", subsArr)
         result.AppendEntry("ranking", arr)
         return J.Ok(result)
     }
