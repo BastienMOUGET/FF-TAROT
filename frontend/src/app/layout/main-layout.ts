@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -9,6 +9,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 
 import { AuthService } from '../core/auth.service';
+import { ApiService } from '../core/api.service';
+import { Club } from '../core/api.types';
 import { environment } from '../../environments/environment';
 import { RoundTimer } from './round-timer';
 
@@ -36,6 +38,16 @@ import { RoundTimer } from './round-timer';
             <span class="brand-version">v{{ version }}</span>
           </div>
         </div>
+        @if (club(); as c) {
+          <!-- Club par défaut (Administration → Paramètres) : le nom du club
+               en tête du bandeau, avec son logo s'il en a un. -->
+          <a class="club-head" routerLink="/tournaments" [title]="c.name">
+            @if (c.logo) {
+              <img [src]="c.logo" alt="" class="club-head-logo" />
+            }
+            <span class="club-head-name">{{ c.name }}</span>
+          </a>
+        }
         <mat-nav-list>
           <a
             mat-list-item
@@ -101,6 +113,14 @@ import { RoundTimer } from './round-timer';
     .brand-text { display: flex; flex-direction: column; }
     .brand-name { font-weight: 600; font-size: 1.1em; line-height: 1; }
     .brand-version { font-size: 0.75em; color: #757575; line-height: 1.4; }
+    .club-head {
+      display: flex; align-items: center; gap: 10px;
+      margin: 12px 12px 4px; padding: 10px 12px; border-radius: 8px;
+      background: #1976d2; color: #fff; text-decoration: none;
+      font-weight: 600; line-height: 1.2;
+    }
+    .club-head-logo { height: 36px; max-width: 48px; object-fit: contain; background: #fff; border-radius: 4px; }
+    .club-head-name { flex: 1 1 auto; }
     .topbar {
       position: sticky;
       top: 0;
@@ -119,7 +139,19 @@ import { RoundTimer } from './round-timer';
     a.active mat-icon { color: #1976d2; }
   `,
 })
-export class MainLayout {
+export class MainLayout implements OnInit {
   protected auth = inject(AuthService);
+  private api = inject(ApiService);
   protected version = environment.appVersion;
+  club = signal<Club | null>(null);
+
+  ngOnInit(): void {
+    this.api.settings().subscribe({
+      next: (s) => {
+        const id = Number(s.default_club_id);
+        if (id > 0) this.api.club(id).subscribe({ next: (c) => this.club.set(c), error: () => this.club.set(null) });
+      },
+      error: () => this.club.set(null),
+    });
+  }
 }

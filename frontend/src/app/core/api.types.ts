@@ -166,6 +166,15 @@ export interface SubTournament {
   // Classement importé (CSV Excel FFT) : ni équipes ni manches, seulement
   // des lignes de rankings figées.
   imported?: boolean;
+  // Nombre de manches prévu (toutes générées après le tirage au sort).
+  rounds_planned?: number;
+}
+
+// Paramètres globaux (GET/PUT /api/settings), valeurs en chaînes.
+export interface Settings {
+  rounds_default?: string | null;
+  default_club_id?: string | null;
+  [key: string]: string | null | undefined;
 }
 
 export interface RankingImportRow {

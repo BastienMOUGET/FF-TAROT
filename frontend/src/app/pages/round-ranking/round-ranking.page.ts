@@ -5,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ApiService } from '../../core/api.service';
 import { RoundRanking } from '../../core/api.types';
@@ -39,6 +40,9 @@ import { ClubLogo } from '../../shared/club-logo';
       <span class="spacer"></span>
       <button mat-flat-button color="primary" (click)="print()">
         <mat-icon>print</mat-icon> Imprimer
+      </button>
+      <button mat-stroked-button (click)="pdf()">
+        <mat-icon>picture_as_pdf</mat-icon> PDF
       </button>
     </div>
 
@@ -127,6 +131,7 @@ import { ClubLogo } from '../../shared/club-logo';
 export class RoundRankingPage implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
+  private snack = inject(MatSnackBar);
 
   loading = signal(true);
   rk = signal<RoundRanking | null>(null);
@@ -146,5 +151,14 @@ export class RoundRankingPage implements OnInit {
 
   print(): void {
     window.print();
+  }
+
+  pdf(): void {
+    this.snack.open(
+      'Dans la fenêtre qui s’ouvre, choisissez « Enregistrer au format PDF » comme imprimante.',
+      'OK',
+      { duration: 6000 }
+    );
+    setTimeout(() => window.print(), 400);
   }
 }

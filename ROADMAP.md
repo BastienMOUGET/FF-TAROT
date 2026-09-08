@@ -6,6 +6,41 @@
 
 ---
 
+## ✅ v3.0.25 — Retour terrain n°6 : manches prévues, PDF, club par défaut, bug « Introuvable » *(livré, 2026-09-08)*
+
+Retour WhatsApp du 08/09 au soir, sur la v3.0.24.
+
+- **Bug « Introuvable » en enregistrant un club** (après avoir mis le logo,
+  mais sans autre changement). Cause : `db.Changes()` compte les lignes
+  *modifiées*, pas les lignes trouvées ; un UPDATE aux mêmes valeurs rend 0
+  et tous les handlers de mise à jour le prenaient pour un 404. Corrigé
+  dans les 10 handlers concernés (clubs, comités, ligues, joueurs, tournois,
+  challenges, types de pénalité, patrons, jeux de donnes, mot de passe) via
+  `Db.ExistsById`. Les DELETE gardent leur test, légitime.
+- **Nombre de manches prévu** (`sub_tournaments.rounds_planned`, migration
+  `007`, 4 par défaut) : demandé à la création d'un tournoi, préréglé par
+  le paramètre global. Après le tirage au sort, la manche 1 puis toutes les
+  suivantes sont créées et placées d'un coup → les feuilles de marque des 4
+  manches s'impriment dès le début (étape 2). Bouton « Générer les manches
+  n à N » sur la page Tournoi si elles manquent.
+- **PDF** : bouton « PDF » à côté d'Imprimer sur le classement général, le
+  classement de manche et le classement du Challenge. Il passe par la
+  fenêtre d'impression du navigateur avec un rappel de choisir
+  « Enregistrer au format PDF » : même rendu que le papier, aucune
+  bibliothèque embarquée.
+- **Club par défaut** : nouvel onglet Administration → Paramètres (club par
+  défaut, nombre de manches par défaut), table `parameters` scope global,
+  `GET/PUT /api/settings`. Le nom du club (et son logo) s'affichent en tête
+  du bandeau latéral au-dessus de Challenges / Administration, et le club
+  est présélectionné à la création d'un challenge.
+
+Vérifié (server-ci, base jetable) : PUT d'un club / joueur sans changement
+→ 200, club inexistant → 404 ; paramètres écrits, supprimés, clé inconnue
+ignorée ; tournoi à 4 manches → 4 mises en place et feuille de route sur 4
+manches. Rendu visuel non testé ici.
+
+---
+
 ## ✅ v3.0.24 — Retour terrain n°5 : club du challenge, classement Challenge détaillé, logo *(livré, 2026-09-08)*
 
 Mémo n°5 (`feedback/2026-09-08-2/` : capture, classeur Excel

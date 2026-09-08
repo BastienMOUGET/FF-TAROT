@@ -1,0 +1,54 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+
+// Module settings — paramètres globaux de l'application (table
+// `parameters`, scope 'global'), lus par tout le monde, modifiés par
+// l'admin. Clés connues : rounds_default, default_club_id.
+public class ModSettings {
+
+    // GET /api/settings → { "clé": "valeur", ... } (valeurs en chaînes)
+    public static HttpResponse Get(WebContext ctx, Db db) {
+        let rows: List<List<string>> = db.Rows("SELECT param_key, param_value FROM parameters WHERE scope = 'global' AND tournament_id IS NULL ORDER BY param_key", Db.NoParams())
+        let o: JsonValue = J.Obj()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            o.AppendEntry(r.Get(0), J.CellStrN(r.Get(1)))
+        }
+        return J.Ok(o)
+    }
+
+    // PUT /api/settings (admin) — corps { "clé": "valeur" | null, ... }.
+    // Chaque clé est créée ou remplacée ; null la supprime.
+    public static HttpResponse Update(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        // Clés connues seulement ; une chaîne vide supprime le paramètre.
+        let keys: List<string> = new List<string>()
+        keys.Add("rounds_default")
+        keys.Add("default_club_id")
+        db.Begin()
+        for k in keys {
+            // Fld.HasStr ignore la chaîne vide ; on lit la valeur brute pour
+            // que "" (= supprimer) soit bien prise en compte.
+            let v: JsonValue = b.Get(k)
+            var present: bool = false
+            var sv: string = ""
+            if (v.IsString()) { present = true sv = v.AsString() }
+            else { if (v.IsInt()) { present = true sv = String.FromInt(v.AsInt()) } }
+            if (!present) { continue }
+            let okD: bool = db.Exec("DELETE FROM parameters WHERE scope = 'global' AND tournament_id IS NULL AND param_key = ?", Db.P1(k))
+            if (!okD) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+            if (String.Length(sv) == 0) { continue }
+            let okI: bool = db.Exec("INSERT INTO parameters (scope, tournament_id, param_key, param_value) VALUES ('global', NULL, ?, ?)", Db.P2(k, sv))
+            if (!okI) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        }
+        db.Commit()
+        return ModSettings.Get(ctx, db)
+    }
+}

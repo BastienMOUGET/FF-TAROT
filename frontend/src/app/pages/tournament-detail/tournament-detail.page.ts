@@ -53,6 +53,11 @@ function todayLabel(): string {
           <input matInput formControlName="label" />
         </mat-form-field>
         <mat-form-field appearance="outline" class="full">
+          <mat-label>Nombre de manches</mat-label>
+          <input matInput type="number" min="1" max="12" formControlName="rounds_planned" />
+          <mat-hint>Toutes générées après le tirage au sort, pour imprimer les feuilles de marque dès le début.</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full">
           <mat-label>Indice PCN (0 = pas de PCN)</mat-label>
           <input matInput type="number" formControlName="indice_pcn" />
         </mat-form-field>
@@ -65,7 +70,7 @@ function todayLabel(): string {
   `,
   styles: `.form { display: flex; flex-direction: column; } .full { width: 100%; }`,
 })
-export class SubTournamentDialog {
+export class SubTournamentDialog implements OnInit {
   private fb = inject(FormBuilder);
   data = inject<{ tournamentId: number }>(MAT_DIALOG_DATA);
   ref = inject<MatDialogRef<SubTournamentDialog>>(MatDialogRef);
@@ -73,8 +78,16 @@ export class SubTournamentDialog {
 
   form = this.fb.nonNullable.group({
     label: [todayLabel(), Validators.required],
+    rounds_planned: [4, [Validators.min(1), Validators.max(12)]],
     indice_pcn: [0],
   });
+
+  ngOnInit(): void {
+    this.api.settings().subscribe((s) => {
+      const n = Number(s.rounds_default);
+      if (n >= 1 && n <= 12) this.form.patchValue({ rounds_planned: n });
+    });
+  }
 
   submit() {
     if (this.form.invalid) return;
@@ -83,6 +96,7 @@ export class SubTournamentDialog {
       .createSubTournament(this.data.tournamentId, {
         label: v.label,
         indice_pcn: v.indice_pcn,
+        rounds_planned: v.rounds_planned,
       })
       .subscribe({
         next: (created) => this.ref.close(created),
@@ -203,7 +217,10 @@ export class SubTournamentDialog {
             </mat-button-toggle-group>
             <span class="spacer"></span>
             <button mat-stroked-button (click)="print()">
-              <mat-icon>print</mat-icon> Imprimer le classement
+              <mat-icon>print</mat-icon> Imprimer
+            </button>
+            <button mat-stroked-button (click)="pdf()">
+              <mat-icon>picture_as_pdf</mat-icon> PDF
             </button>
           </div>
 
@@ -408,6 +425,18 @@ export class TournamentDetailPage implements OnInit {
 
   print(): void {
     window.print();
+  }
+
+  // Le PDF passe par la fenêtre d'impression du navigateur : choisir
+  // « Enregistrer au format PDF » (ou « Microsoft Print to PDF ») comme
+  // imprimante. Aucune bibliothèque, même rendu que le papier.
+  pdf(): void {
+    this.snack.open(
+      'Dans la fenêtre qui s’ouvre, choisissez « Enregistrer au format PDF » comme imprimante.',
+      'OK',
+      { duration: 6000 }
+    );
+    setTimeout(() => window.print(), 400);
   }
 
   private reloadSubs(tid: number): void {

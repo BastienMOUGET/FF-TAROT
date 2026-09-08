@@ -85,7 +85,7 @@ public class ModLigues {
 
         let ok: bool = db.Exec("UPDATE ligues SET code = ?, name = ? WHERE id = ?", Db.P3(code, name, id))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (db.Changes() == 0 && !db.ExistsById("ligues", id)) { return HttpErr.NotFound() }
 
         let rows: List<List<string>> = db.Rows(
             "SELECT id, code, name, created_at FROM ligues WHERE id = ?",

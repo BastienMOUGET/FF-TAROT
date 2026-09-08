@@ -645,15 +645,48 @@ export class TeamsPage implements OnInit {
     });
   }
 
+  // Après la manche 1, les manches 2..N prévues sur le tournoi sont créées
+  // et placées tout de suite (mouvement déterministe) : les feuilles de
+  // marque de toute la soirée s'impriment dès le début.
+  private generatePlannedRounds(firstRoundId: number): void {
+    const subId = this.subTournamentId();
+    this.api.subTournament(subId).subscribe({
+      next: (sub) => {
+        const planned = Math.max(1, Number(sub.rounds_planned ?? 1));
+        this.api.rounds(subId).subscribe((rounds) => {
+          const missing = planned - rounds.length;
+          const done = () => {
+            this.drawing.set(false);
+            this.snack.open(
+              planned > 1
+                ? `Mise en place générée pour les ${planned} manches`
+                : 'Mise en place de la manche 1 générée',
+              'Fermer',
+              { duration: 2500 }
+            );
+            this.router.navigate(['/rounds', firstRoundId]);
+          };
+          if (missing <= 0) return done();
+          from(Array.from({ length: missing }))
+            .pipe(
+              concatMap(() =>
+                this.api.createRound(subId).pipe(concatMap((r) => this.api.generatePlacement(r.id)))
+              ),
+              toArray()
+            )
+            .subscribe({ next: done, error: done });
+        });
+      },
+      error: () => {
+        this.drawing.set(false);
+        this.router.navigate(['/rounds', firstRoundId]);
+      },
+    });
+  }
+
   private applyPlacement(roundId: number): void {
     this.api.generatePlacement(roundId).subscribe({
-      next: () => {
-        this.drawing.set(false);
-        this.snack.open('Mise en place de la manche 1 générée', 'Fermer', {
-          duration: 2000,
-        });
-        this.router.navigate(['/rounds', roundId]);
-      },
+      next: () => this.generatePlannedRounds(roundId),
       error: (err) => {
         this.drawing.set(false);
         this.snack.open(

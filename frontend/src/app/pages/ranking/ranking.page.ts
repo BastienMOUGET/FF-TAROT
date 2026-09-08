@@ -16,6 +16,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ApiService } from '../../core/api.service';
 import { SocketService } from '../../core/socket.service';
@@ -42,6 +43,9 @@ import { ClubLogo } from '../../shared/club-logo';
       <span class="spacer"></span>
       <button mat-flat-button color="primary" (click)="print()">
         <mat-icon>print</mat-icon> Imprimer
+      </button>
+      <button mat-stroked-button (click)="pdf()">
+        <mat-icon>picture_as_pdf</mat-icon> PDF
       </button>
     </div>
 
@@ -132,7 +136,7 @@ import { ClubLogo } from '../../shared/club-logo';
       color: #1976d2;
       background: none; border: none; font: inherit; cursor: pointer; padding: 0;
     }
-    .toolbar { display: flex; align-items: center; margin-bottom: 16px; }
+    .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
     .spacer { flex: 1 1 auto; }
     .head { margin-bottom: 24px; }
     .updated { margin-left: 12px; color: #757575; font-size: 0.85em; }
@@ -157,6 +161,7 @@ export class RankingPage implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private location = inject(Location);
   protected socket = inject(SocketService);
+  private snack = inject(MatSnackBar);
 
   loading = signal(true);
   ranking = signal<RankingEntry[]>([]);
@@ -197,6 +202,16 @@ export class RankingPage implements OnInit, OnDestroy {
 
   print(): void {
     window.print();
+  }
+
+  // PDF via la fenêtre d'impression du navigateur (« Enregistrer au format PDF »).
+  pdf(): void {
+    this.snack.open(
+      'Dans la fenêtre qui s’ouvre, choisissez « Enregistrer au format PDF » comme imprimante.',
+      'OK',
+      { duration: 6000 }
+    );
+    setTimeout(() => window.print(), 400);
   }
 
   goBack(): void {

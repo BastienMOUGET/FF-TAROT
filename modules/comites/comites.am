@@ -108,7 +108,7 @@ public class ModComites {
             ok = db.Exec("UPDATE comites SET code = ?, name = ?, ligue_id = NULL WHERE id = ?", Db.P3(code, name, id))
         }
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (db.Changes() == 0 && !db.ExistsById("comites", id)) { return HttpErr.NotFound() }
         return ModComites.Refetch(db, String.ToInt(id))
     }
 

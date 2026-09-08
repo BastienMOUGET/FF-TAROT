@@ -7,7 +7,7 @@ import Amalgame.Json
 public class ModSubTournaments {
 
     static string SELECT_BASE() {
-        return "SELECT st.id, st.tournament_id, st.label, st.color, st.color_name, st.indice_pcn, st.championnat, st.donne_set_id, t.code AS tournament_code, t.name AS tournament_name, st.imported FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id"
+        return "SELECT st.id, st.tournament_id, st.label, st.color, st.color_name, st.indice_pcn, st.championnat, st.donne_set_id, t.code AS tournament_code, t.name AS tournament_name, st.imported, st.rounds_planned FROM sub_tournaments st JOIN tournaments t ON t.id = st.tournament_id"
     }
 
     public static JsonValue Row(List<string> r) {
@@ -23,6 +23,7 @@ public class ModSubTournaments {
         o.AppendEntry("tournament_code", J.CellStrN(r.Get(8)))
         o.AppendEntry("tournament_name", J.CellStrN(r.Get(9)))
         o.AppendEntry("imported", J.CellBool(r.Get(10)))
+        o.AppendEntry("rounds_planned", J.CellInt(r.Get(11)))
         return o
     }
 
@@ -61,6 +62,12 @@ public class ModSubTournaments {
         ins.Set("indice_pcn", Fld.NumOr(b, "indice_pcn", "0"))
         ins.Set("championnat", Fld.BoolTo01(b, "championnat"))
         if (Fld.HasInt(b, "donne_set_id")) { ins.Set("donne_set_id", Fld.IntStr(b, "donne_set_id")) } else { ins.SetNull("donne_set_id") }
+        // Nombre de manches prévu (4 par défaut au club) : toutes générées
+        // après le tirage au sort pour imprimer les feuilles de marque.
+        var planned: int = String.ToInt(Fld.IntOr(b, "rounds_planned", "4"))
+        if (planned < 1) { planned = 1 }
+        if (planned > 12) { planned = 12 }
+        ins.Set("rounds_planned", String.FromInt(planned))
     }
 
     // POST /api/tournaments/:tournamentId/sub-tournaments (admin)
@@ -102,10 +109,11 @@ public class ModSubTournaments {
         upd.Set("indice_pcn", Fld.NumOr(b, "indice_pcn", "0"))
         upd.Set("championnat", Fld.BoolTo01(b, "championnat"))
         if (Fld.HasInt(b, "donne_set_id")) { upd.Set("donne_set_id", Fld.IntStr(b, "donne_set_id")) } else { upd.SetNull("donne_set_id") }
+        if (Fld.HasInt(b, "rounds_planned")) { upd.Set("rounds_planned", Fld.IntStr(b, "rounds_planned")) }
 
         let ok: bool = db.Exec(upd.Sql("sub_tournaments"), upd.ParamsWithId(id))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (db.Changes() == 0 && !db.ExistsById("sub_tournaments", id)) { return HttpErr.NotFound() }
         return ModSubTournaments.Refetch(db, String.ToInt(id))
     }
 

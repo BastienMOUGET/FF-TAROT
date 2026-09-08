@@ -128,7 +128,7 @@ public class ModTournaments {
 
         let ok: bool = db.Exec(upd.Sql("tournaments"), upd.ParamsWithId(id))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (db.Changes() == 0 && !db.ExistsById("tournaments", id)) { return HttpErr.NotFound() }
         return ModTournaments.Refetch(db, String.ToInt(id))
     }
 

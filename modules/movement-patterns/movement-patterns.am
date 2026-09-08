@@ -93,7 +93,7 @@ public class ModMovementPatterns {
 
         let ok: bool = db.Exec(upd.Sql("movement_patterns"), upd.ParamsWithId(id))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (db.Changes() == 0 && !db.ExistsById("movement_patterns", id)) { return HttpErr.NotFound() }
         return ModMovementPatterns.Refetch(db, String.ToInt(id))
     }
 

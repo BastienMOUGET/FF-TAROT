@@ -97,7 +97,7 @@ public class ModPenaltyTypes {
         ps.Add(id)
         let ok: bool = db.Exec("UPDATE penalty_types SET code = ?, label = ?, default_points = ? WHERE id = ?", ps)
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (db.Changes() == 0 && !db.ExistsById("penalty_types", id)) { return HttpErr.NotFound() }
         return ModPenaltyTypes.Refetch(db, String.ToInt(id))
     }
 

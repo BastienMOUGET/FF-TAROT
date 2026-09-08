@@ -132,7 +132,7 @@ public class ModDonneSets {
         if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
         let ok: bool = db.Exec("UPDATE donne_sets SET name = ? WHERE id = ?", Db.P2(Fld.Str(b, "name"), id))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (db.Changes() == 0 && !db.ExistsById("donne_sets", id)) { return HttpErr.NotFound() }
         let rows: List<List<string>> = db.Rows("SELECT id, name, nb_donne, created_at FROM donne_sets WHERE id = ?", Db.P1(id))
         let r0: List<string> = rows.Get(0)
         return J.Ok(ModDonneSets.SetRow(r0))

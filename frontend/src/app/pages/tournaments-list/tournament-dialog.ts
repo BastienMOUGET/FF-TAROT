@@ -94,6 +94,11 @@ export class TournamentDialog implements OnInit {
     this.api.clubs().subscribe((clubs) => {
       this.clubs.set(clubs);
       if (clubs.length === 1) this.form.patchValue({ club_id: clubs[0].id });
+      // Club par défaut (Administration → Paramètres) prioritaire.
+      this.api.settings().subscribe((st) => {
+        const id = Number(st.default_club_id);
+        if (id > 0 && clubs.some((c) => c.id === id)) this.form.patchValue({ club_id: id });
+      });
     });
   }
 

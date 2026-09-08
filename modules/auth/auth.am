@@ -104,7 +104,7 @@ public class ModAuth {
         let hash: string = Password.Hash(np)
         let ok: bool = db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", Db.P2(hash, String.FromInt(userId)))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (db.Changes() == 0 && !db.ExistsById("users", String.FromInt(userId))) { return HttpErr.NotFound() }
         return J.NoContent()
     }
 

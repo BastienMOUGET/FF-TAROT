@@ -66,6 +66,15 @@ public class Db {
         return ok
     }
 
+    // La ligne existe-t-elle ? Sert aux UPDATE : mysql_affected_rows vaut 0
+    // quand la ligne existe mais n'a pas changé (mêmes valeurs), ce qu'on
+    // prenait pour un « introuvable » (retour terrain n°6 : enregistrer un
+    // club sans rien modifier répondait 404).
+    public bool ExistsById(string table, string id) {
+        let rows: List<List<string>> = this.Rows("SELECT 1 FROM " + table + " WHERE id = ? LIMIT 1", Db.P1(id))
+        return rows.Count() > 0
+    }
+
     public string LastError() { return MySQL.LastError(this.Conn) }
     public int LastInsertId() { return MySQL.LastInsertId(this.Conn) }
     public int Changes() { return MySQL.Changes(this.Conn) }

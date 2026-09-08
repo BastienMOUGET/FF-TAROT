@@ -60,6 +60,7 @@ par tous les installeurs du projet.
 | `004_team_player_seat.sql` | ajoute `team_players.seat` : le siège N/S/E/O choisi au tirage au sort, respecté par la mise en place de la manche 1 (tables de 3) |
 | `005_relais_and_imported.sql` | `players.is_relais` + 3 joueurs « Relais » (Nord fixe des tables de 3) ; `sub_tournaments.imported` (classement importé, jamais recalculé) |
 | `006_club_logo.sql` | `clubs.logo` : image du club en data URL, miniature sur les classements imprimés |
+| `007_rounds_planned_and_settings.sql` | `sub_tournaments.rounds_planned` (manches prévues, 4) + paramètre global `rounds_default` |
 
 ### Interdit dans une migration
 

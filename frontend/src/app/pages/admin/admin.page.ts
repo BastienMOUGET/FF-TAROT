@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
@@ -33,6 +34,7 @@ import { UserDialog } from './dialogs/user-dialog';
   imports: [
     FormsModule,
     MatTabsModule,
+    MatSelectModule,
     MatTableModule,
     MatIconModule,
     MatCardModule,
@@ -236,6 +238,33 @@ import { UserDialog } from './dialogs/user-dialog';
           <tr mat-row *matRowDef="let row; columns: ['username', 'role', 'full_name', 'actions']"></tr>
         </table>
       </mat-tab>
+
+      <!-- ====== PARAMÈTRES ====== -->
+      <mat-tab label="Paramètres">
+        <mat-card class="settings-card">
+          <mat-card-header>
+            <mat-card-title>Paramètres de l'application</mat-card-title>
+            <mat-card-subtitle>Valables pour tous les challenges</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <mat-form-field appearance="outline" class="setting">
+              <mat-label>Club par défaut</mat-label>
+              <mat-select [value]="settingClubId()" (selectionChange)="saveSetting('default_club_id', $event.value)">
+                <mat-option [value]="null">— aucun —</mat-option>
+                @for (c of clubs(); track c.id) {
+                  <mat-option [value]="c.id">{{ c.name }} ({{ c.code }})</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Affiché en tête du bandeau latéral et présélectionné à la création d'un challenge.</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="setting">
+              <mat-label>Nombre de manches par défaut</mat-label>
+              <input matInput type="number" min="1" max="12" [value]="settingRounds()" (change)="saveSetting('rounds_default', $any($event.target).value)" />
+              <mat-hint>Proposé à la création d'un tournoi ; toutes les manches sont générées après le tirage au sort.</mat-hint>
+            </mat-form-field>
+          </mat-card-content>
+        </mat-card>
+      </mat-tab>
     </mat-tab-group>
   `,
   styles: `
@@ -253,6 +282,9 @@ import { UserDialog } from './dialogs/user-dialog';
     .num { text-align: right; }
     .actions-col { width: 120px; text-align: right; }
     .member-yes { color: #2e7d32; vertical-align: middle; }
+    .settings-card { margin-top: 16px; max-width: 640px; }
+    .settings-card mat-card-content { display: flex; flex-direction: column; gap: 20px; padding-top: 16px; }
+    .setting { width: 100%; }
   `,
 })
 export class AdminPage implements OnInit {
@@ -265,6 +297,9 @@ export class AdminPage implements OnInit {
   penaltyTypes = signal<PenaltyType[]>([]);
   users = signal<User[]>([]);
 
+  settingClubId = signal<number | null>(null);
+  settingRounds = signal<number>(4);
+
   playerSearch = '';
   playerMemberOnly = false;
   playerCols = ['licence', 'name', 'club', 'cat', 'member', 'actions'];
@@ -274,6 +309,12 @@ export class AdminPage implements OnInit {
   }
 
   reloadAll() {
+    this.api.settings().subscribe((st) => {
+      const id = Number(st.default_club_id);
+      this.settingClubId.set(id > 0 ? id : null);
+      const n = Number(st.rounds_default);
+      this.settingRounds.set(n >= 1 ? n : 4);
+    });
     this.reloadPlayers();
     this.api.clubs().subscribe((d) => this.clubs.set(d));
     this.api.penaltyTypes().subscribe((d) => this.penaltyTypes.set(d));
@@ -287,6 +328,19 @@ export class AdminPage implements OnInit {
         club_member: this.playerMemberOnly || undefined,
       })
       .subscribe((p) => this.players.set(p));
+  }
+
+  /* ----- Paramètres ----- */
+  saveSetting(key: 'default_club_id' | 'rounds_default', value: unknown): void {
+    const v = value === null || value === undefined || value === '' ? '' : String(value);
+    this.api.updateSettings({ [key]: v }).subscribe({
+      next: () => {
+        this.snack.open('Paramètre enregistré — rechargez la page pour voir le bandeau', 'Fermer', { duration: 3000 });
+        if (key === 'default_club_id') this.settingClubId.set(v ? Number(v) : null);
+        else this.settingRounds.set(v ? Number(v) : 4);
+      },
+      error: (err) => this.snack.open(err?.error?.error || 'Erreur', 'Fermer', { duration: 3000 }),
+    });
   }
 
   /* ----- Players ----- */

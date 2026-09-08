@@ -6,7 +6,7 @@ import { environment } from '../../environments/environment';
 import {
   ChallengeRanking, Club, Comite, DonneSet, Hand, Ligue, MovementPattern, Pair,
   Penalty, PenaltyType, Player, PlayerImportResult, PlayerImportRow, PpEntry,
-  RankingEntry, RankingImportResult, RankingImportRow, Round, RoundRanking, RouteSheet, Seat, SubTournament, TableResult, Team,
+  RankingEntry, RankingImportResult, RankingImportRow, Round, RoundRanking, RouteSheet, Seat, Settings, SubTournament, TableResult, Team,
   Tournament, User,
 } from './api.types';
 
@@ -14,6 +14,12 @@ import {
 export class ApiService {
   private http = inject(HttpClient);
   private base = environment.apiUrl;
+
+  /* ----- Paramètres globaux ----- */
+  settings = (): Observable<Settings> =>
+    this.http.get<Settings>(`${this.base}/settings`);
+  updateSettings = (patch: Settings): Observable<Settings> =>
+    this.http.put<Settings>(`${this.base}/settings`, patch);
 
   /* ----- Ligues (admin) ----- */
   ligues = (): Observable<Ligue[]> =>

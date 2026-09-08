@@ -16,6 +16,10 @@ public class Routes {
         // Référentiel — cartes (lecture publique)
         app.Get("/api/cards", ctx => ModCards.List(ctx, db))
 
+        // Paramètres globaux (club par défaut, manches par défaut…)
+        app.Get("/api/settings", ctx => ModSettings.Get(ctx, db))
+        app.Put("/api/settings", ctx => ModSettings.Update(ctx, db))
+
         // Référentiel — ligues (GET public ; POST/PUT/DELETE admin)
         app.Get("/api/ligues", ctx => ModLigues.List(ctx, db))
         app.Get("/api/ligues/:id", ctx => ModLigues.GetById(ctx, db))

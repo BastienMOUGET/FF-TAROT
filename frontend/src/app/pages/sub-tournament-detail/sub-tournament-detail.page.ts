@@ -105,10 +105,18 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
               </div>
             </div>
             @if (auth.isAdmin()) {
-              <button mat-flat-button color="primary" (click)="newRound()" [disabled]="busy()">
-                <mat-icon>add</mat-icon>
-                {{ rounds().length === 0 ? 'Manche 1' : 'Manche ' + (rounds().length + 1) }}
-              </button>
+              <div class="step-actions">
+                @if (rounds().length > 0 && rounds().length < (s.rounds_planned ?? 0)) {
+                  <button mat-stroked-button color="primary" (click)="generateMissing(s)" [disabled]="busy()">
+                    <mat-icon>playlist_add</mat-icon>
+                    Générer les manches {{ rounds().length + 1 }} à {{ s.rounds_planned }}
+                  </button>
+                }
+                <button mat-flat-button color="primary" (click)="newRound()" [disabled]="busy()">
+                  <mat-icon>add</mat-icon>
+                  {{ rounds().length === 0 ? 'Manche 1' : 'Manche ' + (rounds().length + 1) }}
+                </button>
+              </div>
             }
           </div>
 
@@ -252,6 +260,40 @@ export class SubTournamentDetailPage implements OnInit {
           this.progress.update((m) => ({ ...m, [roundId]: { tables, validated: 0 } })),
       });
     });
+  }
+
+  // Manches 2..N prévues, créées et placées à la suite (mouvement
+  // déterministe à partir de la manche précédente).
+  generateMissing(s: SubTournament): void {
+    const planned = Number(s.rounds_planned ?? 0);
+    const missing = planned - this.rounds().length;
+    if (missing <= 0) return;
+    this.busy.set(true);
+    const step = (left: number): void => {
+      if (left === 0) {
+        this.busy.set(false);
+        this.snack.open(`${planned} manches générées`, 'Fermer', { duration: 2500 });
+        this.loadRounds(s.id);
+        return;
+      }
+      this.api.createRound(s.id).subscribe({
+        next: (r) =>
+          this.api.generatePlacement(r.id).subscribe({
+            next: () => step(left - 1),
+            error: (err) => {
+              this.busy.set(false);
+              this.snack.open(err?.error?.error || 'Mise en place impossible', 'Fermer', { duration: 4000 });
+              this.loadRounds(s.id);
+            },
+          }),
+        error: (err) => {
+          this.busy.set(false);
+          this.snack.open(err?.error?.error || 'Erreur création manche', 'Fermer', { duration: 3000 });
+          this.loadRounds(s.id);
+        },
+      });
+    };
+    step(missing);
   }
 
   newRound(): void {
