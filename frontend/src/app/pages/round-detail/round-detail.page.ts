@@ -9,9 +9,12 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
+import { MatDialog } from '@angular/material/dialog';
+
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { Round } from '../../core/api.types';
+import { Player, Round, RoundSeat } from '../../core/api.types';
+import { PlayerDialog } from '../admin/dialogs/player-dialog';
 
 @Component({
   selector: 'app-round-detail-page',
@@ -93,9 +96,19 @@ import { Round } from '../../core/api.types';
                   @for (s of t.seats; track s.seat) {
                     <li>
                       <span class="seat" [attr.data-seat]="s.seat">{{ s.seat }}</span>
-                      {{ s.name }} {{ s.firstname }}
+                      <span class="pname">{{ s.name }} {{ s.firstname }}</span>
                       @if (s.team_number) {
                         <small class="team">éq.{{ s.team_number }}</small>
+                      }
+                      @if (auth.isAdmin()) {
+                        <button
+                          mat-icon-button
+                          class="edit-player"
+                          (click)="editPlayer(s)"
+                          title="Corriger le nom de ce joueur"
+                        >
+                          <mat-icon>edit</mat-icon>
+                        </button>
                       }
                     </li>
                   }
@@ -139,6 +152,9 @@ import { Round } from '../../core/api.types';
     .seat[data-seat="E"] { background: #ff8a65; color: #4e342e; }
     .seat[data-seat="O"] { background: #aed581; color: #33691e; }
     .team { color: #757575; font-size: 0.8em; }
+    .pname { flex: 1 1 auto; }
+    .edit-player { opacity: 0.45; }
+    .table li:hover .edit-player { opacity: 1; }
   `,
 })
 export class RoundDetailPage implements OnInit {
@@ -147,6 +163,7 @@ export class RoundDetailPage implements OnInit {
   private router = inject(Router);
   private location = inject(Location);
   private snack = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
   protected auth = inject(AuthService);
 
   loading = signal(true);
@@ -254,6 +271,24 @@ export class RoundDetailPage implements OnInit {
           { duration: 3000 }
         );
       },
+    });
+  }
+
+  // Une faute de frappe sur un nom se corrige même une fois la mise en
+  // place faite : on modifie la fiche du joueur, les places ne bougent pas.
+  editPlayer(seat: RoundSeat): void {
+    this.api.player(seat.player_id).subscribe({
+      next: (player) => {
+        const ref = this.dialog.open(PlayerDialog, { data: { player } });
+        ref.afterClosed().subscribe((updated: Player | undefined) => {
+          if (!updated) return;
+          this.snack.open('Joueur modifié', 'Fermer', { duration: 2000 });
+          const r = this.round();
+          if (r) this.refresh(r.id);
+        });
+      },
+      error: () =>
+        this.snack.open('Joueur introuvable', 'Fermer', { duration: 3000 }),
     });
   }
 

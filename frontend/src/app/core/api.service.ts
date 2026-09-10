@@ -67,6 +67,8 @@ export class ApiService {
     if (q?.club_member) params['club_member'] = '1';
     return this.http.get<Player[]>(`${this.base}/players`, { params });
   };
+  player = (id: number): Observable<Player> =>
+    this.http.get<Player>(`${this.base}/players/${id}`);
   createPlayer = (data: Partial<Player>): Observable<Player> =>
     this.http.post<Player>(`${this.base}/players`, data);
   updatePlayer = (id: number, data: Partial<Player>): Observable<Player> =>

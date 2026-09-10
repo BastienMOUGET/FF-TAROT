@@ -111,7 +111,8 @@ interface Row {
             <p class="hint">
               Un score par joueur pour toute la manche. Saisis-en
               {{ activeSeats().length - 1 }}, le dernier se calcule pour que la
-              somme fasse 0.
+              somme fasse 0. <strong>Entrée</strong> valide la case et passe à
+              la suivante.
             </p>
             <table class="grid">
               <thead>
@@ -138,6 +139,8 @@ interface Row {
                         [value]="globalRow().scores[s]"
                         [disabled]="!playerAt(s)"
                         (input)="onScore(globalRow(), s, $any($event.target).value)"
+                        (keydown.enter)="nextField($event)"
+                        (focus)="$any($event.target).select()"
                       />
                     </td>
                   }
@@ -195,6 +198,8 @@ interface Row {
                           [value]="row.scores[s]"
                           [disabled]="!playerAt(s)"
                           (input)="onScore(row, s, $any($event.target).value)"
+                          (keydown.enter)="nextField($event)"
+                          (focus)="$any($event.target).select()"
                         />
                       </td>
                     }
@@ -490,6 +495,25 @@ export class ScoringPage implements OnInit {
       row.auto = null;
     }
     this.touch();
+  }
+
+  // Entrée valide la case et passe à la suivante (les cases grisées d'un
+  // siège vide sont sautées). Sur la dernière, on sort du champ : le bouton
+  // de validation est alors accessible au clavier.
+  nextField(ev: Event): void {
+    const el = ev.target as HTMLInputElement;
+    const inputs = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input.score:not([disabled])')
+    );
+    const i = inputs.indexOf(el);
+    if (i === -1) return;
+    const next = inputs[i + 1];
+    if (next) {
+      next.focus();
+      next.select();
+    } else {
+      el.blur();
+    }
   }
 
   setTaker(row: Row, v: string): void {

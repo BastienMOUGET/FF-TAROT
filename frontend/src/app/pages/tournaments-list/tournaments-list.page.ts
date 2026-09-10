@@ -17,6 +17,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import { Tournament, TournamentStatus } from '../../core/api.types';
 import { TournamentDialog } from './tournament-dialog';
+import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
 import { AuthService } from '../../core/auth.service';
 
 @Component({
@@ -29,6 +30,7 @@ import { AuthService } from '../../core/auth.service';
     MatChipsModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    MatDialogModule,
   ],
   template: `
     <div class="header">
@@ -74,6 +76,16 @@ import { AuthService } from '../../core/auth.service';
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let t">
+            @if (auth.isAdmin()) {
+              <button
+                mat-icon-button
+                color="warn"
+                (click)="remove(t); $event.stopPropagation()"
+                title="Supprimer ce challenge"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            }
             <button
               mat-icon-button
               color="primary"
@@ -150,6 +162,36 @@ export class TournamentsListPage implements OnInit {
         this.snack.open('Challenge créé', 'Fermer', { duration: 2000 });
         this.refresh();
       }
+    });
+  }
+
+  // Suppression d'un challenge : ses tournois, manches, scores et classements
+  // partent avec lui (cascade en base). Réservé à l'admin, confirmation
+  // obligatoire — c'est le seul moyen de retirer un challenge d'essai.
+  remove(t: Tournament): void {
+    const data: ConfirmDialogData = {
+      title: `Supprimer le challenge ${t.name} ?`,
+      message:
+        'Tous ses tournois, leurs manches, les scores saisis et les classements ' +
+        'seront supprimés définitivement. Les joueurs, eux, sont conservés.',
+      confirmLabel: 'Supprimer',
+      danger: true,
+    };
+    const ref = this.dialog.open(ConfirmDialog, { data });
+    ref.afterClosed().subscribe((ok) => {
+      if (!ok) return;
+      this.api.deleteTournament(t.id).subscribe({
+        next: () => {
+          this.snack.open('Challenge supprimé', 'Fermer', { duration: 2000 });
+          this.refresh();
+        },
+        error: (err) =>
+          this.snack.open(
+            err?.error?.error || 'Suppression impossible',
+            'Fermer',
+            { duration: 4000 }
+          ),
+      });
     });
   }
 

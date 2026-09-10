@@ -60,6 +60,15 @@ import { RoundTimer } from './round-timer';
               <span matListItemTitle>Administration</span>
             </a>
           }
+          <a mat-list-item routerLink="/aide" routerLinkActive="active">
+            <mat-icon matListItemIcon>help_outline</mat-icon>
+            <span matListItemTitle>Notice</span>
+          </a>
+          <!-- Les remarques et anomalies vont sur les tickets du projet. -->
+          <a mat-list-item [href]="issuesUrl" target="_blank" rel="noopener">
+            <mat-icon matListItemIcon>bug_report</mat-icon>
+            <span matListItemTitle>Signaler un problème</span>
+          </a>
         </mat-nav-list>
         <app-round-timer />
         <!-- Logo du club par défaut, en bas du bandeau (retour terrain n°7). -->
@@ -151,6 +160,7 @@ export class MainLayout implements OnInit {
   protected auth = inject(AuthService);
   private api = inject(ApiService);
   protected version = environment.appVersion;
+  protected issuesUrl = 'https://github.com/BastienMOUGET/FF-TAROT/issues/new';
   club = signal<Club | null>(null);
 
   ngOnInit(): void {

@@ -89,6 +89,11 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'aide',
+        loadComponent: () =>
+          import('./pages/help/help.page').then((m) => m.HelpPage),
+      },
+      {
         path: 'admin',
         canActivate: [adminGuard],
         loadComponent: () =>

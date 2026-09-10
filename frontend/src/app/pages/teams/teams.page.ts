@@ -124,6 +124,15 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
                     <small>({{ p.licence }})</small>
                   }
                 </mat-checkbox>
+                <button
+                  mat-icon-button
+                  type="button"
+                  class="edit-player"
+                  (click)="editPlayer(p)"
+                  title="Corriger le nom de ce joueur"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
                 @if (drawSelection().has(p.id)) {
                   <mat-select
                     class="orientation-select"
@@ -277,6 +286,9 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     }
     .draw-list small { color: #757575; }
     .draw-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
+    .draw-row mat-checkbox { flex: 1 1 auto; }
+    .edit-player { opacity: 0.5; }
+    .draw-row:hover .edit-player { opacity: 1; }
     .orientation-select { width: 150px; font-size: 0.85em; }
     .size-toggle { margin-bottom: 16px; }
     .grid {
@@ -326,6 +338,7 @@ export class TeamsPage implements OnInit {
       else next.set(playerId, o);
       return next;
     });
+    this.persistDraw();
   }
 
   registeredPlayerIds = computed(
@@ -368,8 +381,52 @@ export class TeamsPage implements OnInit {
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.subTournamentId.set(id);
+    this.restoreDraw();
     this.api.players().subscribe((p) => this.players.set(p));
     this.refreshTeams();
+  }
+
+  // Le pointage des présents survit à un aller-retour vers l'administration
+  // (corriger un nom, ajouter un joueur) : la sélection et les orientations
+  // sont gardées dans le navigateur, par tournoi, jusqu'au tirage au sort.
+  private drawKey(): string {
+    return `pabb90.draw.${this.subTournamentId()}`;
+  }
+
+  private restoreDraw(): void {
+    try {
+      const raw = localStorage.getItem(this.drawKey());
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        ids?: number[];
+        orientations?: [number, Orientation][];
+      };
+      if (saved.ids?.length) this.drawSelection.set(new Set(saved.ids));
+      if (saved.orientations?.length) {
+        this.drawOrientation.set(new Map(saved.orientations));
+      }
+    } catch {
+      /* stockage indisponible ou contenu illisible : on repart à vide */
+    }
+  }
+
+  private persistDraw(): void {
+    try {
+      const ids = Array.from(this.drawSelection());
+      if (ids.length === 0 && this.drawOrientation().size === 0) {
+        localStorage.removeItem(this.drawKey());
+        return;
+      }
+      localStorage.setItem(
+        this.drawKey(),
+        JSON.stringify({
+          ids,
+          orientations: Array.from(this.drawOrientation().entries()),
+        })
+      );
+    } catch {
+      /* pas de stockage : la sélection reste valable pour la page en cours */
+    }
   }
 
   refreshTeams(): void {
@@ -447,6 +504,7 @@ export class TeamsPage implements OnInit {
       if (!created) return;
       this.players.update((list) => [...list, created]);
       this.drawSelection.update((s) => new Set(s).add(created.id));
+      this.persistDraw();
       this.snack.open(`${created.name} ${created.firstname} ajouté(e)`, 'Fermer', {
         duration: 2000,
       });
@@ -460,14 +518,30 @@ export class TeamsPage implements OnInit {
       else next.add(playerId);
       return next;
     });
+    this.persistDraw();
   }
 
   selectAllDraw(): void {
     this.drawSelection.set(new Set(this.filteredAvailablePlayers().map((p) => p.id)));
+    this.persistDraw();
   }
 
   clearDrawSelection(): void {
     this.drawSelection.set(new Set());
+    this.persistDraw();
+  }
+
+  // Corriger un nom sans quitter le pointage (faute de frappe repérée en
+  // cochant les présents).
+  editPlayer(player: Player): void {
+    const ref = this.dialog.open(PlayerDialog, { data: { player } });
+    ref.afterClosed().subscribe((updated: Player | undefined) => {
+      if (!updated) return;
+      this.players.update((list) =>
+        list.map((p) => (p.id === updated.id ? updated : p))
+      );
+      this.snack.open('Joueur modifié', 'Fermer', { duration: 2000 });
+    });
   }
 
   private shuffle<T>(arr: T[]): T[] {
@@ -600,6 +674,7 @@ export class TeamsPage implements OnInit {
         next: () => {
           this.drawSelection.set(new Set());
           this.drawOrientation.set(new Map());
+          this.persistDraw();
           this.refreshTeams();
           const msg =
             `${nbTeams} équipe(s) tirée(s) au sort` +

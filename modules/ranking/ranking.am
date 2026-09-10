@@ -552,17 +552,28 @@ public class ModRanking {
                 "SELECT r.player_id, p.licence, p.name, p.firstname, r.total_general, r.place, r.pcn FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND p.is_relais = FALSE ORDER BY r.place ASC", Db.P1(subId))
             let n: int = rows.Count()
             playersBySub.Set(subId, n)
+            // Points Challenge : le 1er marque autant de points qu'il y a de
+            // joueurs classés, le dernier 1 point. On se base sur le RANG dans
+            // la liste triée, pas sur `rankings.place` : une place peut manquer
+            // (ligne ignorée à l'import) ou dépasser le nombre de joueurs, ce
+            // qui créait des trous dans les points (11, 10, 8…) et écrasait les
+            // derniers à 1 point ex aequo (retour terrain n°8). Les joueurs à
+            // la même place gardent le même nombre de points.
+            var rank: int = 0
+            var prevPlace: int = -1
             for i in 0..n {
                 let row: List<string> = rows.Get(i)
                 let pid: string = row.Get(0)
                 let raw: float = Db.CellFloat(row.Get(4))
                 let pcn: float = Db.CellFloat(row.Get(6))
+                let place: int = Db.CellInt(row.Get(5))
+                if (i == 0 || place != prevPlace) { rank = i + 1 }
+                prevPlace = place
                 var pts: float = 0.0
                 if (mode == "raw") {
                     pts = raw
                 } else {
-                    let place: int = Db.CellInt(row.Get(5))
-                    var p: int = n - place + 1
+                    var p: int = n - rank + 1
                     if (p < 1) { p = 1 }
                     pts = String.ToFloat(String.FromInt(p))
                 }

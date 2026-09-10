@@ -6,6 +6,61 @@
 
 ---
 
+## ✅ v3.0.27 — Retour terrain n°8 : points du Challenge, notice, confort de saisie *(livré, 2026-09-10)*
+
+Sept points remontés sur la v3.0.26.
+
+### Points du Challenge faux en fin de classement
+
+Constaté : la suite des points passait de 10 à 8 (le 9 manquait) et les deux
+derniers se retrouvaient ex aequo 38ᵉ à 1 point avec des scores différents.
+Cause : les points étaient calculés depuis `rankings.place` brute
+(`n - place + 1`, borné à 1). Sur un classement importé, une ligne écartée
+(celle sans nom du CSV) laisse un trou dans les places, et la dernière place
+(40 pour 39 joueurs classés) tombait à 0 puis était remontée à 1 — d'où le
+faux ex aequo. Le calcul se fait maintenant sur le **rang réel** dans la
+liste triée ; deux joueurs à la même place gardent le même nombre de points.
+Vérifié sur le CSV du club : 39 points distincts, de 39 à 1, sans trou ; et
+sur un cas d'ex aequo volontaire : 4, 3, 3, 1.
+
+### Suppression d'un challenge
+
+La liste des challenges n'avait aucun bouton de suppression, alors que l'API
+existait — d'où l'impossibilité de retirer le challenge d'essai. Corbeille
+ajoutée sur chaque ligne (admin), avec confirmation détaillée. La base
+cascade correctement : tournois, manches, scores et classements partent,
+les joueurs restent. Vérifié.
+
+### Pointage des présents perdu
+
+Cocher des joueurs, aller corriger une fiche en administration, revenir : la
+sélection était repartie à zéro. Elle est désormais conservée par le
+navigateur, par tournoi (sélection **et** orientations choisies), et effacée
+après le tirage au sort.
+
+### Corriger un nom sans tout défaire
+
+Crayon à côté de chaque joueur dans le pointage des présents, et à côté de
+chaque nom sur les tables d'une manche, y compris après la mise en place :
+la fiche s'ouvre, les places ne bougent pas.
+
+### Saisie au clavier
+
+Dans la saisie d'une table, **Entrée** valide la case et passe à la
+suivante, en sautant les sièges vides ; le contenu est sélectionné à
+l'arrivée pour être écrasé directement.
+
+### Notice et remontée d'anomalies
+
+Nouvelle entrée « Notice » dans le bandeau (`/aide`) : le déroulé d'une
+soirée dans l'ordre où on s'en sert, la mise en route, le classement du
+Challenge et les questions courantes. Imprimable. Une entrée « Signaler un
+problème » ouvre les tickets du dépôt GitHub.
+
+Pas de migration de base sur cette version.
+
+---
+
 ## ✅ v3.0.26 — Logo du club en bas du bandeau *(livré, 2026-09-08)*
 
 Retour n°7 (`feedback/2026-09-08-3/`) : le logo du club par défaut
