@@ -61,6 +61,7 @@ par tous les installeurs du projet.
 | `005_relais_and_imported.sql` | `players.is_relais` + 3 joueurs « Relais » (Nord fixe des tables de 3) ; `sub_tournaments.imported` (classement importé, jamais recalculé) |
 | `006_club_logo.sql` | `clubs.logo` : image du club en data URL, miniature sur les classements imprimés |
 | `007_rounds_planned_and_settings.sql` | `sub_tournaments.rounds_planned` (manches prévues, 4) + paramètre global `rounds_default` |
+| `008_placement_mode.sql` | `sub_tournaments.placement_mode` : mouvement fédéral, tables par niveau, ou dernière manche par niveau |
 
 ### Interdit dans une migration
 

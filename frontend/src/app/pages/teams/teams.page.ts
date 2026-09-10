@@ -727,14 +727,20 @@ export class TeamsPage implements OnInit {
     const subId = this.subTournamentId();
     this.api.subTournament(subId).subscribe({
       next: (sub) => {
-        const planned = Math.max(1, Number(sub.rounds_planned ?? 1));
+        const asked = Math.max(1, Number(sub.rounds_planned ?? 1));
+        // En placement par niveau, une manche dépend du classement de la
+        // précédente : on ne peut pas les générer d'avance. Seul le mode
+        // « mouvement » permet de tout sortir dès le tirage au sort.
+        const mode = sub.placement_mode ?? 'movement';
+        const planned =
+          mode === 'level' ? 1 : mode === 'level_last' ? Math.max(1, asked - 1) : asked;
         this.api.rounds(subId).subscribe((rounds) => {
           const missing = planned - rounds.length;
           const done = () => {
             this.drawing.set(false);
             this.snack.open(
               planned > 1
-                ? `Mise en place générée pour les ${planned} manches`
+                ? `Mise en place générée pour les ${planned} premières manches`
                 : 'Mise en place de la manche 1 générée',
               'Fermer',
               { duration: 2500 }

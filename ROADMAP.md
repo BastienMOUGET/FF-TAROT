@@ -6,6 +6,67 @@
 
 ---
 
+## ✅ v3.0.28 — Retour terrain n°9 : feuilles de marque au format club, placement par niveau *(livré, 2026-09-10)*
+
+Retour du 10/09 après une vraie soirée à 8 tables.
+
+### Feuilles de marque
+
+Une soirée de 4 manches × 8 tables sortait sur 32 pages A4. Désormais
+**deux feuilles par page**, chacune tenant dans une demi-page, séparées par
+un trait de découpe. Le tableau reprend le format papier du club : deux
+colonnes par orientation, « + » et « − », puis une ligne **Total +**, une
+ligne **Total −** et une ligne **Total général**. Sélecteur de manche en
+haut de l'écran, et le nombre de feuilles et de pages est annoncé avant
+d'imprimer.
+
+### Saisie au clavier
+
+À l'ouverture d'une table, le curseur se place directement dans la case
+Nord ; Entrée enchaîne sur Sud, Est puis Ouest. Complète le passage de case
+en case livré en v3.0.27.
+
+### Placement par niveau (migration 008)
+
+`sub_tournaments.placement_mode`, choisi à la création du tournoi :
+
+| Mode | Effet |
+|---|---|
+| `movement` | mouvement fédéral, comme avant — défaut |
+| `level_last` | mouvement, sauf la dernière manche formée par niveau |
+| `level` | dès la manche 2, tables formées par niveau |
+
+« Par niveau » : les 4 meilleurs du classement cumulé ensemble, les 4
+suivants ensemble, etc. Les orientations sont tirées au sort dans chaque
+table. Une table de 3 prend les derniers du classement et reçoit un Relais
+en Nord — jamais de table de 2, la décomposition en tables de 4 et de 3 est
+la même que pour le tirage initial.
+
+Conséquence assumée : une manche par niveau dépend de la précédente, donc
+elle **n'est plus générée d'avance**. Le serveur refuse de la former tant
+que toutes les tables des manches précédentes ne sont pas validées, avec le
+nombre de tables manquantes dans le message. Le bouton « Générer la manche
+N par niveau » apparaît sur la page du tournoi, et rappelle de réimprimer
+placement et feuilles de marque. En mode `movement`, rien ne change : tout
+est généré au tirage au sort.
+
+### Classement général après chaque manche
+
+`GET /api/sub-tournaments/:id/ranking?through_round=N` : cumul des tables
+validées des manches 1 à N (les pénalités, qui portent sur le challenge,
+restent réservées au classement final). Un bouton « Général après la manche
+N » est proposé à côté de chaque manche. C'est aussi ce classement qui sert
+à former les tables par niveau.
+
+Vérifié (server-ci, base jetable, 11 joueurs = 2 tables de 4 + 1 de 3) :
+refus tant que la manche 1 n'est pas validée ; après validation, table 1 =
+les 4 premiers du classement, table 3 = les 3 derniers plus le Relais ;
+bascule correcte en `level_last` ; mode `movement` inchangé ; cumuls après
+manche 1 et 2 cohérents avec le classement général. Rendu papier non testé
+ici.
+
+---
+
 ## ✅ v3.0.27 — Retour terrain n°8 : points du Challenge, notice, confort de saisie *(livré, 2026-09-10)*
 
 Sept points remontés sur la v3.0.26.

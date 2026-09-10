@@ -291,10 +291,47 @@ public class ModRanking {
     }
 
     // GET /api/sub-tournaments/:subTournamentId/ranking
+    // Classement général arrêté après la manche `through` : cumul des tables
+    // validées des manches 1..through. Sert à suivre le tournoi manche par
+    // manche (retour terrain n°9) et à former les tables « par niveau ».
+    // Les pénalités, qui portent sur le challenge entier, ne sont comptées
+    // que dans le classement final.
+    static HttpResponse RankingThroughRound(Db db, string subId, string through) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT s.player_id, p.licence, p.name, p.firstname, COUNT(tr.id) AS played, COALESCE(SUM(CASE s.seat WHEN 'N' THEN tr.score_n WHEN 'S' THEN tr.score_s WHEN 'E' THEN tr.score_e ELSE tr.score_o END * r.coef), 0) AS total FROM seats s JOIN rounds r ON r.id = s.round_id JOIN players p ON p.id = s.player_id LEFT JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number AND tr.validated = TRUE WHERE r.sub_tournament_id = ? AND r.round_number <= ? AND p.is_relais = FALSE GROUP BY s.player_id, p.licence, p.name, p.firstname ORDER BY total DESC, p.name ASC",
+            Db.P2(subId, through))
+        let arr: JsonValue = J.Arr()
+        var place: int = 1
+        var prev: float = 0.0
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let total: float = Db.CellFloat(r.Get(5))
+            if (i > 0 && total < prev) { place = i + 1 }
+            prev = total
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("player_id", J.CellInt(r.Get(0)))
+            o.AppendEntry("licence", J.CellStrN(r.Get(1)))
+            o.AppendEntry("name", J.CellStr(r.Get(2)))
+            o.AppendEntry("firstname", J.CellStr(r.Get(3)))
+            o.AppendEntry("rounds_played", J.CellInt(r.Get(4)))
+            o.AppendEntry("total", J.Float(total))
+            o.AppendEntry("total_general", J.Float(total))
+            o.AppendEntry("place", J.Int(place))
+            o.AppendEntry("pcn", J.Float(0.0))
+            o.AppendEntry("pp", J.Float(0.0))
+            o.AppendEntry("eliminated", J.Bool(false))
+            o.AppendEntry("updated_at", J.Null())
+            arr.AppendItem(o)
+        }
+        return J.Ok(arr)
+    }
+
     public static HttpResponse GetRanking(WebContext ctx, Db db) {
         let subId: string = ctx.Param("subTournamentId")
         let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
         if (subt.Count() == 0) { return HttpErr.NotFound() }
+        let through: string = ctx.QueryParam("through_round")
+        if (String.Length(through) > 0) { return ModRanking.RankingThroughRound(db, subId, through) }
         let rows: List<List<string>> = db.Rows(
             "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp, r.eliminated, r.updated_at FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? ORDER BY r.place ASC, p.name ASC", Db.P1(subId))
         let arr: JsonValue = J.Arr()

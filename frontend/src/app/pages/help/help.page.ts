@@ -67,8 +67,9 @@ import { environment } from '../../../environments/environment';
           <li>
             <strong>Créer le tournoi</strong> — ouvrir le challenge, « Ajouter
             un tournoi ». Le nom proposé est la date du jour. Vérifier le
-            nombre de manches. Le tournoi s'ouvre sur sa page, qui déroule les
-            étapes de la soirée.
+            nombre de manches et la <strong>formation des tables</strong> (voir
+            plus bas). Le tournoi s'ouvre sur sa page, qui déroule les étapes
+            de la soirée.
           </li>
           <li>
             <strong>Pointer les présents</strong> — étape 1, bouton
@@ -82,13 +83,17 @@ import { environment } from '../../../environments/environment';
             <strong>Tirer au sort</strong> — le bouton forme les tables de 4 et,
             s'il le faut, des tables de 3 où le Nord est tenu par un joueur
             virtuel « Relais », fixe à sa table toute la soirée et qui marque
-            des points comme les autres. Toutes les manches prévues sont
-            générées d'un coup.
+            des points comme les autres. En mouvement fédéral, toutes les
+            manches prévues sont générées d'un coup ; par niveau, elles se
+            forment une par une.
           </li>
-          <li>
+            <li>
             <strong>Imprimer</strong> — étape 2 : « Placement » donne le
             tableau des positions de départ sur une page ; « Feuilles de
-            marque » donne une feuille par table et par manche, à distribuer.
+            marque » donne une feuille par table et par manche, deux par page
+            A4, avec les colonnes « + » et « − », les deux sous-totaux et le
+            total général par orientation. Choisir la manche à imprimer en
+            haut de l'écran.
           </li>
           <li>
             <strong>Lancer la manche</strong> — la minuterie du bandeau (50
@@ -106,13 +111,51 @@ import { environment } from '../../../environments/environment';
           </li>
           <li>
             <strong>Classement de la manche</strong> — bouton à côté de chaque
-            manche, imprimable ou exportable en PDF. Puis manche suivante.
+            manche, imprimable ou exportable en PDF. « Général après la manche
+            N » donne le cumul depuis le début du tournoi. Puis manche
+            suivante.
           </li>
           <li>
             <strong>Classement général</strong> — étape 4, après la dernière
             manche. Il alimente automatiquement le classement du Challenge.
           </li>
         </ol>
+
+        <h2>La formation des tables</h2>
+        <p>
+          Elle se choisit à la création du tournoi et vaut pour toute la
+          soirée.
+        </p>
+        <dl>
+          <dt>Mouvement (règle fédérale)</dt>
+          <dd>
+            Le mode habituel : Nord reste, Sud avance d'une table, Est de
+            deux, Ouest recule d'une. Toutes les manches sont générées dès le
+            tirage au sort, donc toutes les feuilles de marque s'impriment au
+            début.
+          </dd>
+          <dt>Dernière manche par niveau</dt>
+          <dd>
+            Mouvement sur les premières manches, puis la dernière regroupe les
+            quatre meilleurs du classement ensemble, les quatre suivants
+            ensemble, et ainsi de suite.
+          </dd>
+          <dt>Par niveau dès la manche 2</dt>
+          <dd>
+            Chaque manche regroupe les joueurs de même niveau d'après le
+            classement cumulé. Cela évite que les mêmes restent en tête tout au
+            long de la soirée.
+          </dd>
+        </dl>
+        <p>
+          Dans les deux modes par niveau, une manche ne peut être formée
+          qu'une fois <strong>toutes les tables de la précédente validées</strong> :
+          le bouton « Générer la manche N par niveau » apparaît alors sur la
+          page du tournoi. Il faut ensuite réimprimer le placement et les
+          feuilles de marque de cette manche. S'il y a une table de 3, elle
+          prend les derniers du classement et reçoit un Relais, jamais une
+          table de 2.
+        </p>
 
         <h2>Le classement du Challenge</h2>
         <p>
@@ -131,6 +174,12 @@ import { environment } from '../../../environments/environment';
           <dd>
             Le bouton PDF ouvre la fenêtre d'impression : choisir
             « Enregistrer au format PDF » comme imprimante.
+          </dd>
+          <dt>Saisir plus vite ?</dt>
+          <dd>
+            En ouvrant une table, le curseur est déjà dans la case Nord.
+            Entrée valide et passe à Sud, puis Est, puis Ouest ; le dernier
+            score se calcule tout seul.
           </dd>
           <dt>Une erreur dans la mise en place ?</dt>
           <dd>

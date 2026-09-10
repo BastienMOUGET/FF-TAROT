@@ -17,10 +17,16 @@ import {
 } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
-import { ChallengeRanking, SubTournament, Tournament } from '../../core/api.types';
+import {
+  ChallengeRanking,
+  PlacementMode,
+  SubTournament,
+  Tournament,
+} from '../../core/api.types';
 import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
 import { ClubLogo } from '../../shared/club-logo';
 import { RankingImportDialog } from './ranking-import-dialog';
@@ -42,6 +48,7 @@ function todayLabel(): string {
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatButtonModule,
   ],
   template: `
@@ -55,7 +62,15 @@ function todayLabel(): string {
         <mat-form-field appearance="outline" class="full">
           <mat-label>Nombre de manches</mat-label>
           <input matInput type="number" min="1" max="12" formControlName="rounds_planned" />
-          <mat-hint>Toutes générées après le tirage au sort, pour imprimer les feuilles de marque dès le début.</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Formation des tables</mat-label>
+          <mat-select formControlName="placement_mode">
+            <mat-option value="movement">Mouvement (règle fédérale)</mat-option>
+            <mat-option value="level_last">Dernière manche par niveau</mat-option>
+            <mat-option value="level">Par niveau dès la manche 2</mat-option>
+          </mat-select>
+          <mat-hint>{{ modeHint() }}</mat-hint>
         </mat-form-field>
         <mat-form-field appearance="outline" class="full">
           <mat-label>Indice PCN (0 = pas de PCN)</mat-label>
@@ -79,8 +94,20 @@ export class SubTournamentDialog implements OnInit {
   form = this.fb.nonNullable.group({
     label: [todayLabel(), Validators.required],
     rounds_planned: [4, [Validators.min(1), Validators.max(12)]],
+    placement_mode: ['movement' as PlacementMode],
     indice_pcn: [0],
   });
+
+  modeHint(): string {
+    switch (this.form.getRawValue().placement_mode) {
+      case 'level':
+        return 'À chaque manche, les 4 meilleurs du classement en cours jouent ensemble. Chaque manche se génère après la précédente.';
+      case 'level_last':
+        return 'Mouvement fédéral, puis dernière manche entre joueurs de même niveau.';
+      default:
+        return 'Toutes les manches sont générées après le tirage au sort : feuilles de marque imprimables dès le début.';
+    }
+  }
 
   ngOnInit(): void {
     this.api.settings().subscribe((s) => {
@@ -97,6 +124,7 @@ export class SubTournamentDialog implements OnInit {
         label: v.label,
         indice_pcn: v.indice_pcn,
         rounds_planned: v.rounds_planned,
+        placement_mode: v.placement_mode,
       })
       .subscribe({
         next: (created) => this.ref.close(created),

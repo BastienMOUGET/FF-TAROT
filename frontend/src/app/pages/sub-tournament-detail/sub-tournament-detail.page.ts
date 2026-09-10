@@ -44,6 +44,9 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
         @if (+s.indice_pcn > 0) {
           <mat-chip class="ml">PCN {{ s.indice_pcn }}</mat-chip>
         }
+        @if (!s.imported && (s.placement_mode ?? 'movement') !== 'movement') {
+          <mat-chip class="ml level-chip">{{ modeLabel(s) }}</mat-chip>
+        }
       </h1>
 
       @if (s.imported) {
@@ -79,10 +82,13 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
           <div class="step">
             <div class="step-num">2</div>
             <div class="step-body">
-              <div class="step-title">Impressions de début de tournoi</div>
+              <div class="step-title">Impressions</div>
               <div class="step-help">
-                Placement de départ (une page) et feuilles de marque par table et
-                par manche.
+                Placement (une page) et feuilles de marque, deux par feuille A4.
+                @if ((s.placement_mode ?? 'movement') !== 'movement') {
+                  À réimprimer après chaque nouvelle manche : les tables
+                  changent selon le classement.
+                }
               </div>
             </div>
             <div class="step-actions">
@@ -107,15 +113,24 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
             @if (auth.isAdmin()) {
               <div class="step-actions">
                 @if (rounds().length > 0 && rounds().length < (s.rounds_planned ?? 0)) {
-                  <button mat-stroked-button color="primary" (click)="generateMissing(s)" [disabled]="busy()">
-                    <mat-icon>playlist_add</mat-icon>
-                    Générer les manches {{ rounds().length + 1 }} à {{ s.rounds_planned }}
+                  @if (nextIsByLevel(s)) {
+                    <button mat-flat-button color="primary" (click)="generateNextLevel(s)" [disabled]="busy()">
+                      <mat-icon>leaderboard</mat-icon>
+                      Générer la manche {{ rounds().length + 1 }} par niveau
+                    </button>
+                  } @else {
+                    <button mat-stroked-button color="primary" (click)="generateMissing(s)" [disabled]="busy()">
+                      <mat-icon>playlist_add</mat-icon>
+                      Générer les manches {{ rounds().length + 1 }} à {{ s.rounds_planned }}
+                    </button>
+                  }
+                }
+                @if (rounds().length === 0 || rounds().length >= (s.rounds_planned ?? 0)) {
+                  <button mat-flat-button color="primary" (click)="newRound()" [disabled]="busy()">
+                    <mat-icon>add</mat-icon>
+                    {{ rounds().length === 0 ? 'Manche 1' : 'Manche ' + (rounds().length + 1) }}
                   </button>
                 }
-                <button mat-flat-button color="primary" (click)="newRound()" [disabled]="busy()">
-                  <mat-icon>add</mat-icon>
-                  {{ rounds().length === 0 ? 'Manche 1' : 'Manche ' + (rounds().length + 1) }}
-                </button>
               </div>
             }
           </div>
@@ -143,6 +158,16 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
                     </a>
                     <a mat-stroked-button [routerLink]="['/rounds', r.id, 'ranking']">
                       <mat-icon>format_list_numbered</mat-icon> Classement de la manche
+                    </a>
+                    <!-- Cumul des manches 1..N : ce qui sert à suivre le
+                         tournoi et, en placement par niveau, à former les
+                         tables de la manche suivante. -->
+                    <a
+                      mat-stroked-button
+                      [routerLink]="['/sub-tournaments', s.id, 'ranking']"
+                      [queryParams]="{ through: r.round_number }"
+                    >
+                      <mat-icon>leaderboard</mat-icon> Général après la manche {{ r.round_number }}
                     </a>
                   </div>
                 </div>
@@ -206,6 +231,7 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
     .round-progress { flex: 1 1 auto; }
     .round-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     mat-chip.done { background: #c8e6c9; }
+    mat-chip.level-chip { background: #e1f5fe; }
   `,
 })
 export class SubTournamentDetailPage implements OnInit {
@@ -259,6 +285,62 @@ export class SubTournamentDetailPage implements OnInit {
         error: () =>
           this.progress.update((m) => ({ ...m, [roundId]: { tables, validated: 0 } })),
       });
+    });
+  }
+
+  modeLabel(s: SubTournament): string {
+    return s.placement_mode === 'level'
+      ? 'tables par niveau'
+      : 'dernière manche par niveau';
+  }
+
+  // La prochaine manche à générer est-elle formée par niveau ? Elle dépend
+  // alors du classement, donc elle se génère seule, après la précédente.
+  nextIsByLevel(s: SubTournament): boolean {
+    const next = this.rounds().length + 1;
+    const mode = s.placement_mode ?? 'movement';
+    if (next < 2) return false;
+    if (mode === 'level') return true;
+    return mode === 'level_last' && next >= Number(s.rounds_planned ?? 0);
+  }
+
+  // Une seule manche, formée d'après le classement cumulé. Le serveur refuse
+  // tant que les tables des manches précédentes ne sont pas toutes validées.
+  generateNextLevel(s: SubTournament): void {
+    this.busy.set(true);
+    this.api.createRound(s.id).subscribe({
+      next: (r) =>
+        this.api.generatePlacement(r.id).subscribe({
+          next: () => {
+            this.busy.set(false);
+            this.snack.open(
+              `Manche ${r.round_number} formée par niveau — pensez à réimprimer le placement et les feuilles de marque`,
+              'Fermer',
+              { duration: 6000 }
+            );
+            this.loadRounds(s.id);
+          },
+          error: (err) => {
+            // La manche a été créée mais reste sans placement : on la retire
+            // pour que le bouton reste proposé une fois la saisie terminée.
+            this.api.deleteRound(r.id).subscribe({
+              next: () => this.loadRounds(s.id),
+              error: () => this.loadRounds(s.id),
+            });
+            this.busy.set(false);
+            this.snack.open(
+              err?.error?.error || 'Placement par niveau impossible',
+              'Fermer',
+              { duration: 7000 }
+            );
+          },
+        }),
+      error: (err) => {
+        this.busy.set(false);
+        this.snack.open(err?.error?.error || 'Erreur création manche', 'Fermer', {
+          duration: 3000,
+        });
+      },
     });
   }
 

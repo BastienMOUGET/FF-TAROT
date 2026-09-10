@@ -168,7 +168,14 @@ export interface SubTournament {
   imported?: boolean;
   // Nombre de manches prévu (toutes générées après le tirage au sort).
   rounds_planned?: number;
+  // Comment les tables sont formées d'une manche à l'autre.
+  placement_mode?: PlacementMode;
 }
+
+// movement   : mouvement fédéral Libre par 4 (N fixe, S+1, E+2, O-1)
+// level      : dès la manche 2, tables formées par niveau (classement cumulé)
+// level_last : mouvement, sauf la dernière manche formée par niveau
+export type PlacementMode = 'movement' | 'level' | 'level_last';
 
 // Paramètres globaux (GET/PUT /api/settings), valeurs en chaînes.
 export interface Settings {

@@ -146,6 +146,32 @@ public class ModRounds {
         return out
     }
 
+    // Nombre de tables non validées sur les manches précédant `beforeRound`.
+    // Sert de garde au placement par niveau : sans résultats complets, le
+    // classement de référence serait faux.
+    static int UnvalidatedTables(Db db, string subId, int beforeRound) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT COUNT(*) FROM (SELECT s.round_id, s.table_number FROM seats s JOIN rounds r ON r.id = s.round_id WHERE r.sub_tournament_id = ? AND r.round_number < ? GROUP BY s.round_id, s.table_number) t LEFT JOIN table_results tr ON tr.round_id = t.round_id AND tr.table_number = t.table_number WHERE tr.id IS NULL OR tr.validated = FALSE",
+            Db.P2(subId, String.FromInt(beforeRound)))
+        if (rows.Count() == 0) { return 0 }
+        let r0: List<string> = rows.Get(0)
+        return Db.CellInt(r0.Get(0))
+    }
+
+    // Joueurs (hors Relais) triés par score cumulé décroissant sur les
+    // manches validées qui précèdent `beforeRound` — l'ordre « par niveau ».
+    static List<int> LevelOrder(Db db, string subId, int beforeRound) {
+        let out: List<int> = new List<int>()
+        let rows: List<List<string>> = db.Rows(
+            "SELECT s.player_id, COALESCE(SUM(CASE s.seat WHEN 'N' THEN tr.score_n WHEN 'S' THEN tr.score_s WHEN 'E' THEN tr.score_e ELSE tr.score_o END * r.coef), 0) AS total FROM seats s JOIN rounds r ON r.id = s.round_id JOIN players p ON p.id = s.player_id LEFT JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number AND tr.validated = TRUE WHERE r.sub_tournament_id = ? AND r.round_number < ? AND p.is_relais = FALSE GROUP BY s.player_id ORDER BY total DESC, s.player_id ASC",
+            Db.P2(subId, String.FromInt(beforeRound)))
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            out.Add(Db.CellInt(r.Get(0)))
+        }
+        return out
+    }
+
     // POST /api/rounds/:id/generate (admin) — (re)génère le placement.
     public static HttpResponse Generate(WebContext ctx, Db db) {
         let rc: int = Auth.CheckRole(ctx, "admin")
@@ -159,9 +185,39 @@ public class ModRounds {
         let subId: string = rr.Get(1)
         let roundNumber: int = Db.CellInt(rr.Get(2))
 
+        // Mode de placement du tournoi (migration 008) : mouvement fédéral,
+        // ou tables formées par niveau d'après le classement en cours.
+        let subRows: List<List<string>> = db.Rows("SELECT placement_mode, rounds_planned FROM sub_tournaments WHERE id = ?", Db.P1(subId))
+        if (subRows.Count() == 0) { return HttpErr.NotFound() }
+        let sr: List<string> = subRows.Get(0)
+        let mode: string = sr.Get(0)
+        let planned: int = Db.CellInt(sr.Get(1))
+        var byLevel: bool = false
+        if (roundNumber > 1) {
+            if (mode == "level") { byLevel = true }
+            if (mode == "level_last" && roundNumber >= planned) { byLevel = true }
+        }
+
         var seats: List<SeatRow> = new List<SeatRow>()
 
-        if (roundNumber == 1) {
+        if (byLevel) {
+            // Classement cumulé des manches précédentes validées : il faut
+            // qu'elles le soient toutes, sinon le niveau ne veut rien dire.
+            let missing: int = ModRounds.UnvalidatedTables(db, subId, roundNumber)
+            if (missing > 0) {
+                return HttpErr.BadRequest("Placement par niveau : " + String.FromInt(missing) + " table(s) des manches précédentes ne sont pas encore validées. Terminez la saisie avant de générer cette manche.")
+            }
+            let ordered: List<int> = ModRounds.LevelOrder(db, subId, roundNumber)
+            if (ordered.Count() == 0) {
+                return HttpErr.BadRequest("Placement par niveau impossible : aucun résultat validé sur les manches précédentes.")
+            }
+            let plan: List<int> = Placement.Decompose(ordered.Count())
+            if (plan.Count() == 0) {
+                return HttpErr.BadRequest("Placement par niveau impossible avec " + String.FromInt(ordered.Count()) + " joueurs (ni tables de 4 ni de 3).")
+            }
+            let relaisIds: List<int> = ModRounds.RelaisIds(db, plan.Get(1))
+            seats = Placement.GenerateLevelSeats(ordered, relaisIds)
+        } else { if (roundNumber == 1) {
             // Équipes + 4 joueurs chacune.
             let teamRows: List<List<string>> = db.Rows("SELECT id FROM teams WHERE sub_tournament_id = ? ORDER BY team_number ASC", Db.P1(subId))
             if (teamRows.Count() == 0) { return HttpErr.BadRequest("Aucune équipe inscrite dans ce sous-tournoi") }
@@ -211,7 +267,7 @@ public class ModRounds {
             for s in prevSeats { if (s.TableNumber > nbTables) { nbTables = s.TableNumber } }
             let offs: List<int> = ModMovementPatterns.OffsetsForTableCount(db, nbTables)
             seats = Placement.GenerateNextSeats(prevSeats, offs.Get(0), offs.Get(1), offs.Get(2), offs.Get(3))
-        }
+        } }
 
         // Persistance transactionnelle.
         // table_results est indexé par (round_id, table_number), pas par joueur :
@@ -231,8 +287,15 @@ public class ModRounds {
             ps.Add(String.FromInt(s.TableNumber))
             ps.Add(s.Seat)
             ps.Add(String.FromInt(s.PlayerId))
-            ps.Add(String.FromInt(s.TeamId))
-            let insOk: bool = db.Exec("INSERT INTO seats (round_id, table_number, seat, player_id, team_id) VALUES (?, ?, ?, ?, ?)", ps)
+            // TeamId 0 = placement par niveau : les tables ne suivent plus
+            // les équipes d'inscription, la colonne reste NULL.
+            var insOk: bool = false
+            if (s.TeamId > 0) {
+                ps.Add(String.FromInt(s.TeamId))
+                insOk = db.Exec("INSERT INTO seats (round_id, table_number, seat, player_id, team_id) VALUES (?, ?, ?, ?, ?)", ps)
+            } else {
+                insOk = db.Exec("INSERT INTO seats (round_id, table_number, seat, player_id, team_id) VALUES (?, ?, ?, ?, NULL)", ps)
+            }
             if (!insOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
         }
         db.Commit()

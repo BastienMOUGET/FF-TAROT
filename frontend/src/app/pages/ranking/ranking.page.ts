@@ -70,7 +70,13 @@ import { ClubLogo } from '../../shared/club-logo';
 
     <div class="print-head">
       <app-club-logo [subTournamentId]="subTournamentId()" [size]="56" />
-      <h1>Classement général du tournoi</h1>
+      <h1>
+        Classement général
+        @if (throughRound()) {
+          après la manche {{ throughRound() }}
+        }
+        du tournoi
+      </h1>
     </div>
 
     @if (loading()) {
@@ -166,6 +172,7 @@ export class RankingPage implements OnInit, OnDestroy {
   loading = signal(true);
   ranking = signal<RankingEntry[]>([]);
   subTournamentId = signal<number>(0);
+  throughRound = signal<number | null>(null);
   lastUpdate = signal<Date | null>(null);
 
   cols = ['place', 'name', 'rounds', 'total', 'general', 'pcn', 'pp'];
@@ -174,7 +181,7 @@ export class RankingPage implements OnInit, OnDestroy {
     // React to live ranking updates from socket
     effect(() => {
       const ev = this.socket.lastRanking();
-      if (ev && ev.sub_tournament_id === this.subTournamentId()) {
+      if (ev && !this.throughRound() && ev.sub_tournament_id === this.subTournamentId()) {
         this.ranking.set(ev.ranking);
         this.lastUpdate.set(new Date());
       }
@@ -184,9 +191,12 @@ export class RankingPage implements OnInit, OnDestroy {
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.subTournamentId.set(id);
-    this.socket.connect();
+    const through = Number(this.route.snapshot.queryParamMap.get('through'));
+    this.throughRound.set(through > 0 ? through : null);
+    // Un classement arrêté à une manche est figé : pas de suivi live.
+    if (!this.throughRound()) this.socket.connect();
 
-    this.api.ranking(id).subscribe({
+    this.api.ranking(id, this.throughRound() ?? undefined).subscribe({
       next: (r) => {
         this.ranking.set(r);
         this.lastUpdate.set(new Date());

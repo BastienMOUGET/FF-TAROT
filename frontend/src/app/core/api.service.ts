@@ -203,9 +203,15 @@ export class ApiService {
     );
 
   /* ----- Classement ----- */
-  ranking = (subTournamentId: number): Observable<RankingEntry[]> =>
+  // `throughRound` : classement arrêté après cette manche (cumul des tables
+  // validées des manches 1..N). Sans lui, le classement général du tournoi.
+  ranking = (
+    subTournamentId: number,
+    throughRound?: number
+  ): Observable<RankingEntry[]> =>
     this.http.get<RankingEntry[]>(
-      `${this.base}/sub-tournaments/${subTournamentId}/ranking`
+      `${this.base}/sub-tournaments/${subTournamentId}/ranking`,
+      throughRound ? { params: { through_round: String(throughRound) } } : {}
     );
   roundRanking = (roundId: number): Observable<RoundRanking> =>
     this.http.get<RoundRanking>(`${this.base}/rounds/${roundId}/ranking`);

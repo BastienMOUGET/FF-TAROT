@@ -135,6 +135,94 @@ public class Placement {
         return out
     }
 
+    // Répartition de n joueurs en tables de 4 (prioritaires) complétées par
+    // des tables de 3 — jamais de table de 2. Renvoie [fours, threes], ou
+    // une liste vide si n est irréalisable (n < 3, ou n == 5).
+    public static List<int> Decompose(int n) {
+        let out: List<int> = new List<int>()
+        if (n < 3) { return out }
+        if (n == 5) { return out }
+        let rest: int = n % 4
+        var threes: int = 0
+        if (rest == 1) { threes = 3 }
+        if (rest == 2) { threes = 2 }
+        if (rest == 3) { threes = 1 }
+        let remaining: int = n - threes * 3
+        if (remaining < 0) { return out }
+        if (remaining % 4 != 0) { return out }
+        out.Add(remaining / 4)
+        out.Add(threes)
+        return out
+    }
+
+    // Mélange une liste d'entiers (Fisher-Yates sur le CSPRNG).
+    static List<int> Shuffled(List<int> src) {
+        let pool: List<int> = new List<int>()
+        for x in src { pool.Add(x) }
+        let out: List<int> = new List<int>()
+        while (pool.Count() > 0) {
+            let j: int = Placement.Below(pool.Count())
+            out.Add(pool.Get(j))
+            pool.RemoveAt(j)
+        }
+        return out
+    }
+
+    // Placement « par niveau » : les joueurs arrivent triés du meilleur au
+    // moins bon, les 4 premiers forment la table 1, les 4 suivants la table
+    // 2, etc. Les tables de 3 sont les dernières (bas de classement) et
+    // reçoivent un Relais en Nord, comme partout ailleurs. Les orientations
+    // sont tirées au sort dans chaque table : le niveau décide de la table,
+    // pas de la place.
+    public static List<SeatRow> GenerateLevelSeats(List<int> orderedPlayerIds, List<int> relaisIds) {
+        let seats: List<SeatRow> = new List<SeatRow>()
+        let n: int = orderedPlayerIds.Count()
+        let plan: List<int> = Placement.Decompose(n)
+        if (plan.Count() == 0) { return seats }
+        let fours: int = plan.Get(0)
+        let threes: int = plan.Get(1)
+
+        var cursor: int = 0
+        for t in 0..fours {
+            let idx: List<int> = new List<int>()
+            for k in 0..4 { idx.Add(cursor + k) }
+            cursor = cursor + 4
+            let order: List<int> = Placement.Shuffled(idx)
+            for k in 0..4 {
+                let row: SeatRow = new SeatRow()
+                row.TableNumber = t + 1
+                row.Seat = Placement.SeatAt(k)
+                row.PlayerId = orderedPlayerIds.Get(order.Get(k))
+                row.TeamId = 0
+                seats.Add(row)
+            }
+        }
+        for k in 0..threes {
+            let tableNumber: int = fours + k + 1
+            let idx: List<int> = new List<int>()
+            for j in 0..3 { idx.Add(cursor + j) }
+            cursor = cursor + 3
+            let order: List<int> = Placement.Shuffled(idx)
+            for j in 0..3 {
+                let row: SeatRow = new SeatRow()
+                row.TableNumber = tableNumber
+                row.Seat = Placement.SeatAt(j + 1)   // S, E, O
+                row.PlayerId = orderedPlayerIds.Get(order.Get(j))
+                row.TeamId = 0
+                seats.Add(row)
+            }
+            if (k < relaisIds.Count()) {
+                let rr: SeatRow = new SeatRow()
+                rr.TableNumber = tableNumber
+                rr.Seat = "N"
+                rr.PlayerId = relaisIds.Get(k)
+                rr.TeamId = 0
+                seats.Add(rr)
+            }
+        }
+        return seats
+    }
+
     // Places du round suivant : offset par siège sur le numéro de table.
     public static List<SeatRow> GenerateNextSeats(List<SeatRow> prevSeats, int offN, int offS, int offE, int offO) {
         let out: List<SeatRow> = new List<SeatRow>()

@@ -363,12 +363,14 @@ export class ScoringPage implements OnInit {
             this.table.set(tr);
             this.fillFrom(tr);
             this.loading.set(false);
+            this.focusFirstField();
           },
           error: () => {
             // Pas encore de table_result : grille vierge.
             this.table.set(null);
             this.fillFrom(null);
             this.loading.set(false);
+            this.focusFirstField();
           },
         });
       },
@@ -393,6 +395,21 @@ export class ScoringPage implements OnInit {
       },
       auto: null,
     };
+  }
+
+  // À l'ouverture d'une table, le curseur se place dans la première case
+  // saisissable (Nord, ou Sud si la table est à 3) : on saisit au clavier
+  // sans toucher la souris.
+  private focusFirstField(): void {
+    setTimeout(() => {
+      const first = document.querySelector<HTMLInputElement>(
+        'input.score:not([disabled])'
+      );
+      if (first) {
+        first.focus();
+        first.select();
+      }
+    }, 60);
   }
 
   private fillFrom(tr: TableResult | null): void {
@@ -424,6 +441,7 @@ export class ScoringPage implements OnInit {
 
   switchMode(mode: 'global' | 'detail'): void {
     this.entryMode.set(mode);
+    this.focusFirstField();
   }
 
   // ---------------------------------------------------------------- helpers
