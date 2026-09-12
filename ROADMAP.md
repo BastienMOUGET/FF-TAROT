@@ -6,6 +6,77 @@
 
 ---
 
+## ✅ v3.0.29 — Retour terrain n°10 : remplacer un joueur, saisie donne par donne, détails *(livré, 2026-09-12)*
+
+Mémo `feedback/2026-09-12/` (version 3.028) et retour WhatsApp du 10/09 au
+soir.
+
+### Remplacer un joueur (le point bloquant)
+
+Une case cochée à côté de la bonne au pointage des présents, la soirée
+lancée : impossible de corriger, et les points sont allés à un absent.
+`POST /api/sub-tournaments/:id/substitute` reprend l'inscription, **les
+places de toutes les manches** et les lignes de classement, puis recalcule.
+Les scores restent attachés à la table : ils changent simplement de
+titulaire. Écran « Joueurs » du tournoi, carte « Remplacer un joueur ».
+Fonctionne aussi sur une soirée terminée, ce qui répare les données déjà
+saisies — et corrige du même coup le classement du Challenge, sans avoir à
+bricoler des points à la main.
+
+Refusé, avec message : même joueur des deux côtés, remplaçant déjà inscrit
+(il jouerait deux fois), joueur à remplacer non inscrit, Relais d'un côté ou
+de l'autre.
+
+### Saisie donne par donne
+
+- Le preneur se coche (une case par orientation) au lieu d'une liste
+  déroulante.
+- Nouvelle colonne **Score** entre « Preneur » et « N » : on saisit le
+  résultat de la donne, le preneur marque trois fois ce score et les trois
+  autres son opposé. Entrée passe à la donne suivante. Les cases N/S/E/O
+  restent modifiables à la main.
+- **Bug corrigé** : après une saisie détaillée, le mode « Résultat global de
+  la table » affichait des cases vides alors que les totaux existaient. Il
+  montre désormais le total de la table, avec un avertissement expliquant
+  qu'enregistrer là remplacerait les donnes détaillées.
+
+### Feuilles de marque
+
+Bandeau `NOSENOSE…` juste au-dessus du tableau pour suivre le donneur,
+« Preneur » devient « Preneur & Contrat », et les deux lignes Total + et
+Total − sont fusionnées en une seule ligne **Total** (les plus à gauche, les
+moins à droite).
+
+### Classement général manche par manche
+
+`GET /api/sub-tournaments/:id/ranking-detail` : le classement général avec
+une colonne par manche, comme le classement du Challenge a une colonne par
+tournoi. Les Relais sont exclus de tous les classements.
+
+### Détails
+
+- Le calendrier de création d'un challenge affichait la date en anglais :
+  locale `fr-FR` fournie à l'application et au sélecteur de date.
+- Le nom par défaut d'un tournoi passe de `12/09/2026` à `12092026`.
+- « Mouvement (règle fédérale) » devient « Règle FFT (mouvement) ».
+
+Vérifié (server-ci, base jetable, 2 manches saisies et validées) : après
+remplacement, le joueur absent disparaît du classement du tournoi et du
+Challenge, le remplaçant récupère ses points et ses deux manches, les
+places en base ont changé de titulaire ; les quatre refus renvoient le bon
+message ; détail par manche cohérent. Rendu écran et papier non testé ici.
+
+### Non retenu pour l'instant
+
+L'ajustement manuel de points sur le classement du Challenge (suggéré via
+les pénalités) : le remplacement de joueur corrige la cause, donc le
+besoin tombe. À reprendre si un cas non corrigeable à la source apparaît.
+Au passage, un défaut connu à traiter alors : une pénalité saisie sur un
+challenge est aujourd'hui appliquée au classement de **chacun** de ses
+tournois.
+
+---
+
 ## ✅ v3.0.28 — Retour terrain n°9 : feuilles de marque au format club, placement par niveau *(livré, 2026-09-10)*
 
 Retour du 10/09 après une vraie soirée à 8 tables.

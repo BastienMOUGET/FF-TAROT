@@ -20,7 +20,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ApiService } from '../../core/api.service';
 import { SocketService } from '../../core/socket.service';
-import { RankingEntry } from '../../core/api.types';
+import { RankingDetailEntry, RankingEntry } from '../../core/api.types';
 import { ClubLogo } from '../../shared/club-logo';
 
 @Component({
@@ -102,6 +102,16 @@ import { ClubLogo } from '../../shared/club-logo';
           <th mat-header-cell *matHeaderCellDef class="num">Manches</th>
           <td mat-cell *matCellDef="let r" class="num">{{ r.rounds_played }}</td>
         </ng-container>
+        <!-- Une colonne par manche : le récapitulatif que le club lisait
+             sur son tableur (retour terrain n°10). -->
+        @for (rd of detailRounds(); track rd.round_number) {
+          <ng-container [matColumnDef]="'m' + rd.round_number">
+            <th mat-header-cell *matHeaderCellDef class="num">M{{ rd.round_number }}</th>
+            <td mat-cell *matCellDef="let r" class="num manche">
+              {{ scoreOf(r, $index) }}
+            </td>
+          </ng-container>
+        }
         <ng-container matColumnDef="total">
           <th mat-header-cell *matHeaderCellDef class="num">Total</th>
           <td mat-cell *matCellDef="let r" class="num">{{ r.total }}</td>
@@ -120,10 +130,10 @@ import { ClubLogo } from '../../shared/club-logo';
           <th mat-header-cell *matHeaderCellDef class="num">PP</th>
           <td mat-cell *matCellDef="let r" class="num">{{ r.pp }}</td>
         </ng-container>
-        <tr mat-header-row *matHeaderRowDef="cols"></tr>
+        <tr mat-header-row *matHeaderRowDef="cols()"></tr>
         <tr
           mat-row
-          *matRowDef="let row; columns: cols"
+          *matRowDef="let row; columns: cols()"
           [class.podium-1]="row.place === 1"
           [class.positive]="row.place !== 1 && +row.total_general >= 0"
         ></tr>
@@ -150,6 +160,7 @@ import { ClubLogo } from '../../shared/club-logo';
     .num { text-align: right; }
     .place { font-weight: 600; }
     .strong { font-weight: 600; }
+    .manche { color: #424242; }
     .lic { color: #757575; }
     .empty { color: #757575; }
     /* Retour terrain : le 1er en couleur, et tous les scores >= 0. */
@@ -175,7 +186,25 @@ export class RankingPage implements OnInit, OnDestroy {
   throughRound = signal<number | null>(null);
   lastUpdate = signal<Date | null>(null);
 
-  cols = ['place', 'name', 'rounds', 'total', 'general', 'pcn', 'pp'];
+  detailRounds = signal<{ id: number; round_number: number }[]>([]);
+  // Les colonnes de manches se glissent entre « Manches » et « Total ».
+  cols = computed(() => [
+    'place',
+    'name',
+    'rounds',
+    ...this.detailRounds().map((r) => 'm' + r.round_number),
+    'total',
+    'general',
+    'pcn',
+    'pp',
+  ]);
+
+  // Score du joueur sur la i-ème manche affichée.
+  scoreOf(row: RankingEntry, i: number): string {
+    const rounds = (row as RankingDetailEntry).rounds;
+    const v = rounds?.[i];
+    return v === null || v === undefined ? '' : String(v);
+  }
 
   constructor() {
     // React to live ranking updates from socket
@@ -196,13 +225,34 @@ export class RankingPage implements OnInit, OnDestroy {
     // Un classement arrêté à une manche est figé : pas de suivi live.
     if (!this.throughRound()) this.socket.connect();
 
-    this.api.ranking(id, this.throughRound() ?? undefined).subscribe({
-      next: (r) => {
-        this.ranking.set(r);
+    if (this.throughRound()) {
+      // Vue « arrêté après la manche N » : pas de détail par manche.
+      this.api.ranking(id, this.throughRound()!).subscribe({
+        next: (r) => {
+          this.ranking.set(r);
+          this.lastUpdate.set(new Date());
+          this.loading.set(false);
+        },
+        error: () => this.loading.set(false),
+      });
+      return;
+    }
+    this.api.rankingDetail(id).subscribe({
+      next: (d) => {
+        this.detailRounds.set(d.rounds);
+        this.ranking.set(d.ranking);
         this.lastUpdate.set(new Date());
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      // Serveur plus ancien ou erreur : on retombe sur le classement simple.
+      error: () =>
+        this.api.ranking(id).subscribe({
+          next: (r) => {
+            this.ranking.set(r);
+            this.loading.set(false);
+          },
+          error: () => this.loading.set(false),
+        }),
     });
   }
 

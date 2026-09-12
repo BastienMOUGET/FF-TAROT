@@ -100,6 +100,7 @@ public class Routes {
         // Équipes (Libre par 4)
         app.Get("/api/sub-tournaments/:subTournamentId/teams", ctx => ModTeams.ListBySubTournament(ctx, db))
         app.Post("/api/sub-tournaments/:subTournamentId/teams", ctx => ModTeams.Create(ctx, db))
+        app.Post("/api/sub-tournaments/:subTournamentId/substitute", ctx => ModTeams.Substitute(ctx, db))
         app.Get("/api/teams/:id", ctx => ModTeams.GetById(ctx, db))
         app.Delete("/api/teams/:id", ctx => ModTeams.Remove(ctx, db))
 
@@ -129,6 +130,7 @@ public class Routes {
         // Classement (live)
         app.Get("/api/sub-tournaments/:subTournamentId/ranking", ctx => ModRanking.GetRanking(ctx, db))
         app.Get("/api/rounds/:id/ranking", ctx => ModRanking.GetRoundRanking(ctx, db))
+        app.Get("/api/sub-tournaments/:subTournamentId/ranking-detail", ctx => ModRanking.GetRankingDetail(ctx, db))
         app.Post("/api/sub-tournaments/:subTournamentId/recompute", ctx => ModRanking.Recompute(ctx, db))
         app.Get("/api/sub-tournaments/:subTournamentId/export-pcn.csv", ctx => ModRanking.ExportPcn(ctx, db))
         app.Get("/api/tournaments/:tournamentId/challenge-ranking", ctx => ModRanking.GetChallengeRanking(ctx, db))

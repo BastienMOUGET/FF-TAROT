@@ -33,12 +33,13 @@ import { RankingImportDialog } from './ranking-import-dialog';
 
 // Vocabulaire du club (retour terrain) : un "Challenge" (tournament) regroupe
 // des "Tournois" hebdomadaires (sub_tournaments). Le libellé par défaut d'un
-// tournoi est la date du jour, c'est ainsi que le club les nomme.
+// tournoi est la date du jour sans séparateur — la forme utilisée par le
+// club pour nommer ses fichiers de soirée (« 12092026 »).
 function todayLabel(): string {
   const d = new Date();
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return `${dd}/${mm}/${d.getFullYear()}`;
+  return `${dd}${mm}${d.getFullYear()}`;
 }
 
 @Component({
@@ -66,7 +67,7 @@ function todayLabel(): string {
         <mat-form-field appearance="outline" class="full">
           <mat-label>Formation des tables</mat-label>
           <mat-select formControlName="placement_mode">
-            <mat-option value="movement">Mouvement (règle fédérale)</mat-option>
+            <mat-option value="movement">Règle FFT (mouvement)</mat-option>
             <mat-option value="level_last">Dernière manche par niveau</mat-option>
             <mat-option value="level">Par niveau dès la manche 2</mat-option>
           </mat-select>
@@ -105,7 +106,7 @@ export class SubTournamentDialog implements OnInit {
       case 'level_last':
         return 'Mouvement fédéral, puis dernière manche entre joueurs de même niveau.';
       default:
-        return 'Toutes les manches sont générées après le tirage au sort : feuilles de marque imprimables dès le début.';
+        return 'Mouvement fédéral. Toutes les manches sont générées après le tirage au sort : feuilles de marque imprimables dès le début.';
     }
   }
 

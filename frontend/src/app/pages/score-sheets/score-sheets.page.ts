@@ -11,9 +11,10 @@ import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
 
 // Feuilles de marque : une par table et par manche, remplies à la main par
 // le joueur en Nord pendant le jeu, puis recopiées dans la saisie.
-// Format du club : deux colonnes par orientation, « + » et « − », un total
-// de chaque en bas puis le total général de l'orientation. Deux feuilles
-// par page A4 pour ne pas imprimer 32 pages une soirée de 8 tables.
+// Format du club : bandeau « NOSE » pour suivre le donneur, colonne
+// « Preneur & Contrat », deux colonnes par orientation (« + » et « − »),
+// une ligne Total puis le total général. Deux feuilles par page A4 pour ne
+// pas imprimer 32 pages une soirée de 8 tables.
 @Component({
   selector: 'app-score-sheets-page',
   imports: [DatePipe, MatButtonModule, MatIconModule, MatProgressSpinnerModule],
@@ -59,11 +60,14 @@ import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
                   <span class="big">Table {{ t.table_number }}</span>
                 </div>
               </header>
+              <!-- Suite des orientations : le responsable de table y marque
+                   le prochain donneur (usage du club). -->
+              <div class="nose">{{ noseLine }}</div>
               <table>
                 <thead>
                   <tr>
                     <th class="donne" rowspan="2">Donne</th>
-                    <th class="taker" rowspan="2">Preneur</th>
+                    <th class="taker" rowspan="2">Preneur &amp; Contrat</th>
                     @for (seat of seats; track seat) {
                       <th class="orient" colspan="2" [class.empty-seat]="!playerAt(t.seats, seat)">
                         <span class="seat" [attr.data-seat]="seat">{{ seat }}</span>
@@ -90,16 +94,9 @@ import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
                     </tr>
                   }
                   <tr class="sub">
-                    <td class="donne" colspan="2">Total +</td>
+                    <td class="donne" colspan="2">Total</td>
                     @for (seat of seats; track seat) {
                       <td [class.empty-seat]="!playerAt(t.seats, seat)"></td>
-                      <td class="dim"></td>
-                    }
-                  </tr>
-                  <tr class="sub">
-                    <td class="donne" colspan="2">Total −</td>
-                    @for (seat of seats; track seat) {
-                      <td class="dim"></td>
                       <td [class.empty-seat]="!playerAt(t.seats, seat)"></td>
                     }
                   </tr>
@@ -151,7 +148,11 @@ import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
     .donne { width: 58px; text-align: center; font-weight: 600; }
     .taker { width: 74px; }
     .empty-seat { background: repeating-linear-gradient(45deg, #eee, #eee 4px, #fff 4px, #fff 8px); }
-    .dim { background: #f0f0f0; }
+    .nose {
+      font-family: monospace; font-size: 0.95em; letter-spacing: 1px;
+      border: 1px solid #616161; border-bottom: none; padding: 3px 6px;
+      overflow: hidden; white-space: nowrap; color: #424242;
+    }
     tr.sub td { background: #fafafa; font-weight: 600; }
     tr.total td { font-weight: 700; background: #f0f0f0; height: 36px; }
     .seat {
@@ -185,6 +186,7 @@ import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
       .big { font-size: 12pt; }
       .title { font-size: 9pt; }
       footer { font-size: 7pt; }
+      .nose { font-size: 8pt; letter-spacing: 0.5px; padding: 1px 3px; }
     }
   `,
 })
@@ -200,6 +202,9 @@ export class ScoreSheetsPage implements OnInit {
   // niveau, les suivantes ne sont connues qu'après coup.
   roundFilter = signal(1);
   seats: Seat[] = ['N', 'S', 'E', 'O'];
+  // Bandeau « NOSE » répété : le joueur en charge de la table entoure la
+  // lettre du prochain donneur, donne après donne.
+  noseLine = 'NOSE'.repeat(14);
   now = () => new Date();
 
   visibleRounds = computed(() => {

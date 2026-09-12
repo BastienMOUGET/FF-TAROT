@@ -24,6 +24,10 @@ interface Row {
   id: number | null; // hand id existant, null = à créer
   hand_number: number;
   taker: Seat | '';
+  // Résultat de la donne pour le preneur, tel que noté sur la feuille de
+  // marque : le preneur marque 3 × ce score, chacun des trois autres son
+  // opposé (somme = 0).
+  deal: string;
   scores: Record<Seat, string>;
   auto: Seat | null;
 }
@@ -114,6 +118,13 @@ interface Row {
               somme fasse 0. <strong>Entrée</strong> valide la case et passe à
               la suivante.
             </p>
+            @if ((table()?.hands?.length ?? 0) > 1) {
+              <p class="warn">
+                Cette table a {{ table()!.hands.length }} donnes détaillées : les
+                cases ci-dessous en montrent le total. Enregistrer ici les
+                remplacerait par ce seul résultat.
+              </p>
+            }
             <table class="grid">
               <thead>
                 <tr>
@@ -156,15 +167,17 @@ interface Row {
         <mat-card class="entry">
           <mat-card-content>
             <p class="hint">
-              Toutes les donnes sont visibles d'un coup : corrige une valeur
-              directement dans la grille. Le dernier score de chaque donne se
-              calcule pour que la somme fasse 0.
+              Coche le preneur, saisis le <strong>score de la donne</strong> :
+              le preneur marque trois fois ce score et les trois autres son
+              opposé. <strong>Entrée</strong> passe à la donne suivante. Les
+              cases N/S/E/O restent modifiables à la main.
             </p>
             <table class="grid detail">
               <thead>
                 <tr>
                   <th class="num">Donne</th>
                   <th class="taker">Preneur</th>
+                  <th class="dealcol">Score</th>
                   @for (s of seatsAll; track s) {
                     <th [class.vacant]="!playerAt(s)">
                       <span class="seat" [attr.data-seat]="s">{{ s }}</span>
@@ -180,12 +193,36 @@ interface Row {
                   <tr>
                     <td class="num">{{ row.hand_number }}</td>
                     <td class="taker">
-                      <select [value]="row.taker" (change)="setTaker(row, $any($event.target).value)">
-                        <option value="">—</option>
+                      <!-- Une case par orientation : plus rapide qu'une liste
+                           déroulante quand on recopie 6 donnes. -->
+                      <div class="taker-radios">
                         @for (s of activeSeats(); track s) {
-                          <option [value]="s">{{ s }}</option>
+                          <label class="taker-radio" [class.on]="row.taker === s">
+                            <input
+                              type="radio"
+                              [name]="'taker-' + row.hand_number"
+                              [value]="s"
+                              [checked]="row.taker === s"
+                              (change)="setTaker(row, s)"
+                            />
+                            {{ s }}
+                          </label>
                         }
-                      </select>
+                      </div>
+                    </td>
+                    <td class="dealcol">
+                      <input
+                        class="deal"
+                        type="text"
+                        inputmode="numeric"
+                        pattern="-?[0-9]*"
+                        [value]="row.deal"
+                        [disabled]="!row.taker"
+                        [title]="row.taker ? 'Résultat de la donne pour le preneur' : 'Choisir d’abord le preneur'"
+                        (input)="onDeal(row, $any($event.target).value)"
+                        (keydown.enter)="nextIn($event, 'input.deal:not([disabled])')"
+                        (focus)="$any($event.target).select()"
+                      />
                     </td>
                     @for (s of seatsAll; track s) {
                       <td [class.vacant]="!playerAt(s)">
@@ -214,7 +251,7 @@ interface Row {
                   </tr>
                 }
                 <tr class="totals">
-                  <td class="num" colspan="2">Total</td>
+                  <td class="num" colspan="3">Total</td>
                   @for (s of seatsAll; track s) {
                     <td [class.vacant]="!playerAt(s)">{{ playerAt(s) ? colTotal(s) : '' }}</td>
                   }
@@ -282,8 +319,23 @@ interface Row {
     .grid th .name { font-weight: 500; font-size: 0.85em; color: #424242; margin-top: 2px; }
     .grid th.vacant, .grid td.vacant { opacity: 0.4; }
     .grid .num { width: 60px; font-weight: 600; }
-    .grid .taker { width: 90px; }
-    .grid .taker select { font-size: 1.1em; padding: 4px; }
+    .grid .taker { width: 132px; }
+    .taker-radios { display: flex; gap: 2px; justify-content: center; }
+    .taker-radio {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 28px; padding: 3px 4px; border: 1px solid #bdbdbd;
+      border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.95em;
+    }
+    .taker-radio input { margin: 0 2px 0 0; }
+    .taker-radio.on { background: #1976d2; border-color: #1976d2; color: #fff; }
+    .grid .dealcol { width: 92px; }
+    input.deal {
+      width: 76px; font-size: 1.15em; text-align: center; padding: 6px 4px;
+      border: 1px solid #bdbdbd; border-radius: 6px;
+    }
+    input.deal:focus { outline: 2px solid #1976d2; border-color: #1976d2; }
+    input.deal:disabled { background: #f5f5f5; }
+    .warn { color: #e65100; font-weight: 500; margin: 0 0 12px; }
     .grid .sum { width: 80px; font-weight: 700; }
     .sum.ok { color: #2e7d32; }
     .sum.bad { color: #c62828; }
@@ -382,19 +434,18 @@ export class ScoringPage implements OnInit {
   }
 
   private emptyRow(n: number): Row {
-    return { id: null, hand_number: n, taker: '', scores: { N: '', S: '', E: '', O: '' }, auto: null };
+    return { id: null, hand_number: n, taker: '', deal: '', scores: { N: '', S: '', E: '', O: '' }, auto: null };
   }
 
   private rowFromHand(h: Hand): Row {
-    return {
-      id: h.id,
-      hand_number: h.hand_number,
-      taker: h.taker_seat ?? '',
-      scores: {
-        N: String(h.score_n), S: String(h.score_s), E: String(h.score_e), O: String(h.score_o),
-      },
-      auto: null,
+    const scores: Record<Seat, string> = {
+      N: String(h.score_n), S: String(h.score_s), E: String(h.score_e), O: String(h.score_o),
     };
+    // Le score de la donne n'est pas stocké : on le retrouve depuis le
+    // preneur (son score vaut trois fois celui de la donne).
+    const taker = h.taker_seat ?? '';
+    const deal = taker ? String(Math.round(Number(scores[taker]) / 3)) : '';
+    return { id: h.id, hand_number: h.hand_number, taker, deal, scores, auto: null };
   }
 
   // À l'ouverture d'une table, le curseur se place dans la première case
@@ -412,6 +463,13 @@ export class ScoringPage implements OnInit {
     }, 60);
   }
 
+  // Totaux de la table, tels que le back les a recalculés.
+  private totalsRow(tr: TableResult): Row {
+    const r = this.emptyRow(1);
+    for (const s of SEATS) r.scores[s] = String(this.scoreFor(tr, s));
+    return r;
+  }
+
   private fillFrom(tr: TableResult | null): void {
     const hands = tr?.hands ?? [];
     if (hands.length > 1) {
@@ -424,7 +482,9 @@ export class ScoringPage implements OnInit {
       }
       rows.sort((a, b) => a.hand_number - b.hand_number);
       this.rows.set(rows);
-      this.globalRow.set(this.emptyRow(1));
+      // Le mode « résultat global » affiche le total de la table : il était
+      // vide après une saisie détaillée (retour terrain n°10).
+      this.globalRow.set(tr ? this.totalsRow(tr) : this.emptyRow(1));
     } else {
       this.entryMode.set('global');
       this.globalRow.set(hands.length === 1 ? this.rowFromHand(hands[0]) : this.emptyRow(1));
@@ -474,6 +534,10 @@ export class ScoringPage implements OnInit {
     return this.activeSeats().every((s) => row.scores[s] === '' || row.auto === s);
   }
 
+  // Les Row sont mutées : le focus revient sur la première case au
+  // changement de mode, d'où un sélecteur dédié pour chaque famille.
+  seatFieldSelector = 'input.score:not([disabled])';
+
   colTotal(seat: Seat): number {
     return this.rows().reduce((acc, r) => acc + this.num(r.scores[seat]), 0);
   }
@@ -519,10 +583,44 @@ export class ScoringPage implements OnInit {
   // siège vide sont sautées). Sur la dernière, on sort du champ : le bouton
   // de validation est alors accessible au clavier.
   nextField(ev: Event): void {
+    this.nextIn(ev, this.seatFieldSelector);
+  }
+
+  setTaker(row: Row, v: string): void {
+    row.taker = (v as Seat) || '';
+    // Le preneur change : on recalcule la répartition si un score est déjà là.
+    if (row.deal !== '') this.applyDeal(row);
+    this.touch();
+  }
+
+  // Score de la donne saisi : le preneur marque 3 × ce score, chacun des
+  // trois autres son opposé. C'est la règle de marque du club.
+  onDeal(row: Row, value: string): void {
+    row.deal = value.replace(/[^0-9-]/g, '');
+    this.applyDeal(row);
+    this.touch();
+  }
+
+  private applyDeal(row: Row): void {
+    if (!row.taker) return;
+    if (row.deal === '' || row.deal === '-') {
+      for (const s of this.activeSeats()) row.scores[s] = '';
+      row.auto = null;
+      return;
+    }
+    const d = this.num(row.deal);
+    for (const s of SEATS) {
+      if (!this.playerAt(s)) continue;
+      row.scores[s] = s === row.taker ? String(d * 3) : String(-d);
+    }
+    row.auto = null;
+  }
+
+  // Entrée : passe au champ suivant de la même famille (les scores entre
+  // eux, les scores de donne entre eux).
+  nextIn(ev: Event, selector: string): void {
     const el = ev.target as HTMLInputElement;
-    const inputs = Array.from(
-      document.querySelectorAll<HTMLInputElement>('input.score:not([disabled])')
-    );
+    const inputs = Array.from(document.querySelectorAll<HTMLInputElement>(selector));
     const i = inputs.indexOf(el);
     if (i === -1) return;
     const next = inputs[i + 1];
@@ -534,14 +632,10 @@ export class ScoringPage implements OnInit {
     }
   }
 
-  setTaker(row: Row, v: string): void {
-    row.taker = (v as Seat) || '';
-    this.touch();
-  }
-
   clearRow(row: Row): void {
     for (const s of this.activeSeats()) row.scores[s] = '';
     row.taker = '';
+    row.deal = '';
     row.auto = null;
     this.touch();
   }

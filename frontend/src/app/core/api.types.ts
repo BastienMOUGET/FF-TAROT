@@ -286,13 +286,25 @@ export interface RankingEntry {
   name: string;
   firstname: string;
   rounds_played: number;
-  total: string;
-  total_general: string;
+  total: string | number;
+  total_general: string | number;
   place: number;
-  pcn: string;
-  pp: string;
-  eliminated: 0 | 1 | boolean;
-  updated_at: string;
+  pcn: string | number;
+  pp: string | number;
+  eliminated?: 0 | 1 | boolean;
+  updated_at?: string | null;
+}
+
+// Classement général avec le détail manche par manche
+// (GET /api/sub-tournaments/:id/ranking-detail)
+export interface RankingDetailEntry extends RankingEntry {
+  // Un score par manche, dans l'ordre de `rounds` ; null = pas joué.
+  rounds: (number | null)[];
+}
+
+export interface RankingDetail {
+  rounds: { id: number; round_number: number }[];
+  ranking: RankingDetailEntry[];
 }
 
 // Classement d'une manche (GET /api/rounds/:id/ranking)

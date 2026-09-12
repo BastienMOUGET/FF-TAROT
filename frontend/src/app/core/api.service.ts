@@ -6,7 +6,7 @@ import { environment } from '../../environments/environment';
 import {
   ChallengeRanking, Club, Comite, DonneSet, Hand, Ligue, MovementPattern, Pair,
   Penalty, PenaltyType, Player, PlayerImportResult, PlayerImportRow, PpEntry,
-  RankingEntry, RankingImportResult, RankingImportRow, Round, RoundRanking, RouteSheet, Seat, Settings, SubTournament, TableResult, Team,
+  RankingDetail, RankingEntry, RankingImportResult, RankingImportRow, Round, RoundRanking, RouteSheet, Seat, Settings, SubTournament, TableResult, Team,
   Tournament, User,
 } from './api.types';
 
@@ -215,6 +215,21 @@ export class ApiService {
     );
   roundRanking = (roundId: number): Observable<RoundRanking> =>
     this.http.get<RoundRanking>(`${this.base}/rounds/${roundId}/ranking`);
+  rankingDetail = (subTournamentId: number): Observable<RankingDetail> =>
+    this.http.get<RankingDetail>(
+      `${this.base}/sub-tournaments/${subTournamentId}/ranking-detail`
+    );
+  // Remplace un joueur par un autre dans tout le tournoi (pointage,
+  // placements, classements) — erreur de pointage des présents.
+  substitutePlayer = (
+    subTournamentId: number,
+    fromPlayerId: number,
+    toPlayerId: number
+  ): Observable<{ from: string; to: string; seats_changed: number }> =>
+    this.http.post<{ from: string; to: string; seats_changed: number }>(
+      `${this.base}/sub-tournaments/${subTournamentId}/substitute`,
+      { from_player_id: fromPlayerId, to_player_id: toPlayerId }
+    );
   recomputeRanking = (subTournamentId: number): Observable<RankingEntry[]> =>
     this.http.post<RankingEntry[]>(
       `${this.base}/sub-tournaments/${subTournamentId}/ranking/recompute`,

@@ -268,7 +268,7 @@ public class ModRanking {
     // Le classement d'un sous-tournoi en tableau JSON (string).
     public static string RankingJson(Db db, string subId) {
         let rows: List<List<string>> = db.Rows(
-            "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp, r.eliminated, r.updated_at FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? ORDER BY r.place ASC, p.name ASC", Db.P1(subId))
+            "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp, r.eliminated, r.updated_at FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND p.is_relais = FALSE ORDER BY r.place ASC, p.name ASC", Db.P1(subId))
         let arr: JsonValue = J.Arr()
         for i in 0..rows.Count() {
             let r: List<string> = rows.Get(i)
@@ -326,6 +326,73 @@ public class ModRanking {
         return J.Ok(arr)
     }
 
+    // GET /api/sub-tournaments/:subTournamentId/ranking-detail
+    // Classement général avec le détail manche par manche : une colonne par
+    // manche dans l'écran du classement, comme le classement du Challenge a
+    // une colonne par tournoi (retour terrain n°10).
+    public static HttpResponse GetRankingDetail(WebContext ctx, Db db) {
+        let subId: string = ctx.Param("subTournamentId")
+        let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
+        if (subt.Count() == 0) { return HttpErr.NotFound() }
+
+        let rounds: List<List<string>> = db.Rows(
+            "SELECT id, round_number FROM rounds WHERE sub_tournament_id = ? ORDER BY round_number ASC", Db.P1(subId))
+
+        // Score par joueur et par manche (tables validées seulement).
+        let byKey: Map<string, string> = new Map<string, string>()
+        let rows: List<List<string>> = db.Rows(
+            "SELECT s.player_id, r.round_number, CASE s.seat WHEN 'N' THEN tr.score_n WHEN 'S' THEN tr.score_s WHEN 'E' THEN tr.score_e ELSE tr.score_o END * r.coef AS sc FROM seats s JOIN rounds r ON r.id = s.round_id JOIN players p ON p.id = s.player_id JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number AND tr.validated = TRUE WHERE r.sub_tournament_id = ? AND p.is_relais = FALSE",
+            Db.P1(subId))
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            byKey.Set(r.Get(0) + "|" + r.Get(1), r.Get(2))
+        }
+
+        // Le classement officiel (table rankings) donne l'ordre et les totaux.
+        let rk: List<List<string>> = db.Rows(
+            "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND p.is_relais = FALSE ORDER BY r.place ASC, p.name ASC",
+            Db.P1(subId))
+
+        let arr: JsonValue = J.Arr()
+        for i in 0..rk.Count() {
+            let r: List<string> = rk.Get(i)
+            let pid: string = r.Get(0)
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("player_id", J.CellInt(pid))
+            o.AppendEntry("licence", J.CellStrN(r.Get(1)))
+            o.AppendEntry("name", J.CellStr(r.Get(2)))
+            o.AppendEntry("firstname", J.CellStr(r.Get(3)))
+            o.AppendEntry("rounds_played", J.CellInt(r.Get(4)))
+            o.AppendEntry("total", J.CellFloat(r.Get(5)))
+            o.AppendEntry("total_general", J.CellFloat(r.Get(6)))
+            o.AppendEntry("place", J.CellInt(r.Get(7)))
+            o.AppendEntry("pcn", J.CellFloat(r.Get(8)))
+            o.AppendEntry("pp", J.CellFloat(r.Get(9)))
+            let det: JsonValue = J.Arr()
+            for ri in 0..rounds.Count() {
+                let rw: List<string> = rounds.Get(ri)
+                let key: string = pid + "|" + rw.Get(1)
+                if (byKey.Has(key)) { det.AppendItem(J.Float(String.ToFloat(byKey.Get(key)))) }
+                else { det.AppendItem(J.Null()) }
+            }
+            o.AppendEntry("rounds", det)
+            arr.AppendItem(o)
+        }
+
+        let rArr: JsonValue = J.Arr()
+        for ri in 0..rounds.Count() {
+            let rw: List<string> = rounds.Get(ri)
+            let ro: JsonValue = J.Obj()
+            ro.AppendEntry("id", J.CellInt(rw.Get(0)))
+            ro.AppendEntry("round_number", J.CellInt(rw.Get(1)))
+            rArr.AppendItem(ro)
+        }
+        let out: JsonValue = J.Obj()
+        out.AppendEntry("rounds", rArr)
+        out.AppendEntry("ranking", arr)
+        return J.Ok(out)
+    }
+
     public static HttpResponse GetRanking(WebContext ctx, Db db) {
         let subId: string = ctx.Param("subTournamentId")
         let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
@@ -333,7 +400,7 @@ public class ModRanking {
         let through: string = ctx.QueryParam("through_round")
         if (String.Length(through) > 0) { return ModRanking.RankingThroughRound(db, subId, through) }
         let rows: List<List<string>> = db.Rows(
-            "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp, r.eliminated, r.updated_at FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? ORDER BY r.place ASC, p.name ASC", Db.P1(subId))
+            "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp, r.eliminated, r.updated_at FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND p.is_relais = FALSE ORDER BY r.place ASC, p.name ASC", Db.P1(subId))
         let arr: JsonValue = J.Arr()
         for i in 0..rows.Count() {
             let r: List<string> = rows.Get(i)

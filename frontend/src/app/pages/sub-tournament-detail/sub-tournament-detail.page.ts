@@ -71,7 +71,8 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
               <div class="step-title">Joueurs présents</div>
               <div class="step-help">
                 Pointer les joueurs, l'appli forme les tables de 4 (et de 3)
-                et tire la mise en place de la manche 1.
+                et tire la mise en place de la manche 1. C'est aussi là qu'on
+                remplace un joueur pointé par erreur, même en cours de soirée.
               </div>
             </div>
             <a mat-flat-button color="primary" [routerLink]="['/sub-tournaments', s.id, 'teams']">

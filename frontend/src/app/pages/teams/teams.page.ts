@@ -164,6 +164,47 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
       </mat-card-actions>
     </mat-card>
 
+    @if (registeredPlayers().length > 0) {
+      <mat-card class="form-card swap-card">
+        <mat-card-header>
+          <mat-card-title>Remplacer un joueur</mat-card-title>
+          <mat-card-subtitle>
+            Une case cochée à côté de la bonne au pointage ? Le remplacement
+            reprend la place et les points déjà saisis, sur toutes les manches.
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="swap-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Joueur inscrit par erreur</mat-label>
+              <mat-select [value]="swapFrom()" (selectionChange)="swapFrom.set($event.value)">
+                @for (p of registeredPlayers(); track p.id) {
+                  <mat-option [value]="p.id">{{ p.name }} {{ p.firstname }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-icon class="swap-arrow">arrow_forward</mat-icon>
+            <mat-form-field appearance="outline">
+              <mat-label>Joueur réellement présent</mat-label>
+              <mat-select [value]="swapTo()" (selectionChange)="swapTo.set($event.value)">
+                @for (p of availablePlayers(); track p.id) {
+                  <mat-option [value]="p.id">{{ p.name }} {{ p.firstname }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <button
+              mat-flat-button
+              color="primary"
+              [disabled]="!swapFrom() || !swapTo() || swapping()"
+              (click)="doSubstitute()"
+            >
+              <mat-icon>swap_horiz</mat-icon> Remplacer
+            </button>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+
     <mat-card class="form-card">
       <mat-card-header>
         <mat-card-title>Nouvelle équipe (Libre par 3 ou 4)</mat-card-title>
@@ -287,6 +328,10 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     .draw-list small { color: #757575; }
     .draw-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
     .draw-row mat-checkbox { flex: 1 1 auto; }
+    .swap-card mat-card-content { padding-top: 16px; }
+    .swap-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .swap-row mat-form-field { min-width: 240px; }
+    .swap-arrow { color: #757575; }
     .edit-player { opacity: 0.5; }
     .draw-row:hover .edit-player { opacity: 1; }
     .orientation-select { width: 150px; font-size: 0.85em; }
@@ -344,6 +389,15 @@ export class TeamsPage implements OnInit {
   registeredPlayerIds = computed(
     () => new Set(this.teams().flatMap((t) => t.players.map((p) => p.player_id)))
   );
+  // Inscrits de ce tournoi, hors Relais (un Relais ne se remplace pas).
+  registeredPlayers = computed(() =>
+    this.players()
+      .filter((p) => this.registeredPlayerIds().has(p.id) && !p.is_relais)
+      .sort((a, b) => `${a.name} ${a.firstname}`.localeCompare(`${b.name} ${b.firstname}`))
+  );
+  swapFrom = signal<number | null>(null);
+  swapTo = signal<number | null>(null);
+  swapping = signal(false);
   availablePlayers = computed(() =>
     this.players().filter((p) => !this.registeredPlayerIds().has(p.id))
   );
@@ -529,6 +583,47 @@ export class TeamsPage implements OnInit {
   clearDrawSelection(): void {
     this.drawSelection.set(new Set());
     this.persistDraw();
+  }
+
+  // Remplacement d'un joueur : le serveur reprend l'inscription, les places
+  // de chaque manche et refait le classement. Les scores restent à la table,
+  // ils changent simplement de titulaire.
+  doSubstitute(): void {
+    const from = this.swapFrom();
+    const to = this.swapTo();
+    if (!from || !to) return;
+    const fromP = this.players().find((p) => p.id === from);
+    const toP = this.players().find((p) => p.id === to);
+    const label = (p?: Player) => (p ? `${p.name} ${p.firstname}` : '');
+    if (
+      !confirm(
+        `Remplacer ${label(fromP)} par ${label(toP)} dans tout ce tournoi ?\n\n` +
+          `${label(toP)} reprend sa place à la table et les points déjà ` +
+          `saisis. Le classement est recalculé.`
+      )
+    ) {
+      return;
+    }
+    this.swapping.set(true);
+    this.api.substitutePlayer(this.subTournamentId(), from, to).subscribe({
+      next: (r) => {
+        this.swapping.set(false);
+        this.swapFrom.set(null);
+        this.swapTo.set(null);
+        this.snack.open(
+          `${r.to} remplace ${r.from} (${r.seats_changed} place(s) mise(s) à jour)`,
+          'Fermer',
+          { duration: 5000 }
+        );
+        this.refreshTeams();
+      },
+      error: (err) => {
+        this.swapping.set(false);
+        this.snack.open(err?.error?.error || 'Remplacement impossible', 'Fermer', {
+          duration: 6000,
+        });
+      },
+    });
   }
 
   // Corriger un nom sans quitter le pointage (faute de frappe repérée en

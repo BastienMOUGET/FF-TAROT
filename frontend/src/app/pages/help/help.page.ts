@@ -102,11 +102,23 @@ import { environment } from '../../../environments/environment';
           </li>
           <li>
             <strong>Saisir les résultats</strong> — étape 3, « Tables &amp;
-            saisie ». Pour chaque table, entrer le résultat de chaque joueur :
-            <em>Entrée</em> valide la case et passe à la suivante, et le dernier
-            score se calcule tout seul pour que la somme fasse zéro. Les
-            raccourcis en haut de l'écran passent d'une table à l'autre dans
-            l'ordre où les feuilles arrivent. Une table validée reste
+            saisie ». Deux façons de faire, au choix :
+            <ul>
+              <li>
+                <em>Résultat global de la table</em> : un score par joueur pour
+                toute la manche. Le curseur part de Nord, <em>Entrée</em> passe
+                à Sud, Est puis Ouest, et le dernier score se calcule pour que
+                la somme fasse zéro.
+              </li>
+              <li>
+                <em>Détail donne par donne</em> : cocher le preneur, saisir le
+                score de la donne — le preneur marque trois fois ce score et
+                les trois autres son opposé. <em>Entrée</em> passe à la donne
+                suivante. Utile pour retrouver une erreur de marque.
+              </li>
+            </ul>
+            Les raccourcis en haut de l'écran passent d'une table à l'autre
+            dans l'ordre où les feuilles arrivent. Une table validée reste
             modifiable.
           </li>
           <li>
@@ -117,7 +129,8 @@ import { environment } from '../../../environments/environment';
           </li>
           <li>
             <strong>Classement général</strong> — étape 4, après la dernière
-            manche. Il alimente automatiquement le classement du Challenge.
+            manche, avec une colonne par manche pour voir la répartition des
+            résultats. Il alimente automatiquement le classement du Challenge.
           </li>
         </ol>
 
@@ -127,7 +140,7 @@ import { environment } from '../../../environments/environment';
           soirée.
         </p>
         <dl>
-          <dt>Mouvement (règle fédérale)</dt>
+          <dt>Règle FFT (mouvement)</dt>
           <dd>
             Le mode habituel : Nord reste, Sud avance d'une table, Est de
             deux, Ouest recule d'une. Toutes les manches sont générées dès le
@@ -180,6 +193,14 @@ import { environment } from '../../../environments/environment';
             En ouvrant une table, le curseur est déjà dans la case Nord.
             Entrée valide et passe à Sud, puis Est, puis Ouest ; le dernier
             score se calcule tout seul.
+          </dd>
+          <dt>Un joueur pointé par erreur ?</dt>
+          <dd>
+            Sur l'écran « Joueurs » du tournoi, « Remplacer un joueur » :
+            choisir celui inscrit par erreur et celui qui était réellement là.
+            Le remplaçant reprend sa place à toutes les manches et les points
+            déjà saisis ; le classement du tournoi et celui du Challenge sont
+            recalculés. Cela fonctionne même une fois la soirée terminée.
           </dd>
           <dt>Une erreur dans la mise en place ?</dt>
           <dd>

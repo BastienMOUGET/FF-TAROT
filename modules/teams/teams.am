@@ -161,6 +161,81 @@ public class ModTeams {
         return db.Exec("INSERT INTO team_players (team_id, player_id, pair, player_number, seat) VALUES (?, ?, ?, ?, ?)", ps)
     }
 
+    // POST /api/sub-tournaments/:subTournamentId/substitute (admin)
+    // Remplace un joueur par un autre dans TOUT le tournoi : inscription,
+    // places de chaque manche, classements. Répare le cas courant d'une
+    // case cochée à côté de la bonne au pointage des présents — les points
+    // déjà saisis suivent le joueur qui était réellement à la table, sans
+    // rien resaisir (retour terrain n°10).
+    // Corps : { from_player_id, to_player_id }.
+    public static HttpResponse Substitute(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let subId: string = ctx.Param("subTournamentId")
+        let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
+        if (subt.Count() == 0) { return HttpErr.NotFound() }
+
+        let pr: JsonResult = Json.Parse(ctx.Body)
+        if (!pr.Ok) { return HttpErr.BadRequest("JSON invalide") }
+        let b: JsonValue = pr.Value
+        if (!Fld.HasInt(b, "from_player_id")) { return HttpErr.BadRequest("from_player_id requis") }
+        if (!Fld.HasInt(b, "to_player_id")) { return HttpErr.BadRequest("to_player_id requis") }
+        let fromId: string = Fld.IntStr(b, "from_player_id")
+        let toId: string = Fld.IntStr(b, "to_player_id")
+        if (fromId == toId) { return HttpErr.BadRequest("Les deux joueurs sont les mêmes") }
+
+        // Les deux joueurs doivent exister et ne pas être des Relais : un
+        // Relais n'est pas une personne, il ne se remplace pas.
+        let fr: List<List<string>> = db.Rows("SELECT name, firstname, is_relais FROM players WHERE id = ?", Db.P1(fromId))
+        if (fr.Count() == 0) { return HttpErr.BadRequest("Joueur à remplacer introuvable") }
+        let f0: List<string> = fr.Get(0)
+        if (Db.CellBool(f0.Get(2))) { return HttpErr.BadRequest("Un Relais ne peut pas être remplacé") }
+        let tr: List<List<string>> = db.Rows("SELECT name, firstname, is_relais FROM players WHERE id = ?", Db.P1(toId))
+        if (tr.Count() == 0) { return HttpErr.BadRequest("Joueur remplaçant introuvable") }
+        let t0: List<string> = tr.Get(0)
+        if (Db.CellBool(t0.Get(2))) { return HttpErr.BadRequest("Un Relais ne peut pas remplacer un joueur") }
+
+        let inscr: List<List<string>> = db.Rows(
+            "SELECT COUNT(*) FROM team_players tp JOIN teams t ON t.id = tp.team_id WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
+            Db.P2(subId, fromId))
+        let i0: List<string> = inscr.Get(0)
+        if (Db.CellInt(i0.Get(0)) == 0) { return HttpErr.BadRequest(f0.Get(1) + " " + f0.Get(0) + " n'est pas inscrit dans ce tournoi") }
+
+        let already: List<List<string>> = db.Rows(
+            "SELECT COUNT(*) FROM team_players tp JOIN teams t ON t.id = tp.team_id WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
+            Db.P2(subId, toId))
+        let a0: List<string> = already.Get(0)
+        if (Db.CellInt(a0.Get(0)) > 0) { return HttpErr.BadRequest(t0.Get(1) + " " + t0.Get(0) + " est déjà inscrit dans ce tournoi : il jouerait deux fois") }
+
+        db.Begin()
+        let okTp: bool = db.Exec(
+            "UPDATE team_players tp JOIN teams t ON t.id = tp.team_id SET tp.player_id = ? WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
+            Db.P3(toId, subId, fromId))
+        if (!okTp) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        let okSeats: bool = db.Exec(
+            "UPDATE seats s JOIN rounds r ON r.id = s.round_id SET s.player_id = ? WHERE r.sub_tournament_id = ? AND s.player_id = ?",
+            Db.P3(toId, subId, fromId))
+        if (!okSeats) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        let seatsChanged: int = db.Changes()
+        // Les lignes de classement des deux joueurs sont refaites par le
+        // recalcul (contrainte d'unicité sub_tournament + joueur).
+        let okRk: bool = db.Exec(
+            "DELETE FROM rankings WHERE sub_tournament_id = ? AND player_id IN (?, ?)",
+            Db.P3(subId, fromId, toId))
+        if (!okRk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        db.Commit()
+
+        ModRanking.RefreshAndBroadcast(db, subId)
+
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("from", J.Str(f0.Get(1) + " " + f0.Get(0)))
+        o.AppendEntry("to", J.Str(t0.Get(1) + " " + t0.Get(0)))
+        o.AppendEntry("seats_changed", J.Int(seatsChanged))
+        return J.Ok(o)
+    }
+
     // DELETE /api/teams/:id (admin)
     public static HttpResponse Remove(WebContext ctx, Db db) {
         let rc: int = Auth.CheckRole(ctx, "admin")
