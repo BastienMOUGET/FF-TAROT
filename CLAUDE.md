@@ -28,8 +28,10 @@ schéma appliqué à la main. Pour chaque changement de structure :
    `DROP TABLE`, `DROP DATABASE` et `TRUNCATE` sont refusés par la CI.
 2. Ajouter la ligne correspondante au tableau « Migrations existantes » de
    [`migrations/README.md`](migrations/README.md).
-3. Appliquer en local (`./migrate.sh`) et vérifier sur une base **vierge**
-   *et* sur une base **déjà peuplée**.
+3. Lancer `./tests/migrations.sh` : il monte une MariaDB jetable et vérifie
+   base vierge, rejeu, base déjà peuplée (les données doivent survivre) et
+   migration en échec. Y ajouter la vérification de la colonne créée. La CI
+   le rejoue à chaque push.
 
 Pourquoi : le beau-père installe chaque version par-dessus la précédente,
 avec les données réelles du club. Les quatre chemins d'installation
@@ -76,6 +78,26 @@ erreur, donc `kill -9` et `ss -ltnp | grep <port>` avant chaque test.
 
 `amalgame.lock` épingle des commits, pas seulement des tags : ne jamais
 l'aligner sur le cache local, toujours vérifier avec `git ls-remote`.
+
+## Défauts connus, non corrigés
+
+- Une pénalité saisie sur un challenge est appliquée au classement de
+  **chacun** de ses tournois (`ModRanking.Compute` somme les pénalités du
+  `tournament_id` sans filtrer sur le sous-tournoi). Sans effet aujourd'hui :
+  le club n'utilise pas les pénalités. À traiter avant de s'en servir, ou si
+  un ajustement manuel du classement du Challenge devient nécessaire.
+- Aucun test automatisé du back : la CI vérifie le build, des sentinelles
+  textuelles sur `migrations/` et le lint des scripts, pas le comportement.
+  Les vérifications se font à la main avec `./server-ci` sur une base
+  jetable (voir plus haut).
+
+## Sauvegarde des données du club
+
+Les données réelles ne vivent que dans la base MariaDB `fft`. La procédure
+(`mysqldump`, restauration, Windows / Linux / Docker) est dans
+[`INSTALL.md`](INSTALL.md) et résumée dans la notice de l'application. Le
+rappeler quand une manipulation risquée est en jeu (`reset-db.sh`,
+désinstallation, changement de schéma inhabituel).
 
 ## Retours terrain
 

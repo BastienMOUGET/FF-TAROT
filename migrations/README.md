@@ -28,6 +28,9 @@ boucle qui les applique diffère, pas le schéma.
 1. Créer `migrations/00N_ce_que_ça_fait.sql` avec le numéro suivant.
 2. N'y mettre que des instructions **rejouables** et **non destructrices**.
 3. Vérifier avec `./migrate.sh --status` puis `./migrate.sh`.
+4. Lancer `./tests/migrations.sh` (MariaDB jetable : base vierge, rejeu,
+   base peuplée, migration en échec) et y ajouter un contrôle de la colonne
+   ajoutée. La CI rejoue ce test à chaque push.
 
 ### La règle à ne pas oublier
 

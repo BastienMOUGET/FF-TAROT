@@ -1,10 +1,9 @@
 # PABB90
 
 **PABB90** (Petit Au Bout Belfortain 90) — logiciel de gestion de tournois
-de tarot
-(mode Libre par 4). Refonte from-scratch d'un ancien outil ASP, en
-**Node.js + Express + MariaDB** côté back et **Angular 21 + Material**
-côté front, avec **classement live** via Socket.IO.
+de tarot (mode Libre par 4). Refonte from-scratch d'un ancien outil ASP, en
+**Amalgame/Mosaic + MariaDB** côté back et **Angular 21 + Material** côté
+front, avec **classement live** via Socket.IO.
 
 ## Installation
 
@@ -13,15 +12,17 @@ côté front, avec **classement live** via Socket.IO.
 
 Voir **[INSTALL.md](INSTALL.md)** — 3 méthodes au choix :
 
-- **Windows** : télécharge `pabb90-X.Y.Z-windows.zip` depuis la
-  [page Releases](../../releases), dézippe, et lance `.\install.ps1`
-  en PowerShell admin → installe Node + MariaDB via winget, build,
-  crée un raccourci sur le Bureau.
-- **Linux** : télécharge `pabb90-X.Y.Z-linux.tar.gz` depuis la
-  [page Releases](../../releases), décompresse, lance `sudo ./install.sh`
-  → apt/dnf, systemd unit pour démarrage auto.
-- **Docker** : `docker compose up -d` (clone du repo) ou
-  `docker pull ghcr.io/<owner>/<repo>:latest`.
+- **Windows (recommandé)** : télécharge `pabb90-X.Y.Z-setup.exe` depuis la
+  [page Releases](../../releases) et lance-le. Il installe MariaDB si
+  besoin, crée la base, applique les migrations et enregistre le service
+  Windows. C'est le **seul artefact publié** par la release.
+- **Linux** : cloner le dépôt, puis `sudo ./install.sh` → apt/dnf, base,
+  build, unité systemd.
+- **Docker** : `docker compose up -d` (clone du dépôt).
+
+Une nouvelle version **s'installe par-dessus la précédente** : les
+migrations manquantes sont appliquées et les données du club sont
+conservées. Voir [`migrations/README.md`](migrations/README.md).
 
 URL : http://localhost:3000 — identifiants par défaut `admin` / `admin123`
 (à changer immédiatement).
@@ -33,7 +34,9 @@ V2 (front), V3 (autres disciplines).
 
 ## Stack
 
-- **Back** : Node.js 20 + Express 5 + MariaDB + Socket.IO + JWT
+- **Back** : Amalgame/Mosaic (binaire natif `server`, aucune dépendance
+  Node à l'exécution) + MariaDB + Socket.IO + JWT. Le back était en
+  Node.js/Express jusqu'au portage complet (commit `3850c05`).
 - **Front** : Angular 21 (standalone components, signals, zoneless)
   + Angular Material (azure-blue theme)
 - **DB** : 22 tables, schéma normalisé pour Libre par 4 (équipes NS+EO,

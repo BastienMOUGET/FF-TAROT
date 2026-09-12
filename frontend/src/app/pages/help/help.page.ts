@@ -222,6 +222,15 @@ import { environment } from '../../../environments/environment';
             Non. L'installeur s'installe par-dessus la version précédente et ne
             touche pas à la base.
           </dd>
+          <dt>Comment sauvegarder les données du club ?</dt>
+          <dd>
+            Tout est dans la base MariaDB, pas dans le dossier de
+            l'application. Une invite de commandes dans
+            <code>C:\Program Files\MariaDB 11.8\bin</code> puis
+            <code>mysqldump -u root fft &gt; sauvegarde.sql</code> produit un
+            fichier unique à copier sur une clé. La marche à suivre complète,
+            restauration comprise, est dans le fichier INSTALL.md du projet.
+          </dd>
         </dl>
 
         <h2>Un problème, une idée ?</h2>

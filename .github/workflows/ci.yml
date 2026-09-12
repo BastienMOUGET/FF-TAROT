@@ -111,6 +111,15 @@ jobs:
           test "$(ls migrations/*.sql | wc -l)" -eq \
                "$(ls migrations/*.sql | xargs -n1 basename | cut -d_ -f1 | sort -u | wc -l)"
 
+      # Les sentinelles ci-dessus ne lisent que du texte. Ce test applique
+      # réellement les migrations sur une MariaDB jetable : base vierge, rejeu,
+      # base déjà peuplée (les données du club doivent survivre) et migration
+      # en échec. C'est la garantie de la règle n°1 de CLAUDE.md.
+      - name: Test des migrations sur une vraie base
+        run: |
+          sudo apt-get install -y mariadb-server
+          ./tests/migrations.sh
+
       - name: Lint shell scripts
         run: |
           bash -n install.sh
@@ -119,6 +128,8 @@ jobs:
           bash -n migrate.sh
           bash -n update-db.sh
           bash -n reset-db.sh
+          bash -n build-ci.sh
+          bash -n tests/migrations.sh
 
       - name: Lint PowerShell scripts
         shell: pwsh

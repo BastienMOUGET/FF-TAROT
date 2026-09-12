@@ -44,8 +44,10 @@
 
 **Prérequis** : Windows 10 1809+ avec winget.
 
+> La release ne publie que l'installeur `.exe`. Pour cette méthode, récupérer
+> les sources du dépôt (bouton « Code » → « Download ZIP », ou `git clone`).
+
 ```powershell
-# Télécharger pabb90-X.Y.Z-windows.zip depuis la page Releases, dézipper.
 # Ouvrir PowerShell EN ADMIN (clic droit -> Exécuter en admin) dans le dossier.
 # Si la politique d'exécution refuse les scripts, autoriser une fois :
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
@@ -87,6 +89,8 @@ Puis relancer `.\install.ps1` (il détecte les présences existantes).
 ## 🐧 Linux — script bash (Debian/Ubuntu/Fedora/RHEL)
 
 **Prérequis** : un système avec `apt-get` ou `dnf`/`yum`, et un accès root.
+Les sources viennent du dépôt (`git clone`) : la release ne publie que
+l'installeur Windows.
 
 ```bash
 cd /chemin/vers/PABB90
@@ -166,6 +170,56 @@ Modifier `docker-compose.yml` pour :
 3. **Aller dans "Administration" > onglet "Utilisateurs"** et **changer le mot de passe**
 4. Créer ses joueurs (onglet Joueurs), club (Clubs), etc.
 5. Créer un tournoi via le menu "Tournois"
+
+---
+
+## Sauvegarder la base
+
+Les données du club (joueurs, challenges, tournois, scores, classements)
+vivent **uniquement** dans la base MariaDB `fft` : ni le dossier de
+l'application ni l'installeur ne les contiennent. Une mise à jour ne les
+touche pas, mais une panne de disque ou une désinstallation avec
+`DROP DATABASE`, si. À sauvegarder après chaque soirée, ou au moins en fin
+de trimestre.
+
+### Windows
+
+Le mot de passe de `fft_user` est dans `.env`, à la racine du dossier
+d'installation. Dans une invite de commandes, en adaptant la version de
+MariaDB :
+
+```bat
+cd "C:\Program Files\MariaDB 11.8\bin"
+mysqldump -u root fft > "%USERPROFILE%\Desktop\pabb90-%DATE:~-4%%DATE:~3,2%%DATE:~0,2%.sql"
+```
+
+Le fichier obtenu sur le Bureau est la sauvegarde complète. Le copier sur
+une clé USB ou un disque externe.
+
+### Linux / Docker
+
+```bash
+# Linux (installation via install.sh)
+sudo mysqldump fft > pabb90-$(date +%Y%m%d).sql
+
+# Docker
+docker compose exec db mysqldump -u root -prootpassword fft > pabb90-$(date +%Y%m%d).sql
+```
+
+### Restaurer
+
+```bash
+# Windows : depuis le dossier bin de MariaDB
+mysql -u root fft < pabb90-20260912.sql
+
+# Linux
+sudo mysql fft < pabb90-20260912.sql
+```
+
+La restauration écrase le contenu de la base par celui de la sauvegarde.
+Restaurer une sauvegarde plus ancienne que la version installée est sans
+risque : les migrations manquantes sont réappliquées au démarrage suivant
+(`./migrate.sh`, ou la réinstallation de l'application).
 
 ---
 
