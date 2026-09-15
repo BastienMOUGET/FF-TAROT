@@ -47,17 +47,27 @@ import { ClubLogo } from '../../shared/club-logo';
       <button mat-stroked-button (click)="pdf()">
         <mat-icon>picture_as_pdf</mat-icon> PDF
       </button>
+      <button mat-stroked-button (click)="mail()" title="Ouvre un brouillon Gmail, à compléter avec le PDF enregistré">
+        <mat-icon>mail</mat-icon> Envoyer
+      </button>
     </div>
 
     <mat-card class="head">
       <mat-card-header>
         <mat-card-title>Classement général du tournoi</mat-card-title>
         <mat-card-subtitle>
-          <mat-chip [color]="socket.connected() ? 'primary' : 'warn'">
-            <mat-icon>{{
-              socket.connected() ? 'wifi' : 'wifi_off'
-            }}</mat-icon>
-            {{ socket.connected() ? 'Connecté' : 'Déconnecté' }}
+          <!-- Statut de la mise à jour automatique du classement, pas un
+               bouton de connexion : le libellé le disait mal. -->
+          <mat-chip
+            [color]="socket.connected() ? 'primary' : undefined"
+            [title]="
+              socket.connected()
+                ? 'Le classement se met à jour tout seul quand une table est validée'
+                : 'Mise à jour automatique indisponible : rechargez la page après avoir validé une table'
+            "
+          >
+            <mat-icon>{{ socket.connected() ? 'sync' : 'sync_disabled' }}</mat-icon>
+            {{ socket.connected() ? 'Mise à jour automatique' : 'Rafraîchir à la main' }}
           </mat-chip>
           @if (lastUpdate()) {
             <span class="updated">
@@ -237,6 +247,12 @@ export class RankingPage implements OnInit, OnDestroy {
       });
       return;
     }
+    this.api.subTournament(id).subscribe({
+      next: (sub) => {
+        document.title = `Classement ${sub.label} — PABB90`;
+      },
+      error: () => {},
+    });
     this.api.rankingDetail(id).subscribe({
       next: (d) => {
         this.detailRounds.set(d.rounds);
@@ -272,6 +288,27 @@ export class RankingPage implements OnInit, OnDestroy {
       { duration: 6000 }
     );
     setTimeout(() => window.print(), 400);
+  }
+
+  // Aucun navigateur ne sait joindre un fichier à un brouillon Gmail : on
+  // ouvre le brouillon avec l'objet et le texte déjà écrits, l'utilisateur
+  // y glisse le PDF qu'il vient d'enregistrer (retour terrain n°11).
+  mail(): void {
+    const sujet = document.title || 'Classement PABB90';
+    const corps =
+      'Bonjour,\n\nVous trouverez ci-joint le classement.\n\n' +
+      '(PDF à joindre : celui enregistré depuis le bouton PDF.)\n';
+    const url =
+      'https://mail.google.com/mail/?view=cm&fs=1&su=' +
+      encodeURIComponent(sujet) +
+      '&body=' +
+      encodeURIComponent(corps);
+    this.snack.open(
+      'Brouillon Gmail ouvert : joignez-y le PDF enregistré depuis le bouton PDF.',
+      'OK',
+      { duration: 7000 }
+    );
+    window.open(url, '_blank', 'noopener');
   }
 
   goBack(): void {

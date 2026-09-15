@@ -6,6 +6,62 @@
 
 ---
 
+## ✅ v3.0.30 — Retour terrain n°11 : classement live réparé, manches renumérotées, export FFT *(livré, 2026-09-15)*
+
+Questions et essais des 14 et 15/09 (WhatsApp).
+
+### Le classement live ne s'est jamais connecté
+
+Le bandeau affichait « Déconnecté » en permanence, pris pour un bouton de
+connexion à la fédération. C'était le statut du classement temps réel, et il
+était juste : le serveur Socket.IO écoute sur **son propre port** (3001),
+alors que le front, servi sur 3000, l'y cherchait. En développement le proxy
+masquait le problème. Le front dérive maintenant l'adresse du port
+`socketPort`, et le libellé devient « Mise à jour automatique » ou
+« Rafraîchir à la main », avec une infobulle qui dit ce que ça change.
+
+### Manches : suppression et renumérotation
+
+Supprimer la manche 1 laissait « Manche 2 … Manche 5 », sans moyen de
+revenir à 1 : la numérotation venait de `MAX(round_number) + 1`. Les manches
+suivantes sont désormais **renumérotées** à la suppression (décrément par
+ordre croissant, la clé unique n'est jamais violée), et une corbeille a été
+ajoutée sur chaque ligne de manche de la page du tournoi — il fallait entrer
+dans la manche pour la supprimer. Vérifié : 5 manches, suppression de la 1re
+→ [1,2,3,4] ; suppression de la dernière → [1,2,3], les places restent
+attachées à leur manche.
+
+### Export vers la fédération
+
+Le CSV fusionnait nom et prénom en une colonne. Le masque du classeur
+fédéral (feuille « Masque » du challenge FFT) attend
+`NumLicenceJoueur;NomJoueur;PrenomJoueur;Pcn;Pp` : l'export s'y conforme, et
+les Relais en sont exclus. Le calcul PCN lui-même est inchangé — il vient du
+portage de l'outil d'origine (PCN de base = `nb_tables × 40 × indice`, suite
+géométrique d'abattement `0,69 + (nb_tables − 3) × 0,01`, plafond 80, sur
+les `2 × nb_tables` premiers) et **n'a pas été validé contre le règlement
+fédéral**, faute de source. À confronter à un classement FFT réel.
+
+### Classement du Challenge jusqu'à 15 tournois
+
+Un trimestre en compte jusqu'à 15, soit plus de 50 colonnes en vue
+détaillée. La police et les marges se réduisent automatiquement au-delà de
+12 puis 24 colonnes, l'impression est forcée en A4 paysage et la licence est
+masquée au papier.
+
+### Confort
+
+- Le mode de formation des tables se change **après** création, depuis la
+  page du tournoi : il n'était accessible qu'à la création, d'où l'impression
+  qu'il avait disparu. Il ne s'applique qu'aux manches générées ensuite.
+- Bouton « Envoyer » sur le classement : ouvre un brouillon Gmail avec objet
+  et texte. Un navigateur ne peut pas y joindre le PDF, l'utilisateur le
+  glisse lui-même ; c'est dit à l'écran et dans la notice.
+
+Pas de migration de base sur cette version.
+
+---
+
 ## ✅ v3.0.29 — Retour terrain n°10 : remplacer un joueur, saisie donne par donne, détails *(livré, 2026-09-12)*
 
 Mémo `feedback/2026-09-12/` (version 3.028) et retour WhatsApp du 10/09 au

@@ -194,6 +194,40 @@ import { environment } from '../../../environments/environment';
             Entrée valide et passe à Sud, puis Est, puis Ouest ; le dernier
             score se calcule tout seul.
           </dd>
+          <dt>Supprimer ou refaire une manche ?</dt>
+          <dd>
+            La corbeille au bout de la ligne d'une manche la supprime, avec sa
+            mise en place et ses scores. Les manches suivantes sont
+            renumérotées pour rester 1, 2, 3… Pour en rajouter une, le bouton
+            « Manche N » de l'étape 3.
+          </dd>
+          <dt>Changer la formation des tables en cours de soirée ?</dt>
+          <dd>
+            Le sélecteur en haut de la page du tournoi. Le nouveau mode ne
+            s'applique qu'aux manches générées ensuite, celles déjà en place
+            ne bougent pas.
+          </dd>
+          <dt>Envoyer un classement par mail ?</dt>
+          <dd>
+            Enregistrer d'abord le PDF avec le bouton PDF, puis « Envoyer » :
+            un brouillon Gmail s'ouvre avec l'objet et le texte déjà écrits,
+            il ne reste qu'à y glisser le fichier. Un navigateur ne peut pas
+            joindre le PDF tout seul.
+          </dd>
+          <dt>« Mise à jour automatique » ou « Rafraîchir à la main » ?</dt>
+          <dd>
+            C'est l'état du classement live, pas un lien avec la fédération.
+            Quand il indique la mise à jour automatique, le classement se
+            rafraîchit dès qu'une table est validée ; sinon, recharger la page
+            suffit.
+          </dd>
+          <dt>Envoyer les PCN à la fédération ?</dt>
+          <dd>
+            Le bouton d'export du classement produit un CSV au format du
+            masque fédéral (licence, nom, prénom, Pcn, Pp). L'envoi lui-même
+            se fait par les moyens habituels de la fédération : l'application
+            ne s'y connecte pas.
+          </dd>
           <dt>Un joueur pointé par erreur ?</dt>
           <dd>
             Sur l'écran « Joueurs » du tournoi, « Remplacer un joueur » :

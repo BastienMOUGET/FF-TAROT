@@ -7,10 +7,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { Round, SubTournament, TableResult } from '../../core/api.types';
+import { PlacementMode, Round, SubTournament, TableResult } from '../../core/api.types';
 
 // Page d'un tournoi hebdomadaire (sub_tournament). C'est l'écran de pilotage
 // de la soirée : joueurs présents → mise en place → saisie par manche →
@@ -25,6 +27,8 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
     MatChipsModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    MatFormFieldModule,
+    MatSelectModule,
   ],
   template: `
     @if (sub(); as s) {
@@ -48,6 +52,30 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
           <mat-chip class="ml level-chip">{{ modeLabel(s) }}</mat-chip>
         }
       </h1>
+
+      @if (!s.imported && auth.isAdmin()) {
+        <mat-card class="mode-card">
+          <mat-card-content>
+            <div class="mode-row">
+              <div>
+                <div class="mode-title">Formation des tables</div>
+                <div class="mode-help">{{ modeHelp(s) }}</div>
+              </div>
+              <span class="spacer"></span>
+              <mat-form-field appearance="outline" class="mode-select">
+                <mat-select
+                  [value]="s.placement_mode ?? 'movement'"
+                  (selectionChange)="setPlacementMode(s, $event.value)"
+                >
+                  <mat-option value="movement">Règle FFT (mouvement)</mat-option>
+                  <mat-option value="level_last">Dernière manche par niveau</mat-option>
+                  <mat-option value="level">Par niveau dès la manche 2</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
 
       @if (s.imported) {
         <mat-card class="steps">
@@ -170,6 +198,17 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
                     >
                       <mat-icon>leaderboard</mat-icon> Général après la manche {{ r.round_number }}
                     </a>
+                    @if (auth.isAdmin()) {
+                      <button
+                        mat-icon-button
+                        color="warn"
+                        (click)="removeRound(s, r)"
+                        [disabled]="busy()"
+                        title="Supprimer cette manche"
+                      >
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    }
                   </div>
                 </div>
               }
@@ -233,6 +272,12 @@ import { Round, SubTournament, TableResult } from '../../core/api.types';
     .round-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     mat-chip.done { background: #c8e6c9; }
     mat-chip.level-chip { background: #e1f5fe; }
+    .mode-card { margin-bottom: 16px; }
+    .mode-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 12px; }
+    .mode-title { font-weight: 600; }
+    .mode-help { color: #757575; font-size: 0.9em; }
+    .mode-select { min-width: 260px; margin-bottom: -1.25em; }
+    .spacer { flex: 1 1 auto; }
   `,
 })
 export class SubTournamentDetailPage implements OnInit {
@@ -286,6 +331,61 @@ export class SubTournamentDetailPage implements OnInit {
         error: () =>
           this.progress.update((m) => ({ ...m, [roundId]: { tables, validated: 0 } })),
       });
+    });
+  }
+
+  modeHelp(s: SubTournament): string {
+    switch (s.placement_mode ?? 'movement') {
+      case 'level':
+        return 'Chaque manche regroupe les joueurs de même niveau, d’après le classement en cours.';
+      case 'level_last':
+        return 'Mouvement fédéral, puis dernière manche entre joueurs de même niveau.';
+      default:
+        return 'Mouvement fédéral : Nord fixe, Sud +1, Est +2, Ouest −1.';
+    }
+  }
+
+  // Le mode se change en cours de soirée : il ne s'applique qu'aux manches
+  // générées ensuite, celles déjà en place ne bougent pas.
+  setPlacementMode(s: SubTournament, mode: PlacementMode): void {
+    if ((s.placement_mode ?? 'movement') === mode) return;
+    this.api.updateSubTournament(s.id, { ...s, placement_mode: mode }).subscribe({
+      next: (updated) => {
+        this.sub.set(updated);
+        this.snack.open(
+          'Mode enregistré. Il s’applique aux manches générées à partir de maintenant.',
+          'Fermer',
+          { duration: 5000 }
+        );
+      },
+      error: (err) =>
+        this.snack.open(err?.error?.error || 'Erreur', 'Fermer', { duration: 3000 }),
+    });
+  }
+
+  // Supprimer une manche : les manches suivantes sont renumérotées par le
+  // serveur, la liste reste 1, 2, 3…
+  removeRound(s: SubTournament, r: Round): void {
+    const nb = this.rounds().length;
+    const after = nb - r.round_number;
+    let msg = `Supprimer la manche ${r.round_number} ?\n\nSa mise en place et les scores saisis seront perdus.`;
+    if (after > 0) {
+      msg += `\nLes ${after} manche(s) suivante(s) seront renumérotées.`;
+    }
+    if (!confirm(msg)) return;
+    this.busy.set(true);
+    this.api.deleteRound(r.id).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.snack.open(`Manche ${r.round_number} supprimée`, 'Fermer', { duration: 2500 });
+        this.loadRounds(s.id);
+      },
+      error: (err) => {
+        this.busy.set(false);
+        this.snack.open(err?.error?.error || 'Suppression impossible', 'Fermer', {
+          duration: 4000,
+        });
+      },
     });
   }
 

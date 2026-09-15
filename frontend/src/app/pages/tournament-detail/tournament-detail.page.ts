@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
 
@@ -266,7 +266,12 @@ export class SubTournamentDialog implements OnInit {
                  colonne par tournoi, puis les totaux et le nombre de
                  participations. -->
             <div class="table-wrap">
-            <table class="challenge-table" [class.full]="detailMode() === 'full'">
+            <table
+              class="challenge-table"
+              [class.full]="detailMode() === 'full'"
+              [class.dense]="density() === 'dense'"
+              [class.very-dense]="density() === 'very-dense'"
+            >
               <thead>
                 <tr>
                   <th rowspan="2" class="num">Place</th>
@@ -280,7 +285,9 @@ export class SubTournamentDialog implements OnInit {
                   <th rowspan="2" class="num total">Points</th>
                   <th rowspan="2" class="num total">Pcn</th>
                   <th rowspan="2" class="num total pc">PC</th>
-                  <th rowspan="2" class="num total">Particip.</th>
+                  <th rowspan="2" class="num total" title="Nombre de participations">
+                    {{ density() === 'normal' ? 'Particip.' : 'Part.' }}
+                  </th>
                 </tr>
                 <tr>
                   @for (st of challengeRanking()!.sub_tournaments; track st.id) {
@@ -316,6 +323,10 @@ export class SubTournamentDialog implements OnInit {
               </tbody>
             </table>
             </div>
+            <p class="print-hint no-print">
+              Impression en paysage. Avec beaucoup de tournois, la vue « PC par
+              tournoi » tient mieux sur une page que « Points / Pcn / PC ».
+            </p>
           }
         </mat-card-content>
       </mat-card>
@@ -356,13 +367,23 @@ export class SubTournamentDialog implements OnInit {
     .sub-delete { flex: 0 0 auto; }
     .challenge-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .spacer { flex: 1 1 auto; }
+    /* Un trimestre compte jusqu'à 15 tournois : en vue détaillée cela fait
+       plus de 50 colonnes. La police se réduit avec le nombre de tournois
+       pour rester imprimable en paysage sur une feuille A4. */
+    .challenge-table.dense { font-size: 0.82em; }
+    .challenge-table.dense th, .challenge-table.dense td { padding: 3px 5px; }
+    .challenge-table.very-dense { font-size: 0.72em; }
+    .challenge-table.very-dense th, .challenge-table.very-dense td { padding: 2px 3px; }
     @media print {
-      @page { size: landscape; margin: 10mm; }
+      @page { size: A4 landscape; margin: 8mm; }
       .back, .head, .section-head, .subs { display: none !important; }
       .challenge-card { box-shadow: none !important; }
       .table-wrap { overflow: visible; }
-      .challenge-table { font-size: 9pt; }
-      .challenge-table th, .challenge-table td { padding: 2px 5px; }
+      .challenge-table { font-size: 8.5pt; width: 100%; table-layout: auto; }
+      .challenge-table th, .challenge-table td { padding: 1px 3px; }
+      .challenge-table.dense { font-size: 7.5pt; }
+      .challenge-table.very-dense { font-size: 6.5pt; letter-spacing: -0.2px; }
+      .challenge-table .lic { display: none; }
       .challenge-table tr.first td { background: #ffe082 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
     .sub-title { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 500; }
@@ -383,6 +404,7 @@ export class SubTournamentDialog implements OnInit {
     .challenge-table .pc { font-weight: 600; }
     .challenge-table .total { border-left: 2px solid #bdbdbd; background: #fafafa; }
     .challenge-table .strong { font-weight: 700; }
+    .print-hint { color: #757575; font-size: 0.85em; margin: 8px 0 0; }
     .challenge-table tr.first td { background: rgba(255, 215, 0, 0.25); font-weight: 600; }
   `,
 })
@@ -399,6 +421,17 @@ export class TournamentDetailPage implements OnInit {
   challengeRanking = signal<ChallengeRanking | null>(null);
   challengeLoading = signal(false);
   detailMode = signal<'pc' | 'full'>('pc');
+
+  // Densité d'affichage : une colonne par tournoi en vue compacte, trois en
+  // vue détaillée. Au-delà d'une quinzaine de colonnes, la police est
+  // réduite pour tenir sur une page A4 en paysage.
+  density = computed<'normal' | 'dense' | 'very-dense'>(() => {
+    const n = this.challengeRanking()?.sub_tournaments.length ?? 0;
+    const cols = this.detailMode() === 'full' ? n * 3 : n;
+    if (cols > 24) return 'very-dense';
+    if (cols > 12) return 'dense';
+    return 'normal';
+  });
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));

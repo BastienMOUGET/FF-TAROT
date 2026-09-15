@@ -7,5 +7,13 @@ export const environment = {
   production: false,
   appVersion: '3.0.29',
   apiUrl: '/api',
-  socketUrl: '', // même origine que la page (auto-détection par socket.io)
+  socketUrl: '', // vide = déduit de l'adresse de la page (voir socket.service)
+  // Le classement live tourne sur un port séparé du back (SOCKET_PORT côté
+  // serveur). En production, la page est servie sur 3000 : viser la même
+  // origine ferait échouer la connexion, d'où le « Déconnecté » permanent
+  // (retour terrain n°11).
+  socketPort: 3001,
+  // Port du serveur de développement Angular : là, /socket.io est proxifié
+  // par proxy.conf.json, donc on garde l'origine.
+  devPort: '4200',
 };

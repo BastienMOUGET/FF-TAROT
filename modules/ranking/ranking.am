@@ -794,17 +794,19 @@ public class ModRanking {
         let tname: string = s0.Get(4)
 
         let rows: List<List<string>> = db.Rows(
-            "SELECT r.pcn, r.pp, p.licence, p.name, p.firstname FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND r.pcn > 0 ORDER BY r.pcn DESC", Db.P1(subId))
+            "SELECT r.pcn, r.pp, p.licence, p.name, p.firstname FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND r.pcn > 0 AND p.is_relais = FALSE ORDER BY r.pcn DESC", Db.P1(subId))
 
         var indPcnInt: string = "0"
         if (String.Length(indicePcn) > 0) { indPcnInt = String.FromInt(Db.CellInt(indicePcn)) }
+        // En-tête du masque FFT (feuille « Masque » du classeur de challenge
+        // fédéral) : nom et prénom en DEUX colonnes distinctes. L'export les
+        // fusionnait, ce que le masque ne sait pas relire.
         var csv: string = code + ";" + String.FromInt(rows.Count()) + ";" + indPcnInt + ";1\n"
         csv = csv + tname + " - " + label + "\n"
-        csv = csv + "numLicenceJoueur;nom prénom;Pcn;PP\n"
+        csv = csv + "NumLicenceJoueur;NomJoueur;PrenomJoueur;Pcn;Pp\n"
         for i in 0..rows.Count() {
             let r: List<string> = rows.Get(i)
-            let fullName: string = r.Get(3) + " " + r.Get(4)
-            csv = csv + r.Get(2) + ";" + fullName + ";" + String.FromInt(Db.CellInt(r.Get(0))) + ";" + String.FromInt(Db.CellInt(r.Get(1))) + "\n"
+            csv = csv + r.Get(2) + ";" + r.Get(3) + ";" + r.Get(4) + ";" + String.FromInt(Db.CellInt(r.Get(0))) + ";" + String.FromInt(Db.CellInt(r.Get(1))) + "\n"
         }
         var fname: string = code
         if (String.Length(fname) == 0) { fname = "tournoi" }

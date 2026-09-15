@@ -115,15 +115,32 @@ public class ModRounds {
     }
 
     // DELETE /api/rounds/:id (admin)
+    // Les manches restantes sont renumérotées pour rester 1, 2, 3… :
+    // supprimer la manche 1 laissait « Manche 2 … Manche 5 » à l'écran, sans
+    // moyen de revenir à 1 (retour terrain n°11).
     public static HttpResponse Remove(WebContext ctx, Db db) {
         let rc: int = Auth.CheckRole(ctx, "admin")
         if (rc == 401) { return HttpErr.Unauthorized() }
         if (rc == 403) { return HttpErr.Forbidden() }
 
         let id: string = ctx.Param("id")
+        let rows: List<List<string>> = db.Rows("SELECT sub_tournament_id, round_number FROM rounds WHERE id = ?", Db.P1(id))
+        if (rows.Count() == 0) { return HttpErr.NotFound() }
+        let r0: List<string> = rows.Get(0)
+        let subId: string = r0.Get(0)
+        let number: string = r0.Get(1)
+
+        db.Begin()
         let ok: bool = db.Exec("DELETE FROM rounds WHERE id = ?", Db.P1(id))
-        if (!ok) { return HttpErr.FromDb(db.LastError()) }
-        if (db.Changes() == 0) { return HttpErr.NotFound() }
+        if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        // Décrémenter par ordre croissant : le numéro libéré est repris en
+        // premier, la clé unique (sous-tournoi, numéro) n'est jamais violée.
+        let okRenum: bool = db.Exec(
+            "UPDATE rounds SET round_number = round_number - 1 WHERE sub_tournament_id = ? AND round_number > ? ORDER BY round_number ASC",
+            Db.P2(subId, number))
+        if (!okRenum) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        db.Commit()
+        ModRanking.RefreshAndBroadcast(db, subId)
         return J.NoContent()
     }
 

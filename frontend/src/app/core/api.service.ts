@@ -106,6 +106,11 @@ export class ApiService {
     );
   subTournament = (id: number): Observable<SubTournament> =>
     this.http.get<SubTournament>(`${this.base}/sub-tournaments/${id}`);
+  updateSubTournament = (
+    id: number,
+    data: Partial<SubTournament>
+  ): Observable<SubTournament> =>
+    this.http.put<SubTournament>(`${this.base}/sub-tournaments/${id}`, data);
   deleteSubTournament = (id: number): Observable<void> =>
     this.http.delete<void>(`${this.base}/sub-tournaments/${id}`);
   importRanking = (

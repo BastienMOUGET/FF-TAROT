@@ -15,16 +15,25 @@ export class SocketService implements OnDestroy {
   readonly connected = signal(false);
   readonly lastRanking = signal<RankingUpdateEvent | null>(null);
 
+  // Adresse du serveur de classement live. Il écoute sur son propre port
+  // (3001 par défaut), pas sur celui qui sert la page : sans cette
+  // dérivation, socket.io interroge le port 3000 et reste « Déconnecté ».
+  // En développement (port 4200), proxy.conf.json s'en charge : on garde
+  // l'origine de la page.
+  private resolveUrl(): string | null {
+    if (environment.socketUrl) return environment.socketUrl;
+    if (typeof location === 'undefined') return null;
+    if (location.port === environment.devPort) return null;
+    return `${location.protocol}//${location.hostname}:${environment.socketPort}`;
+  }
+
   connect(): void {
     if (this.socket) return;
-    // socketUrl vide -> même origine que la page (prod quand le back
-    // sert le front, dev quand /socket.io est proxifié).
     const opts = {
       transports: ['websocket', 'polling'] as ('websocket' | 'polling')[],
     };
-    this.socket = environment.socketUrl
-      ? io(environment.socketUrl, opts)
-      : io(opts);
+    const url = this.resolveUrl();
+    this.socket = url ? io(url, opts) : io(opts);
     this.socket.on('connect', () => this.connected.set(true));
     this.socket.on('disconnect', () => this.connected.set(false));
     this.socket.on('ranking:update', (data: RankingUpdateEvent) => {
