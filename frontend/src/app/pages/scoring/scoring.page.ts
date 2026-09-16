@@ -115,8 +115,8 @@ interface Row {
             <p class="hint">
               Un score par joueur pour toute la manche. Saisis-en
               {{ activeSeats().length - 1 }}, le dernier se calcule pour que la
-              somme fasse 0. <strong>Entrée</strong> valide la case et passe à
-              la suivante.
+              somme fasse 0. <strong>Entrée</strong> passe à la case suivante et,
+              quand la table est complète, l'enregistre et la valide.
             </p>
             @if ((table()?.hands?.length ?? 0) > 1) {
               <p class="warn">
@@ -150,7 +150,7 @@ interface Row {
                         [value]="globalRow().scores[s]"
                         [disabled]="!playerAt(s)"
                         (input)="onScore(globalRow(), s, $any($event.target).value)"
-                        (keydown.enter)="nextField($event)"
+                        (keydown.enter)="afterScore($event)"
                         (focus)="$any($event.target).select()"
                       />
                     </td>
@@ -167,10 +167,11 @@ interface Row {
         <mat-card class="entry">
           <mat-card-content>
             <p class="hint">
-              Coche le preneur, saisis le <strong>score de la donne</strong> :
-              le preneur marque trois fois ce score et les trois autres son
-              opposé. <strong>Entrée</strong> passe à la donne suivante. Les
-              cases N/S/E/O restent modifiables à la main.
+              Saisis le <strong>score de la donne</strong>, coche le preneur :
+              il marque trois fois ce score et les trois autres son opposé.
+              <strong>Entrée</strong> passe à la donne suivante et, à la
+              dernière, enregistre et valide la table. Les cases N/S/E/O
+              restent modifiables à la main.
             </p>
             <table class="grid detail">
               <thead>
@@ -217,10 +218,9 @@ interface Row {
                         inputmode="numeric"
                         pattern="-?[0-9]*"
                         [value]="row.deal"
-                        [disabled]="!row.taker"
-                        [title]="row.taker ? 'Résultat de la donne pour le preneur' : 'Choisir d’abord le preneur'"
+                        title="Score de la donne, puis cocher le preneur"
                         (input)="onDeal(row, $any($event.target).value)"
-                        (keydown.enter)="nextIn($event, 'input.deal:not([disabled])')"
+                        (keydown.enter)="afterDeal($event)"
                         (focus)="$any($event.target).select()"
                       />
                     </td>
@@ -235,7 +235,7 @@ interface Row {
                           [value]="row.scores[s]"
                           [disabled]="!playerAt(s)"
                           (input)="onScore(row, s, $any($event.target).value)"
-                          (keydown.enter)="nextField($event)"
+                          (keydown.enter)="afterScore($event)"
                           (focus)="$any($event.target).select()"
                         />
                       </td>
@@ -453,9 +453,13 @@ export class ScoringPage implements OnInit {
   // sans toucher la souris.
   private focusFirstField(): void {
     setTimeout(() => {
-      const first = document.querySelector<HTMLInputElement>(
-        'input.score:not([disabled])'
-      );
+      // En détail, la saisie commence par le score de la donne ; en global,
+      // par la première orientation occupée (Nord le plus souvent).
+      const selector =
+        this.entryMode() === 'detail'
+          ? 'input.deal'
+          : 'input.score:not([disabled])';
+      const first = document.querySelector<HTMLInputElement>(selector);
       if (first) {
         first.focus();
         first.select();
@@ -586,6 +590,30 @@ export class ScoringPage implements OnInit {
     this.nextIn(ev, this.seatFieldSelector);
   }
 
+  // Entrée depuis une case de score : si la table est complète et équilibrée,
+  // on enregistre et on valide sans autre geste — c'est la fin de la saisie
+  // d'une table. Sinon on passe simplement à la case suivante.
+  afterScore(ev: Event): void {
+    if (this.canSave() && !this.saving()) {
+      (ev.target as HTMLInputElement).blur();
+      this.save(true);
+      return;
+    }
+    this.nextField(ev);
+  }
+
+  // Entrée depuis un score de donne : donne suivante, ou validation de la
+  // table quand toutes les donnes sont remplies.
+  afterDeal(ev: Event): void {
+    const filled = this.rows().filter((r) => !this.rowEmpty(r)).length;
+    if (filled === this.rows().length && this.canSave() && !this.saving()) {
+      (ev.target as HTMLInputElement).blur();
+      this.save(true);
+      return;
+    }
+    this.nextIn(ev, 'input.deal');
+  }
+
   setTaker(row: Row, v: string): void {
     row.taker = (v as Seat) || '';
     // Le preneur change : on recalcule la répartition si un score est déjà là.
@@ -678,7 +706,7 @@ export class ScoringPage implements OnInit {
   // Enregistre la grille (création / mise à jour / suppression des donnes)
   // puis valide la table. Une table déjà validée reste validée : c'est le
   // chemin « corriger une erreur de saisie ».
-  save(): void {
+  save(auto = false): void {
     if (!this.canSave() || this.saving()) return;
     const existing = this.table()?.hands ?? [];
     const rid = this.roundId();
@@ -715,7 +743,14 @@ export class ScoringPage implements OnInit {
       .subscribe({
         next: () => {
           this.saving.set(false);
-          this.snack.open(`Table ${tn} validée`, 'Fermer', { duration: 2000 });
+          const next = this.nextTable();
+          this.snack.open(
+            auto && next
+              ? `Table ${tn} validée — au suivant : table ${next}`
+              : `Table ${tn} validée`,
+            'Fermer',
+            { duration: 2500 }
+          );
           this.loadAll();
         },
         error: (err) => {

@@ -27,7 +27,8 @@ import { environment } from '../../../environments/environment';
           PABB90 gère les soirées de tarot du club : un <strong>Challenge</strong>
           couvre un trimestre, il contient un <strong>Tournoi</strong> par
           soirée, et chaque tournoi se joue en plusieurs <strong>manches</strong>
-          (4 au club). Version {{ version }}.
+          (4 par défaut au club) et en <strong>donnes libres</strong>.
+          Version {{ version }}.
         </p>
 
         <h2>Une fois pour toutes</h2>
@@ -111,15 +112,16 @@ import { environment } from '../../../environments/environment';
                 la somme fasse zéro.
               </li>
               <li>
-                <em>Détail donne par donne</em> : cocher le preneur, saisir le
-                score de la donne — le preneur marque trois fois ce score et
-                les trois autres son opposé. <em>Entrée</em> passe à la donne
-                suivante. Utile pour retrouver une erreur de marque.
+                <em>Détail donne par donne</em> : saisir le score de la donne,
+                cocher le preneur — il marque trois fois ce score et les trois
+                autres son opposé. <em>Entrée</em> passe à la donne suivante.
+                Utile pour retrouver une erreur de marque.
               </li>
             </ul>
-            Les raccourcis en haut de l'écran passent d'une table à l'autre
-            dans l'ordre où les feuilles arrivent. Une table validée reste
-            modifiable.
+            Dans les deux cas, <em>Entrée</em> sur la dernière valeur
+            enregistre et valide la table. Les raccourcis en haut de l'écran
+            passent d'une table à l'autre dans l'ordre où les feuilles
+            arrivent. Une table validée reste modifiable.
           </li>
           <li>
             <strong>Classement de la manche</strong> — bouton à côté de chaque

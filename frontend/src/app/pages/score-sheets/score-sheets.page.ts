@@ -25,10 +25,14 @@ import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
       </button>
       <label class="pick">
         Manche :
-        <select [value]="roundFilter()" (change)="roundFilter.set(+$any($event.target).value)">
-          <option [value]="0">toutes</option>
+        <!-- [selected] sur chaque option : un select natif rempli après coup
+             par @for affichait « toutes » alors que le filtre valait 1. -->
+        <select (change)="roundFilter.set(+$any($event.target).value)">
+          <option [value]="0" [selected]="roundFilter() === 0">toutes</option>
           @for (r of sheet()?.rounds || []; track r.round_number) {
-            <option [value]="r.round_number">{{ r.round_number }}</option>
+            <option [value]="r.round_number" [selected]="roundFilter() === r.round_number">
+              manche {{ r.round_number }}
+            </option>
           }
         </select>
       </label>
@@ -149,9 +153,9 @@ import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
     .taker { width: 74px; }
     .empty-seat { background: repeating-linear-gradient(45deg, #eee, #eee 4px, #fff 4px, #fff 8px); }
     .nose {
-      font-family: monospace; font-size: 0.95em; letter-spacing: 1px;
-      border: 1px solid #616161; border-bottom: none; padding: 3px 6px;
-      overflow: hidden; white-space: nowrap; color: #424242;
+      font-family: monospace; font-size: 1.25em; font-weight: 700; letter-spacing: 2px;
+      border: 1px solid #616161; border-bottom: none; padding: 4px 6px;
+      overflow: hidden; white-space: nowrap; color: #212121;
     }
     tr.sub td { background: #fafafa; font-weight: 600; }
     tr.total td { font-weight: 700; background: #f0f0f0; height: 36px; }
@@ -186,7 +190,7 @@ import { RouteSheet, RouteSheetSeat, Seat } from '../../core/api.types';
       .big { font-size: 12pt; }
       .title { font-size: 9pt; }
       footer { font-size: 7pt; }
-      .nose { font-size: 8pt; letter-spacing: 0.5px; padding: 1px 3px; }
+      .nose { font-size: 11pt; font-weight: 700; letter-spacing: 1.5px; padding: 2px 3px; }
     }
   `,
 })

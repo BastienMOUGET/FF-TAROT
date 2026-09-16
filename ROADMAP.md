@@ -6,6 +6,63 @@
 
 ---
 
+## ✅ v3.0.31 — Retour terrain n°12 : enchaînement de la saisie et de la soirée *(livré, 2026-09-16)*
+
+Essais du 15 au soir sur un tournoi de 7 tables. Tout est côté écran, le
+back n'a pas bougé.
+
+### Deux anomalies
+
+- **Feuilles de marque** : le sélecteur affichait « toutes » alors que le
+  filtre valait « manche 1 » (7 feuilles au lieu de 28). Un `<select>` natif
+  ne suit pas `[value]` quand ses options sont rendues après coup : chaque
+  option porte maintenant son propre `[selected]`, et les libellés disent
+  « manche 1 » plutôt que « 1 ».
+- **Joueurs présents** : après le tirage, la liste à cocher était vide — les
+  inscrits en sortent par construction. Un bandeau rappelle désormais qui
+  est inscrit, avec le compte, pour vérifier le pointage d'un coup d'œil.
+
+### La saisie s'enchaîne toute seule
+
+- Résultat global : `Entrée` sur la dernière valeur (le 4ᵉ score étant
+  calculé) **enregistre et valide la table**, et annonce la table suivante à
+  saisir.
+- Détail donne par donne : le curseur part de la colonne **Score** et non de
+  Nord, le score se saisit **avant** de cocher le preneur (le champ n'est
+  plus bloqué tant qu'aucun preneur n'est coché), et `Entrée` sur la
+  dernière donne enregistre et valide la table.
+
+### Enchaînement de la soirée
+
+- « Manche suivante » sur une manche **y navigue** au lieu d'en créer une et
+  de régénérer le placement : les manches sont générées d'avance, l'ancien
+  comportement proposait de refaire un tirage et de perdre les scores. Il ne
+  crée une manche que si la suivante n'existe pas.
+- « Régénérer la mise en place » devient « Refaire le tirage des places »,
+  réservé à l'admin et **désactivé dès qu'un score est saisi** sur la manche,
+  avec l'explication en infobulle. Il sert à retirer les places avant de
+  jouer.
+- Classement d'une manche : bouton « Manche N+1 » qui ouvre directement la
+  manche suivante, et « Classement général après la manche N » qui pointe le
+  cumul correspondant.
+
+### Lisibilité
+
+- Le bandeau `NOSENOSE…` des feuilles de marque passe en gras et plus gros,
+  à l'écran comme au papier.
+- Le marqueur « éq.5 » à côté des noms disparaît de la page d'une manche :
+  il désignait l'équipe du tirage initial, sans utilité une fois les tables
+  formées.
+- Classement général : les colonnes « Total » et « Général » étaient
+  identiques faute de pénalité. Une seule colonne s'affiche, et les deux
+  reviennent si une pénalité s'applique.
+- Notice : « en plusieurs manches (4 par défaut au club) et en donnes
+  libres ».
+
+Pas de migration de base sur cette version.
+
+---
+
 ## ✅ v3.0.30 — Retour terrain n°11 : classement live réparé, manches renumérotées, export FFT *(livré, 2026-09-15)*
 
 Questions et essais des 14 et 15/09 (WhatsApp).

@@ -57,10 +57,25 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
         </mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
+        @if (registeredPlayers().length > 0) {
+          <!-- Une fois le tirage fait, les inscrits sortent de la liste à
+               cocher : on les rappelle ici pour vérifier le pointage. -->
+          <div class="registered">
+            <div class="registered-head">
+              {{ registeredPlayers().length }} joueur(s) déjà inscrit(s) dans ce tournoi
+            </div>
+            <div class="registered-list">
+              @for (p of registeredPlayers(); track p.id) {
+                <span class="chip-name">{{ p.name }} {{ p.firstname }}</span>
+              }
+            </div>
+          </div>
+        }
         @if (availablePlayers().length === 0) {
           <p class="empty">
-            Tous les joueurs sont déjà inscrits dans une équipe pour ce
-            tournoi.
+            Tous les joueurs connus sont déjà inscrits dans ce tournoi. Pour
+            en ajouter un, « Nouveau joueur » ; pour corriger un pointage,
+            « Remplacer un joueur » plus bas.
           </p>
           <button mat-button type="button" (click)="openNewPlayer()">
             <mat-icon>person_add</mat-icon> Nouveau joueur
@@ -328,6 +343,13 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     .draw-list small { color: #757575; }
     .draw-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
     .draw-row mat-checkbox { flex: 1 1 auto; }
+    .registered { margin: 4px 0 16px; padding: 10px 12px; background: #f1f8e9; border-radius: 8px; }
+    .registered-head { font-weight: 600; margin-bottom: 6px; }
+    .registered-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip-name {
+      background: #fff; border: 1px solid #c5e1a5; border-radius: 12px;
+      padding: 2px 10px; font-size: 0.9em;
+    }
     .swap-card mat-card-content { padding-top: 16px; }
     .swap-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .swap-row mat-form-field { min-width: 240px; }

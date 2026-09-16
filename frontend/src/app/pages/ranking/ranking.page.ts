@@ -127,7 +127,9 @@ import { ClubLogo } from '../../shared/club-logo';
           <td mat-cell *matCellDef="let r" class="num">{{ r.total }}</td>
         </ng-container>
         <ng-container matColumnDef="general">
-          <th mat-header-cell *matHeaderCellDef class="num">Général</th>
+          <th mat-header-cell *matHeaderCellDef class="num">
+            {{ hasPenalties() ? 'Général' : 'Total' }}
+          </th>
           <td mat-cell *matCellDef="let r" class="num strong">
             {{ r.total_general }}
           </td>
@@ -198,12 +200,17 @@ export class RankingPage implements OnInit, OnDestroy {
 
   detailRounds = signal<{ id: number; round_number: number }[]>([]);
   // Les colonnes de manches se glissent entre « Manches » et « Total ».
+  // « Total » et « Général » ne diffèrent que si une pénalité s'applique :
+  // sans pénalité, les deux colonnes affichaient la même chose.
+  hasPenalties = computed(() =>
+    this.ranking().some((r) => Number(r.total) !== Number(r.total_general))
+  );
   cols = computed(() => [
     'place',
     'name',
     'rounds',
     ...this.detailRounds().map((r) => 'm' + r.round_number),
-    'total',
+    ...(this.hasPenalties() ? ['total'] : []),
     'general',
     'pcn',
     'pp',

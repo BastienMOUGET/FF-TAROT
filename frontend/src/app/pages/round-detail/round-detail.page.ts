@@ -45,22 +45,30 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
         <a mat-stroked-button [routerLink]="['/sub-tournaments', r.sub_tournament_id, 'route-sheet']">
           <mat-icon>print</mat-icon> Placement
         </a>
-        <button
-          mat-stroked-button
-          color="primary"
-          (click)="regenerate(r.id)"
-          [disabled]="busy()"
-        >
-          <mat-icon>shuffle</mat-icon> Régénérer la mise en place
-        </button>
-        @if (auth.isAdmin() && r.tables && r.tables.length > 0) {
+        @if (auth.isAdmin()) {
+          <button
+            mat-stroked-button
+            color="primary"
+            (click)="regenerate(r.id)"
+            [disabled]="busy() || hasScores()"
+            [title]="
+              hasScores()
+                ? 'Impossible : des scores sont déjà saisis sur cette manche'
+                : 'Refait le tirage des places de cette manche, avant de jouer'
+            "
+          >
+            <mat-icon>shuffle</mat-icon> Refaire le tirage des places
+          </button>
+        }
+        @if (r.tables && r.tables.length > 0) {
           <button
             mat-flat-button
             color="primary"
             (click)="nextRound(r)"
             [disabled]="busy()"
           >
-            <mat-icon>skip_next</mat-icon> Manche suivante
+            <mat-icon>skip_next</mat-icon>
+            {{ nextRoundId() ? 'Manche ' + (r.round_number + 1) : 'Créer la manche ' + (r.round_number + 1) }}
           </button>
         }
         @if (auth.isAdmin()) {
@@ -97,9 +105,6 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
                     <li>
                       <span class="seat" [attr.data-seat]="s.seat">{{ s.seat }}</span>
                       <span class="pname">{{ s.name }} {{ s.firstname }}</span>
-                      @if (s.team_number) {
-                        <small class="team">éq.{{ s.team_number }}</small>
-                      }
                       @if (auth.isAdmin()) {
                         <button
                           mat-icon-button
@@ -151,7 +156,6 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     .seat[data-seat="S"] { background: #4fc3f7; color: #01579b; }
     .seat[data-seat="E"] { background: #ff8a65; color: #4e342e; }
     .seat[data-seat="O"] { background: #aed581; color: #33691e; }
-    .team { color: #757575; font-size: 0.8em; }
     .pname { flex: 1 1 auto; }
     .edit-player { opacity: 0.45; }
     .table li:hover .edit-player { opacity: 1; }
@@ -169,6 +173,10 @@ export class RoundDetailPage implements OnInit {
   loading = signal(true);
   busy = signal(false);
   round = signal<Round | null>(null);
+  // Manche suivante déjà générée (cas normal : toutes le sont au tirage au
+  // sort) et présence de scores, qui interdit de refaire le tirage.
+  nextRoundId = signal<number | null>(null);
+  hasScores = signal(false);
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
@@ -181,6 +189,17 @@ export class RoundDetailPage implements OnInit {
       next: (r) => {
         this.round.set(r);
         this.loading.set(false);
+        this.api.rounds(r.sub_tournament_id).subscribe((rounds) => {
+          const next = rounds.find((x) => x.round_number === r.round_number + 1);
+          this.nextRoundId.set(next ? next.id : null);
+        });
+        this.api.tableResults(id).subscribe((results) => {
+          this.hasScores.set(
+            results.some(
+              (t) => !!t.validated || (t.hands?.length ?? 0) > 0
+            )
+          );
+        });
       },
       error: () => {
         this.snack.open('Manche introuvable', 'Fermer', { duration: 3000 });
@@ -233,9 +252,17 @@ export class RoundDetailPage implements OnInit {
   }
 
   nextRound(r: Round): void {
+    // Les manches sont générées d'avance (sauf en placement par niveau) :
+    // on va simplement à la suivante, sans rien régénérer ni risquer de
+    // perdre des scores.
+    const existing = this.nextRoundId();
+    if (existing) {
+      this.router.navigate(['/rounds', existing]);
+      return;
+    }
     if (
       !confirm(
-        `Créer et générer la mise en place de la manche ${r.round_number + 1} ?`
+        `La manche ${r.round_number + 1} n'existe pas encore. La créer et tirer ses places ?`
       )
     ) {
       return;

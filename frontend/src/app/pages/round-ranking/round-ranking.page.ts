@@ -30,11 +30,21 @@ import { ClubLogo } from '../../shared/club-logo';
         <a [routerLink]="['/sub-tournaments', r.sub_tournament_id]" class="back">
           <mat-icon>arrow_back</mat-icon> Retour au tournoi
         </a>
-        <a mat-stroked-button [routerLink]="['/rounds', r.round_id]">
-          <mat-icon>edit</mat-icon> Saisie des tables
-        </a>
-        <a mat-stroked-button [routerLink]="['/sub-tournaments', r.sub_tournament_id, 'ranking']">
-          <mat-icon>leaderboard</mat-icon> Classement général
+        @if (nextRoundId(); as nid) {
+          <a mat-flat-button color="primary" [routerLink]="['/rounds', nid]">
+            <mat-icon>skip_next</mat-icon> Manche {{ r.round_number + 1 }}
+          </a>
+        } @else {
+          <a mat-stroked-button [routerLink]="['/rounds', r.round_id]">
+            <mat-icon>edit</mat-icon> Saisie des tables
+          </a>
+        }
+        <a
+          mat-stroked-button
+          [routerLink]="['/sub-tournaments', r.sub_tournament_id, 'ranking']"
+          [queryParams]="{ through: r.round_number }"
+        >
+          <mat-icon>leaderboard</mat-icon> Classement général après la manche {{ r.round_number }}
         </a>
       }
       <span class="spacer"></span>
@@ -136,6 +146,9 @@ export class RoundRankingPage implements OnInit {
   loading = signal(true);
   rk = signal<RoundRanking | null>(null);
   pendingCount = signal(0);
+  // Manche suivante déjà générée : on y va directement depuis le classement,
+  // c'est l'enchaînement naturel d'une soirée.
+  nextRoundId = signal<number | null>(null);
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
@@ -144,6 +157,10 @@ export class RoundRankingPage implements OnInit {
         this.rk.set(r);
         this.pendingCount.set(r.ranking.filter((e) => !e.validated).length);
         this.loading.set(false);
+        this.api.rounds(r.sub_tournament_id).subscribe((rounds) => {
+          const next = rounds.find((x) => x.round_number === r.round_number + 1);
+          this.nextRoundId.set(next ? next.id : null);
+        });
       },
       error: () => this.loading.set(false),
     });
