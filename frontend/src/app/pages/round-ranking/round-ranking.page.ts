@@ -39,13 +39,22 @@ import { ClubLogo } from '../../shared/club-logo';
             <mat-icon>edit</mat-icon> Saisie des tables
           </a>
         }
-        <a
-          mat-stroked-button
-          [routerLink]="['/sub-tournaments', r.sub_tournament_id, 'ranking']"
-          [queryParams]="{ through: r.round_number }"
-        >
-          <mat-icon>leaderboard</mat-icon> Classement général après la manche {{ r.round_number }}
-        </a>
+        @if (r.round_number > 1) {
+          @if (nextRoundId()) {
+            <a
+              mat-stroked-button
+              [routerLink]="['/sub-tournaments', r.sub_tournament_id, 'ranking']"
+              [queryParams]="{ through: r.round_number }"
+            >
+              <mat-icon>leaderboard</mat-icon> Général après la manche {{ r.round_number }}
+            </a>
+          } @else {
+            <!-- Dernière manche : le cumul est le classement général. -->
+            <a mat-stroked-button [routerLink]="['/sub-tournaments', r.sub_tournament_id, 'ranking']">
+              <mat-icon>leaderboard</mat-icon> Classement général
+            </a>
+          }
+        }
       }
       <span class="spacer"></span>
       <button mat-flat-button color="primary" (click)="print()">

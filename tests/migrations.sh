@@ -85,6 +85,12 @@ for col in players.club_member players.is_relais clubs.logo \
     check "colonne $col" "$(R mt_fresh -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='mt_fresh' AND table_name='$t' AND column_name='$c'")" 1
 done
 check "3 joueurs Relais" "$(R mt_fresh -e 'SELECT COUNT(*) FROM players WHERE is_relais = TRUE')" 3
+# 009 : mouvements FFT par nombre de tables et par position.
+check "colonne movement_patterns.position" "$(R mt_fresh -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='mt_fresh' AND table_name='movement_patterns' AND column_name='position'")" 1
+check "mouvement de base FFT : Ouest -2" "$(R mt_fresh -e 'SELECT offset_o FROM movement_patterns WHERE table_count = 0 AND position = 0')" -2
+check "6 tables : Ouest -1" "$(R mt_fresh -e 'SELECT offset_o FROM movement_patterns WHERE table_count = 6 AND position = 0')" -1
+check "8 tables, position 5 : Sud +2" "$(R mt_fresh -e 'SELECT offset_s FROM movement_patterns WHERE table_count = 8 AND position = 5')" 2
+check "clé unique (tables, position)" "$(R mt_fresh -e "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='mt_fresh' AND table_name='movement_patterns' AND index_name='uniq_movement'")" 2
 
 # ---------------------------------------------------------------- 2. rejeu
 step "2. Rejeu : rien ne doit être réappliqué"

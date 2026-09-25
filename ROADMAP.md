@@ -6,6 +6,90 @@
 
 ---
 
+## ✅ v3.0.32 — Retour terrain n°13 : mouvements FFT conformes, tables de 3 espacées *(livré, 2026-09-25)*
+
+Mémo `feedback/2026-09-25/` (version 3.031), après une soirée à 37 joueurs.
+
+### Les mouvements n'étaient pas ceux de la FFT (migration 009)
+
+Deux écarts, corrigés :
+
+- Le mouvement de base appliquait **Ouest −1**. Le règlement fédéral impose
+  Nord fixe, Sud +1, Est +2, **Ouest −2** (valable pour 5, 7, 11, 13, 17, 19,
+  21 tables et au-delà).
+- Le mouvement dépend aussi de la **position jouée**, pas seulement du
+  nombre de tables. `movement_patterns` n'avait qu'une ligne par nombre de
+  tables ; elle porte maintenant une colonne `position`, et les tableaux
+  fédéraux sont chargés : 6 tables (Ouest −1, position 3 Ouest +3, position 4
+  Ouest −2), 8 (Ouest −1, position 5 Sud +2 Est +3, position 6 Est +4), 9
+  (positions 4 et 5 Est +3 Ouest −3), 10 (Ouest −1, position 6 Est +3 Ouest
+  −2), 12, 14, 15, 16, 18, 20. La recherche va du plus précis au plus
+  général : (tables, position) → (tables, toutes) → mouvement de base.
+
+Vérifié sur une base jetable : 10 tables position 2 → S +1, E +2, O −1 ;
+position 6 → S +1, E +3, O −2 ; 7 tables → O −2.
+
+*Hypothèse à confirmer* : « en Nᵉ position, Ouest −3 » est interprété comme
+le mouvement qui **amène** à la manche N (depuis la N−1). À vérifier contre
+un tournoi réel.
+
+### Tables de 3 espacées
+
+Le Relais d'une table de 3 est fixe, donc la table garde son numéro toute la
+soirée. Quand les tables de 3 se suivaient (8, 9, 10), un joueur qui avance
+d'une table les enchaînait **trois manches d'affilée**. Les numéros des
+tables de 3 sont désormais répartis sur l'ensemble du tournoi : sur 10
+tables dont 3 de 3, elles tombent en 2, 6 et 9.
+
+### Un Relais peut céder sa place
+
+Un joueur oublié au pointage rejoint une table de 3 : « Remplacer un
+joueur » accepte maintenant un Relais comme joueur à remplacer. Le nouveau
+venu prend sa place sur **toutes** les manches et rejoint l'équipe, la table
+passe de 3 à 4. Vérifié : 6 places transférées, table à 4 joueurs.
+
+### Classements
+
+- Le cumul « après la manche N » affiche une **colonne par manche** (1..N) et
+  **ignore les manches suivantes**, même déjà saisies. Vérifié : manche 3
+  saisie à 300 points, le cumul après la manche 2 reste à 120.
+- Manche 1 : le bouton « Général après la manche 1 » disparaît, il doublait
+  le classement de la manche. Dernière manche : il devient « Classement
+  général ».
+- Impression du classement général resserrée (37 joueurs tenaient sur 4
+  pages), licence masquée au papier.
+- Un bandeau explique les PCN à zéro : l'indice PCN du tournoi vaut 0.
+
+### Saisie
+
+- L'ordre du club est score, preneur, Entrée : Entrée depuis la **case du
+  preneur** enchaîne sur la donne suivante, ou valide la table à la dernière.
+  Seul le champ avait cette touche jusqu'ici.
+- Aucune case de joueur n'est pré-remplie ; seules les places vides portent
+  un 0 figé. À l'enregistrement, **deux scores à 0 ou plus** demandent
+  confirmation.
+- Les onglets de tables validées passent en gras et vert foncé.
+
+### Sécurité et notice
+
+- Suppression d'une manche ou d'un challenge : **double confirmation**.
+- Notice : les mouvements FFT (base et tableaux par nombre de tables), la
+  sauvegarde de la base, les systèmes supportés. Nom du club centré dans le
+  bandeau.
+
+### Demandé, non traité dans cette version
+
+- **Liste FFT** (plusieurs milliers de licenciés, saisie par recherche de nom
+  au lieu de cases à cocher) et **gestion multi-clubs** des joueurs.
+- **Mode « Tournois simples »**, hors challenge.
+- **Ajouter un joueur quand le placement est déjà fait et qu'il n'y a aucune
+  table de 3** : il faut aujourd'hui refaire le pointage. Le cas avec Relais
+  est réglé ci-dessus.
+- Renommage du programme (TAROT 2.0) et échecs d'installation au premier
+  essai (à reproduire).
+
+---
+
 ## ✅ v3.0.31 — Retour terrain n°12 : enchaînement de la saisie et de la soirée *(livré, 2026-09-16)*
 
 Essais du 15 au soir sur un tournoi de 7 tables. Tout est côté écran, le

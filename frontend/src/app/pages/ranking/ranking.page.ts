@@ -89,6 +89,14 @@ import { ClubLogo } from '../../shared/club-logo';
       </h1>
     </div>
 
+    @if (!loading() && ranking().length > 0 && noPcn()) {
+      <p class="warn no-print">
+        PCN non calculés : l'indice PCN de ce tournoi est à 0. Il se règle à
+        la création du tournoi (ou dans ses réglages) ; le classement se
+        recalcule ensuite tout seul.
+      </p>
+    }
+
     @if (loading()) {
       <mat-progress-spinner mode="indeterminate" diameter="40" />
     } @else if (ranking().length === 0) {
@@ -175,11 +183,20 @@ import { ClubLogo } from '../../shared/club-logo';
     .manche { color: #424242; }
     .lic { color: #757575; }
     .empty { color: #757575; }
+    .warn { color: #e65100; font-weight: 500; margin: 0 0 12px; }
     /* Retour terrain : le 1er en couleur, et tous les scores >= 0. */
     .podium-1 { background: rgba(255, 215, 0, 0.35) !important; font-weight: 700; }
     .positive { background: rgba(129, 199, 132, 0.18) !important; }
     @media print {
-      .back, .head { display: none !important; }
+      @page { size: A4 portrait; margin: 8mm; }
+      .back, .head, .toolbar { display: none !important; }
+      /* 37 joueurs tenaient sur 4 pages : lignes resserrées. */
+      table { font-size: 9pt; }
+      th, td { padding: 1px 6px !important; line-height: 1.15; }
+      .print-head h1 { font-size: 14pt; margin: 0 0 4px; }
+      .print-head { gap: 10px; margin-bottom: 6px; }
+      .lic { display: none; }
+      tr { page-break-inside: avoid; }
       .podium-1 { background: #ffe082 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .positive { background: #dcedc8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
@@ -202,6 +219,11 @@ export class RankingPage implements OnInit, OnDestroy {
   // Les colonnes de manches se glissent entre « Manches » et « Total ».
   // « Total » et « Général » ne diffèrent que si une pénalité s'applique :
   // sans pénalité, les deux colonnes affichaient la même chose.
+  // Aucun PCN attribué alors que des joueurs sont classés : l'indice PCN du
+  // tournoi vaut 0 (retour terrain n°13 : « les PCN ne sont pas calculés »).
+  noPcn = computed(
+    () => !this.throughRound() && this.ranking().every((r) => Number(r.pcn) === 0)
+  );
   hasPenalties = computed(() =>
     this.ranking().some((r) => Number(r.total) !== Number(r.total_general))
   );
@@ -242,25 +264,15 @@ export class RankingPage implements OnInit, OnDestroy {
     // Un classement arrêté à une manche est figé : pas de suivi live.
     if (!this.throughRound()) this.socket.connect();
 
-    if (this.throughRound()) {
-      // Vue « arrêté après la manche N » : pas de détail par manche.
-      this.api.ranking(id, this.throughRound()!).subscribe({
-        next: (r) => {
-          this.ranking.set(r);
-          this.lastUpdate.set(new Date());
-          this.loading.set(false);
-        },
-        error: () => this.loading.set(false),
-      });
-      return;
-    }
     this.api.subTournament(id).subscribe({
       next: (sub) => {
         document.title = `Classement ${sub.label} — PABB90`;
       },
       error: () => {},
     });
-    this.api.rankingDetail(id).subscribe({
+    // Le détail par manche vaut aussi pour un classement arrêté à la manche
+    // N : il ne montre alors que les manches 1..N (retour terrain n°13).
+    this.api.rankingDetail(id, this.throughRound() ?? undefined).subscribe({
       next: (d) => {
         this.detailRounds.set(d.rounds);
         this.ranking.set(d.ranking);
@@ -269,7 +281,7 @@ export class RankingPage implements OnInit, OnDestroy {
       },
       // Serveur plus ancien ou erreur : on retombe sur le classement simple.
       error: () =>
-        this.api.ranking(id).subscribe({
+        this.api.ranking(id, this.throughRound() ?? undefined).subscribe({
           next: (r) => {
             this.ranking.set(r);
             this.loading.set(false);

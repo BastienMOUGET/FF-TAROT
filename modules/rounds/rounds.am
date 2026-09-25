@@ -282,7 +282,9 @@ public class ModRounds {
             }
             var nbTables: int = 0
             for s in prevSeats { if (s.TableNumber > nbTables) { nbTables = s.TableNumber } }
-            let offs: List<int> = ModMovementPatterns.OffsetsForTableCount(db, nbTables)
+            // Le mouvement dépend du nombre de tables ET de la position
+            // jouée (migration 009) : on passe le numéro de la manche.
+            let offs: List<int> = ModMovementPatterns.OffsetsForPosition(db, nbTables, roundNumber)
             seats = Placement.GenerateNextSeats(prevSeats, offs.Get(0), offs.Get(1), offs.Get(2), offs.Get(3))
         } }
 

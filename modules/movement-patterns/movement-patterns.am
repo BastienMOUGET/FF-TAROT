@@ -10,19 +10,20 @@ public class ModMovementPatterns {
         let o: JsonValue = J.Obj()
         o.AppendEntry("id", J.CellInt(r.Get(0)))
         o.AppendEntry("table_count", J.CellInt(r.Get(1)))
-        o.AppendEntry("offset_n", J.CellInt(r.Get(2)))
-        o.AppendEntry("offset_s", J.CellInt(r.Get(3)))
-        o.AppendEntry("offset_e", J.CellInt(r.Get(4)))
-        o.AppendEntry("offset_o", J.CellInt(r.Get(5)))
-        o.AppendEntry("label", J.CellStrN(r.Get(6)))
+        o.AppendEntry("position", J.CellInt(r.Get(2)))
+        o.AppendEntry("offset_n", J.CellInt(r.Get(3)))
+        o.AppendEntry("offset_s", J.CellInt(r.Get(4)))
+        o.AppendEntry("offset_e", J.CellInt(r.Get(5)))
+        o.AppendEntry("offset_o", J.CellInt(r.Get(6)))
+        o.AppendEntry("label", J.CellStrN(r.Get(7)))
         return o
     }
 
-    static string COLS() { return "id, table_count, offset_n, offset_s, offset_e, offset_o, label" }
+    static string COLS() { return "id, table_count, position, offset_n, offset_s, offset_e, offset_o, label" }
 
     public static HttpResponse List(WebContext ctx, Db db) {
         let rows: List<List<string>> = db.Rows(
-            "SELECT " + ModMovementPatterns.COLS() + " FROM movement_patterns ORDER BY table_count ASC",
+            "SELECT " + ModMovementPatterns.COLS() + " FROM movement_patterns ORDER BY table_count ASC, position ASC",
             Db.NoParams())
         let arr: JsonValue = J.Arr()
         for i in 0..rows.Count() {
@@ -111,16 +112,25 @@ public class ModMovementPatterns {
 
     // Résout les offsets pour un nombre de tables (utilisé par rounds).
     // Pattern table_count=X prioritaire, sinon défaut (0), sinon fallback codé.
-    public static List<int> OffsetsForTableCount(Db db, int tableCount) {
+    // Offsets à appliquer pour produire la manche `position` sur un tournoi
+    // de `tableCount` tables. Du plus précis au plus général :
+    // (tables, position) → (tables, toutes positions) → mouvement de base.
+    // Le défaut de secours est le mouvement FFT : N fixe, S+1, E+2, O-2.
+    public static List<int> OffsetsForPosition(Db db, int tableCount, int position) {
+        let ps: List<string> = new List<string>()
+        ps.Add(String.FromInt(tableCount))
+        ps.Add(String.FromInt(position))
+        ps.Add(String.FromInt(tableCount))
+        ps.Add(String.FromInt(position))
         let rows: List<List<string>> = db.Rows(
-            "SELECT offset_n, offset_s, offset_e, offset_o FROM movement_patterns WHERE table_count IN (?, 0) ORDER BY table_count = ? DESC LIMIT 1",
-            Db.P2(String.FromInt(tableCount), String.FromInt(tableCount)))
+            "SELECT offset_n, offset_s, offset_e, offset_o FROM movement_patterns WHERE (table_count = ? AND position = ?) OR (table_count = ? AND position = 0) OR (table_count = 0 AND position = 0) ORDER BY table_count DESC, (position = ?) DESC LIMIT 1",
+            ps)
         let out: List<int> = new List<int>()
         if (rows.Count() == 0) {
             out.Add(0)
             out.Add(1)
             out.Add(2)
-            out.Add(-1)
+            out.Add(-2)
             return out
         }
         let r0: List<string> = rows.Get(0)

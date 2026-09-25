@@ -191,13 +191,24 @@ import { PlacementMode, Round, SubTournament, TableResult } from '../../core/api
                     <!-- Cumul des manches 1..N : ce qui sert à suivre le
                          tournoi et, en placement par niveau, à former les
                          tables de la manche suivante. -->
-                    <a
-                      mat-stroked-button
-                      [routerLink]="['/sub-tournaments', s.id, 'ranking']"
-                      [queryParams]="{ through: r.round_number }"
-                    >
-                      <mat-icon>leaderboard</mat-icon> Général après la manche {{ r.round_number }}
-                    </a>
+                    <!-- Manche 1 : le cumul est le classement de la manche,
+                         inutile de le proposer deux fois. Dernière manche :
+                         c'est le classement général du tournoi. -->
+                    @if (r.round_number > 1) {
+                      @if (isLastRound(r)) {
+                        <a mat-stroked-button [routerLink]="['/sub-tournaments', s.id, 'ranking']">
+                          <mat-icon>leaderboard</mat-icon> Classement général
+                        </a>
+                      } @else {
+                        <a
+                          mat-stroked-button
+                          [routerLink]="['/sub-tournaments', s.id, 'ranking']"
+                          [queryParams]="{ through: r.round_number }"
+                        >
+                          <mat-icon>leaderboard</mat-icon> Général après la manche {{ r.round_number }}
+                        </a>
+                      }
+                    }
                     @if (auth.isAdmin()) {
                       <button
                         mat-icon-button
@@ -334,6 +345,11 @@ export class SubTournamentDetailPage implements OnInit {
     });
   }
 
+  isLastRound(r: Round): boolean {
+    const rounds = this.rounds();
+    return rounds.length > 0 && r.round_number === rounds[rounds.length - 1].round_number;
+  }
+
   modeHelp(s: SubTournament): string {
     switch (s.placement_mode ?? 'movement') {
       case 'level':
@@ -373,6 +389,15 @@ export class SubTournamentDetailPage implements OnInit {
       msg += `\nLes ${after} manche(s) suivante(s) seront renumérotées.`;
     }
     if (!confirm(msg)) return;
+    // Double confirmation : la perte est définitive et le premier « OK » part
+    // vite (retour terrain n°13).
+    if (
+      !confirm(
+        `Dernière vérification : la manche ${r.round_number} et ses scores seront perdus définitivement.\n\nConfirmer la suppression ?`
+      )
+    ) {
+      return;
+    }
     this.busy.set(true);
     this.api.deleteRound(r.id).subscribe({
       next: () => {

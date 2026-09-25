@@ -191,17 +191,31 @@ public class ModTeams {
         let fr: List<List<string>> = db.Rows("SELECT name, firstname, is_relais FROM players WHERE id = ?", Db.P1(fromId))
         if (fr.Count() == 0) { return HttpErr.BadRequest("Joueur à remplacer introuvable") }
         let f0: List<string> = fr.Get(0)
-        if (Db.CellBool(f0.Get(2))) { return HttpErr.BadRequest("Un Relais ne peut pas être remplacé") }
+        // Un Relais PEUT céder sa place : c'est ainsi qu'un joueur oublié au
+        // pointage rejoint une table de 3 sans refaire tout le placement
+        // (retour terrain n°13). La table passe alors de 3 à 4 joueurs.
+        let fromRelais: bool = Db.CellBool(f0.Get(2))
         let tr: List<List<string>> = db.Rows("SELECT name, firstname, is_relais FROM players WHERE id = ?", Db.P1(toId))
         if (tr.Count() == 0) { return HttpErr.BadRequest("Joueur remplaçant introuvable") }
         let t0: List<string> = tr.Get(0)
         if (Db.CellBool(t0.Get(2))) { return HttpErr.BadRequest("Un Relais ne peut pas remplacer un joueur") }
+        if (fromId == toId) { return HttpErr.BadRequest("Les deux joueurs sont les mêmes") }
 
-        let inscr: List<List<string>> = db.Rows(
-            "SELECT COUNT(*) FROM team_players tp JOIN teams t ON t.id = tp.team_id WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
-            Db.P2(subId, fromId))
-        let i0: List<string> = inscr.Get(0)
-        if (Db.CellInt(i0.Get(0)) == 0) { return HttpErr.BadRequest(f0.Get(1) + " " + f0.Get(0) + " n'est pas inscrit dans ce tournoi") }
+        // Un Relais n'est pas « inscrit » (il n'a pas d'équipe) : on vérifie
+        // alors qu'il occupe bien une place dans une manche du tournoi.
+        if (fromRelais) {
+            let seated: List<List<string>> = db.Rows(
+                "SELECT COUNT(*) FROM seats s JOIN rounds r ON r.id = s.round_id WHERE r.sub_tournament_id = ? AND s.player_id = ?",
+                Db.P2(subId, fromId))
+            let s0: List<string> = seated.Get(0)
+            if (Db.CellInt(s0.Get(0)) == 0) { return HttpErr.BadRequest("Ce Relais ne joue pas dans ce tournoi") }
+        } else {
+            let inscr: List<List<string>> = db.Rows(
+                "SELECT COUNT(*) FROM team_players tp JOIN teams t ON t.id = tp.team_id WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
+                Db.P2(subId, fromId))
+            let i0: List<string> = inscr.Get(0)
+            if (Db.CellInt(i0.Get(0)) == 0) { return HttpErr.BadRequest(f0.Get(1) + " " + f0.Get(0) + " n'est pas inscrit dans ce tournoi") }
+        }
 
         let already: List<List<string>> = db.Rows(
             "SELECT COUNT(*) FROM team_players tp JOIN teams t ON t.id = tp.team_id WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
@@ -210,10 +224,28 @@ public class ModTeams {
         if (Db.CellInt(a0.Get(0)) > 0) { return HttpErr.BadRequest(t0.Get(1) + " " + t0.Get(0) + " est déjà inscrit dans ce tournoi : il jouerait deux fois") }
 
         db.Begin()
-        let okTp: bool = db.Exec(
-            "UPDATE team_players tp JOIN teams t ON t.id = tp.team_id SET tp.player_id = ? WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
-            Db.P3(toId, subId, fromId))
-        if (!okTp) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        // Remplacer un Relais : le nouveau joueur prend sa place ET rejoint
+        // l'équipe de la table, qui passe de 3 à 4 joueurs.
+        if (fromRelais) {
+            let teamRows: List<List<string>> = db.Rows(
+                "SELECT DISTINCT tp.team_id FROM seats s JOIN rounds r ON r.id = s.round_id JOIN seats s2 ON s2.round_id = s.round_id AND s2.table_number = s.table_number JOIN team_players tp ON tp.player_id = s2.player_id JOIN teams t ON t.id = tp.team_id AND t.sub_tournament_id = r.sub_tournament_id WHERE r.sub_tournament_id = ? AND s.player_id = ? LIMIT 1",
+                Db.P2(subId, fromId))
+            if (teamRows.Count() > 0) {
+                let t0r: List<string> = teamRows.Get(0)
+                let numRows: List<List<string>> = db.Rows(
+                    "SELECT COALESCE(MAX(player_number), 0) + 1 FROM team_players WHERE team_id = ?", Db.P1(t0r.Get(0)))
+                let n0: List<string> = numRows.Get(0)
+                let okAdd: bool = db.Exec(
+                    "INSERT INTO team_players (team_id, player_id, pair, player_number, seat) VALUES (?, ?, 'NS', ?, 'N')",
+                    Db.P3(t0r.Get(0), toId, n0.Get(0)))
+                if (!okAdd) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+            }
+        } else {
+            let okTp: bool = db.Exec(
+                "UPDATE team_players tp JOIN teams t ON t.id = tp.team_id SET tp.player_id = ? WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
+                Db.P3(toId, subId, fromId))
+            if (!okTp) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        }
         let okSeats: bool = db.Exec(
             "UPDATE seats s JOIN rounds r ON r.id = s.round_id SET s.player_id = ? WHERE r.sub_tournament_id = ? AND s.player_id = ?",
             Db.P3(toId, subId, fromId))

@@ -132,12 +132,12 @@ import { RoundTimer } from './round-timer';
     .brand-name { font-weight: 600; font-size: 1.1em; line-height: 1; }
     .brand-version { font-size: 0.75em; color: #757575; line-height: 1.4; }
     .club-head {
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
       margin: 12px 12px 4px; padding: 10px 12px; border-radius: 8px;
       background: #1976d2; color: #fff; text-decoration: none;
-      font-weight: 600; line-height: 1.2;
+      font-weight: 600; line-height: 1.2; text-align: center;
     }
-    .club-head-name { flex: 1 1 auto; }
+    .club-head-name { flex: 0 1 auto; }
     .topbar {
       position: sticky;
       top: 0;

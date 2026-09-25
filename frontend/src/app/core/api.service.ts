@@ -220,9 +220,13 @@ export class ApiService {
     );
   roundRanking = (roundId: number): Observable<RoundRanking> =>
     this.http.get<RoundRanking>(`${this.base}/rounds/${roundId}/ranking`);
-  rankingDetail = (subTournamentId: number): Observable<RankingDetail> =>
+  rankingDetail = (
+    subTournamentId: number,
+    throughRound?: number
+  ): Observable<RankingDetail> =>
     this.http.get<RankingDetail>(
-      `${this.base}/sub-tournaments/${subTournamentId}/ranking-detail`
+      `${this.base}/sub-tournaments/${subTournamentId}/ranking-detail`,
+      throughRound ? { params: { through_round: String(throughRound) } } : {}
     );
   // Remplace un joueur par un autre dans tout le tournoi (pointage,
   // placements, classements) — erreur de pointage des présents.

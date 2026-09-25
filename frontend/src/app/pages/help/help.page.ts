@@ -172,6 +172,43 @@ import { environment } from '../../../environments/environment';
           table de 2.
         </p>
 
+        <h2>Les mouvements FFT</h2>
+        <p>
+          En mode « Règle FFT », chaque joueur garde son orientation toute la
+          soirée et change de table à chaque manche. Le mouvement de base est :
+        </p>
+        <table class="mvt">
+          <tbody>
+            <tr><td>Nord</td><td>reste à sa table</td></tr>
+            <tr><td>Sud</td><td>monte d'une table (+1)</td></tr>
+            <tr><td>Est</td><td>monte de deux tables (+2)</td></tr>
+            <tr><td>Ouest</td><td>descend de deux tables (−2)</td></tr>
+          </tbody>
+        </table>
+        <p>
+          Il vaut pour 5, 7, 11, 13, 17, 19, 21 tables et au-delà. Les autres
+          nombres de tables ont des mouvements particuliers, appliqués
+          automatiquement :
+        </p>
+        <table class="mvt">
+          <thead><tr><th>Tables</th><th>Particularité</th></tr></thead>
+          <tbody>
+            <tr><td>6</td><td>Ouest −1 ; position 3 : Ouest +3 ; position 4 : Ouest −2 (5 positions max)</td></tr>
+            <tr><td>8</td><td>Ouest −1 ; position 5 : Sud +2 et Est +3 ; position 6 : Est +4 (6 positions max)</td></tr>
+            <tr><td>9</td><td>positions 4 et 5 : Est +3, Ouest −3</td></tr>
+            <tr><td>10</td><td>Ouest −1 ; position 6 : Est +3, Ouest −2</td></tr>
+            <tr><td>12</td><td>position 4 : Ouest −3 ; position 7 : Est +3</td></tr>
+            <tr><td>14 et 15</td><td>position 5 : Ouest −3</td></tr>
+            <tr><td>16</td><td>positions 5 et 6 : Ouest −3</td></tr>
+            <tr><td>18 et 20</td><td>position 6 : Ouest −3</td></tr>
+          </tbody>
+        </table>
+        <p>
+          Une table de 3 garde son numéro toute la soirée, puisque son Relais
+          ne bouge pas. Les tables de 3 sont donc réparties sur l'ensemble des
+          numéros, pour qu'un joueur ne les enchaîne pas manche après manche.
+        </p>
+
         <h2>Le classement du Challenge</h2>
         <p>
           Il est en bas de la page du challenge, avec une colonne par tournoi.
@@ -269,6 +306,23 @@ import { environment } from '../../../environments/environment';
           </dd>
         </dl>
 
+        <h2>Sauvegarde et systèmes</h2>
+        <p>
+          Le programme tourne sur <strong>Windows 10 et 11</strong> (installeur
+          fourni). Il fonctionne aussi sous Linux et via Docker, à installer
+          depuis les sources du projet.
+        </p>
+        <p>
+          Toutes les données du club vivent dans la base MariaDB, jamais dans
+          le dossier de l'application. Sauvegarde conseillée après chaque
+          soirée : ouvrir une invite de commandes dans
+          <code>C:\Program Files\MariaDB 11.8\bin</code> et lancer
+          <code>mysqldump -u root fft &gt; sauvegarde.sql</code>, puis copier
+          le fichier obtenu sur une clé. Pour restaurer :
+          <code>mysql -u root fft &lt; sauvegarde.sql</code>. Le détail est
+          dans le fichier INSTALL.md du projet.
+        </p>
+
         <h2>Un problème, une idée ?</h2>
         <p class="no-print">
           Les remarques se déposent sur la page des tickets du projet, elles y
@@ -299,6 +353,10 @@ import { environment } from '../../../environments/environment';
     dt { font-weight: 600; margin-top: 12px; }
     dd { margin: 2px 0 0 16px; color: #424242; }
     code { background: #f5f5f5; padding: 1px 5px; border-radius: 3px; }
+    table.mvt { border-collapse: collapse; margin: 8px 0 12px; }
+    table.mvt th, table.mvt td { border: 1px solid #e0e0e0; padding: 4px 10px; text-align: left; }
+    table.mvt th { background: #f5f5f5; }
+    table.mvt td:first-child { font-weight: 600; white-space: nowrap; }
     @media print {
       .no-print { display: none !important; }
       .notice { box-shadow: none !important; max-width: none; }

@@ -335,8 +335,19 @@ public class ModRanking {
         let subt: List<List<string>> = db.Rows("SELECT id FROM sub_tournaments WHERE id = ?", Db.P1(subId))
         if (subt.Count() == 0) { return HttpErr.NotFound() }
 
-        let rounds: List<List<string>> = db.Rows(
-            "SELECT id, round_number FROM rounds WHERE sub_tournament_id = ? ORDER BY round_number ASC", Db.P1(subId))
+        // ?through_round=N : classement arrêté après la manche N. Les manches
+        // suivantes, même déjà saisies, sont ignorées — colonnes comprises
+        // (retour terrain n°13).
+        let through: string = ctx.QueryParam("through_round")
+        var rounds: List<List<string>> = new List<List<string>>()
+        if (String.Length(through) > 0) {
+            rounds = db.Rows(
+                "SELECT id, round_number FROM rounds WHERE sub_tournament_id = ? AND round_number <= ? ORDER BY round_number ASC",
+                Db.P2(subId, through))
+        } else {
+            rounds = db.Rows(
+                "SELECT id, round_number FROM rounds WHERE sub_tournament_id = ? ORDER BY round_number ASC", Db.P1(subId))
+        }
 
         // Score par joueur et par manche (tables validées seulement).
         let byKey: Map<string, string> = new Map<string, string>()
@@ -348,15 +359,34 @@ public class ModRanking {
             byKey.Set(r.Get(0) + "|" + r.Get(1), r.Get(2))
         }
 
-        // Le classement officiel (table rankings) donne l'ordre et les totaux.
-        let rk: List<List<string>> = db.Rows(
-            "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND p.is_relais = FALSE ORDER BY r.place ASC, p.name ASC",
-            Db.P1(subId))
+        // Sans borne : le classement officiel (table rankings), qui porte les
+        // PCN et les PP. Avec borne : cumul recalculé sur les manches 1..N.
+        var rk: List<List<string>> = new List<List<string>>()
+        if (String.Length(through) > 0) {
+            rk = db.Rows(
+                "SELECT s.player_id, p.licence, p.name, p.firstname, COUNT(tr.id) AS played, COALESCE(SUM(CASE s.seat WHEN 'N' THEN tr.score_n WHEN 'S' THEN tr.score_s WHEN 'E' THEN tr.score_e ELSE tr.score_o END * r.coef), 0) AS total, COALESCE(SUM(CASE s.seat WHEN 'N' THEN tr.score_n WHEN 'S' THEN tr.score_s WHEN 'E' THEN tr.score_e ELSE tr.score_o END * r.coef), 0) AS total2, 0 AS place, 0 AS pcn, 0 AS pp FROM seats s JOIN rounds r ON r.id = s.round_id JOIN players p ON p.id = s.player_id LEFT JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number AND tr.validated = TRUE WHERE r.sub_tournament_id = ? AND r.round_number <= ? AND p.is_relais = FALSE GROUP BY s.player_id, p.licence, p.name, p.firstname ORDER BY total DESC, p.name ASC",
+                Db.P2(subId, through))
+        } else {
+            rk = db.Rows(
+                "SELECT r.player_id, p.licence, p.name, p.firstname, r.rounds_played, r.total, r.total_general, r.place, r.pcn, r.pp FROM rankings r JOIN players p ON p.id = r.player_id WHERE r.sub_tournament_id = ? AND p.is_relais = FALSE ORDER BY r.place ASC, p.name ASC",
+                Db.P1(subId))
+        }
 
         let arr: JsonValue = J.Arr()
+        // Les places d'un classement borné sont recalculées ici (égalité de
+        // total = même place).
+        var place: int = 1
+        var prev: float = 0.0
         for i in 0..rk.Count() {
             let r: List<string> = rk.Get(i)
             let pid: string = r.Get(0)
+            var pl: int = Db.CellInt(r.Get(7))
+            if (String.Length(through) > 0) {
+                let tot: float = Db.CellFloat(r.Get(6))
+                if (i > 0 && tot < prev) { place = i + 1 }
+                prev = tot
+                pl = place
+            }
             let o: JsonValue = J.Obj()
             o.AppendEntry("player_id", J.CellInt(pid))
             o.AppendEntry("licence", J.CellStrN(r.Get(1)))
@@ -365,7 +395,7 @@ public class ModRanking {
             o.AppendEntry("rounds_played", J.CellInt(r.Get(4)))
             o.AppendEntry("total", J.CellFloat(r.Get(5)))
             o.AppendEntry("total_general", J.CellFloat(r.Get(6)))
-            o.AppendEntry("place", J.CellInt(r.Get(7)))
+            o.AppendEntry("place", J.Int(pl))
             o.AppendEntry("pcn", J.CellFloat(r.Get(8)))
             o.AppendEntry("pp", J.CellFloat(r.Get(9)))
             let det: JsonValue = J.Arr()
@@ -390,6 +420,8 @@ public class ModRanking {
         let out: JsonValue = J.Obj()
         out.AppendEntry("rounds", rArr)
         out.AppendEntry("ranking", arr)
+        if (String.Length(through) > 0) { out.AppendEntry("through_round", J.CellInt(through)) }
+        else { out.AppendEntry("through_round", J.Null()) }
         return J.Ok(out)
     }
 

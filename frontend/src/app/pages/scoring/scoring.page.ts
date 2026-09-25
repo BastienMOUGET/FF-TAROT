@@ -51,7 +51,7 @@ interface Row {
       </a>
       <!-- Raccourcis : les résultats arrivent dans un ordre aléatoire, on
            passe d'une table à l'autre sans repasser par la manche. -->
-      <div class="tables-nav">
+      <div class="tables-nav" [title]="validatedTables().size + ' table(s) validée(s) sur ' + allTables().length">
         @for (t of allTables(); track t.table_number) {
           <a
             [routerLink]="['/rounds', roundId(), 'tables', t.table_number]"
@@ -205,6 +205,7 @@ interface Row {
                               [value]="s"
                               [checked]="row.taker === s"
                               (change)="setTaker(row, s)"
+                              (keydown.enter)="afterTaker($event, row)"
                             />
                             {{ s }}
                           </label>
@@ -295,7 +296,7 @@ interface Row {
       text-decoration: none; color: #424242; font-size: 0.9em;
     }
     .tab mat-icon { font-size: 16px; width: 16px; height: 16px; }
-    .tab.done { background: #e8f5e9; border-color: #81c784; color: #2e7d32; }
+    .tab.done { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; font-weight: 700; }
     .tab.current { background: #1976d2; border-color: #1976d2; color: #fff; font-weight: 600; }
     h1 { margin: 8px 0 16px; }
     .players { margin-bottom: 12px; }
@@ -494,7 +495,8 @@ export class ScoringPage implements OnInit {
       this.globalRow.set(hands.length === 1 ? this.rowFromHand(hands[0]) : this.emptyRow(1));
       this.rows.set(Array.from({ length: DEFAULT_DONNES }, (_, i) => this.emptyRow(i + 1)));
     }
-    // Sièges vides (table de 3) : score 0 figé.
+    // Seuls les sièges vides (table de 3 sans Relais) portent un 0 figé :
+    // aucune case de joueur n'est pré-remplie, un 0 doit être voulu.
     for (const s of SEATS) {
       if (!this.playerAt(s)) {
         this.globalRow().scores[s] = '0';
@@ -602,6 +604,25 @@ export class ScoringPage implements OnInit {
     this.nextField(ev);
   }
 
+  // Entrée depuis la case du preneur : l'ordre du club est score, preneur,
+  // Entrée — le focus est donc sur le bouton radio et non sur le champ.
+  // On enchaîne sur le score de la donne suivante, ou on valide la table.
+  afterTaker(ev: Event, row: Row): void {
+    const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('input.deal'));
+    const idx = this.rows().indexOf(row);
+    const next = idx >= 0 ? inputs[idx + 1] : null;
+    const filled = this.rows().filter((r) => !this.rowEmpty(r)).length;
+    if (filled === this.rows().length && this.canSave() && !this.saving()) {
+      (ev.target as HTMLInputElement).blur();
+      this.save(true);
+      return;
+    }
+    if (next) {
+      next.focus();
+      next.select();
+    }
+  }
+
   // Entrée depuis un score de donne : donne suivante, ou validation de la
   // table quand toutes les donnes sont remplies.
   afterDeal(ev: Event): void {
@@ -706,8 +727,31 @@ export class ScoringPage implements OnInit {
   // Enregistre la grille (création / mise à jour / suppression des donnes)
   // puis valide la table. Une table déjà validée reste validée : c'est le
   // chemin « corriger une erreur de saisie ».
+  // Nombre de scores à zéro saisis pour de vrai (sièges occupés).
+  private zeroCount(): number {
+    if (this.entryMode() === 'global') {
+      return this.activeSeats().filter((s) => this.num(this.globalRow().scores[s]) === 0).length;
+    }
+    let n = 0;
+    for (const row of this.rows()) {
+      if (this.rowEmpty(row)) continue;
+      n += this.activeSeats().filter((s) => this.num(row.scores[s]) === 0).length;
+    }
+    return n;
+  }
+
   save(auto = false): void {
     if (!this.canSave() || this.saving()) return;
+    // Plusieurs 0 d'affilée trahissent souvent une case oubliée : on demande
+    // confirmation plutôt que d'enregistrer un résultat douteux.
+    const zeros = this.zeroCount();
+    if (zeros >= 2) {
+      const ok = confirm(
+        `${zeros} score(s) à 0 sur cette table.\n\n` +
+          'Est-ce bien le résultat à enregistrer ?'
+      );
+      if (!ok) return;
+    }
     const existing = this.table()?.hands ?? [];
     const rid = this.roundId();
     const tn = this.tableNumber();

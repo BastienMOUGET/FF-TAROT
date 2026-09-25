@@ -180,6 +180,14 @@ export class TournamentsListPage implements OnInit {
     const ref = this.dialog.open(ConfirmDialog, { data });
     ref.afterClosed().subscribe((ok) => {
       if (!ok) return;
+      // Double confirmation : un challenge emporte tous ses tournois.
+      if (
+        !confirm(
+          `Dernière vérification : le challenge « ${t.name} », tous ses tournois et tous leurs résultats seront perdus définitivement.\n\nConfirmer la suppression ?`
+        )
+      ) {
+        return;
+      }
       this.api.deleteTournament(t.id).subscribe({
         next: () => {
           this.snack.open('Challenge supprimé', 'Fermer', { duration: 2000 });
