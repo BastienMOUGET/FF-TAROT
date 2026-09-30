@@ -255,6 +255,75 @@ end;
 // PrepareToInstall s'execute AVANT le premier fichier copie : c'est ici que
 // l'arret doit avoir lieu (retour terrain n°16).
 
+// Suffixe des binaires mis de cote. Un seul joker en tete et une extension
+// fixe : FindFirst le gere sans surprise.
+const
+  OLD_SUFFIX = '.pabb90old';
+
+function StampNow(): String;
+begin
+  Result := GetDateTimeString('yyyymmddhhnnss', #0, #0);
+end;
+
+// Supprime les binaires mis de cote par une installation precedente. Appele
+// avant l'extraction ET apres le demarrage du service : au premier passage
+// les fichiers de la veille partent, au second ceux qu'on vient de mettre de
+// cote, une fois le nouveau service en place et les verrous relaches.
+procedure PurgeOldBinaries(const AppDir: String);
+var
+  FindRec: TFindRec;
+  Gone, Left: Integer;
+begin
+  Gone := 0;
+  Left := 0;
+  if FindFirst(AppDir + '\*' + OLD_SUFFIX, FindRec) then
+  try
+    repeat
+      if DeleteFile(AppDir + '\' + FindRec.Name) then
+        Gone := Gone + 1
+      else
+        Left := Left + 1;
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
+  end;
+  if (Gone > 0) or (Left > 0) then
+    Log('[PABB90] Purge des anciens binaires : ' + IntToStr(Gone) +
+        ' supprime(s), ' + IntToStr(Left) + ' encore verrouille(s)');
+end;
+
+// Windows refuse de SUPPRIMER un binaire en cours d'execution, mais accepte
+// de le RENOMMER : l'entree de repertoire bouge, le processus garde son
+// handle. C'est le filet de securite quand le service n'a pas voulu
+// s'arreter — l'extraction ecrit alors un server.exe tout neuf a cote.
+procedure MoveBinariesAside(const AppDir, Stamp: String);
+var
+  FindRec: TFindRec;
+  ExePath: String;
+  Moved: Integer;
+begin
+  Moved := 0;
+  ExePath := AppDir + '\server.exe';
+  if FileExists(ExePath) then
+    if RenameFile(ExePath, ExePath + '.' + Stamp + OLD_SUFFIX) then
+      Moved := Moved + 1
+    else
+      Log('[PABB90] server.exe : renommage refuse');
+  // Les DLL runtime sont chargees par ce meme processus, donc verrouillees
+  // de la meme facon.
+  if FindFirst(AppDir + '\*.dll', FindRec) then
+  try
+    repeat
+      if RenameFile(AppDir + '\' + FindRec.Name,
+                    AppDir + '\' + FindRec.Name + '.' + Stamp + OLD_SUFFIX) then
+        Moved := Moved + 1;
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
+  end;
+  Log('[PABB90] ' + IntToStr(Moved) + ' fichier(s) mis de cote avant extraction');
+end;
+
 function ServiceIsStopped(const Sc: String): Boolean;
 var
   ExitCode: Integer;
@@ -266,11 +335,15 @@ end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
-  Sc: String;
+  Sc, AppDir: String;
   ExitCode, I: Integer;
 begin
   Result := '';
   Sc := ExpandConstant('{sys}\sc.exe');
+  AppDir := ExpandConstant('{app}');
+
+  // Restes d'une installation precedente qui n'avait pas pu les supprimer.
+  PurgeOldBinaries(AppDir);
 
   // Service absent (premiere installation) : sc query sort 1060, rien a faire.
   if not (Exec(Sc, 'query PABB90', '', SW_HIDE, ewWaitUntilTerminated, ExitCode)
@@ -300,11 +373,16 @@ begin
     Exit;
   end;
 
-  // Dernier recours avant de faire echouer l'extraction : le processus.
+  // Le service resiste. Plutot que de laisser l'extraction echouer sur
+  // « DeleteFile a echoue ; code 5 », on force le processus, puis on met les
+  // binaires de cote : un renommage reussit meme sur un fichier ouvert.
   Log('[PABB90] Service toujours actif apres 15 s : arret force de server.exe');
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM server.exe', '',
        SW_HIDE, ewWaitUntilTerminated, ExitCode);
   Sleep(2000);
+  if not ServiceIsStopped(Sc) then
+    Log('[PABB90] Service toujours pas arrete : on passe par le renommage');
+  MoveBinariesAside(AppDir, StampNow());
 end;
 
 // Télécharge un MSI (vérif SHA256) dans le dossier temp et l'installe en
@@ -728,6 +806,10 @@ begin
 
   Exec(Sc, 'start PABB90', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   Sleep(2000);
+
+  // Le nouveau service tourne : les binaires de l'ancienne version ne sont
+  // plus tenus par personne, on peut les effacer.
+  PurgeOldBinaries(AppDir);
   Result := True;
 end;
 
