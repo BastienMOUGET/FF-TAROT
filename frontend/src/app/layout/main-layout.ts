@@ -54,12 +54,12 @@ import { RoundTimer } from './round-timer';
             <mat-icon matListItemIcon>emoji_events</mat-icon>
             <span matListItemTitle>Challenges</span>
           </a>
-          @if (auth.isAdmin()) {
-            <a mat-list-item routerLink="/admin" routerLinkActive="active">
-              <mat-icon matListItemIcon>admin_panel_settings</mat-icon>
-              <span matListItemTitle>Administration</span>
-            </a>
-          }
+          <!-- Visible par tous : un utilisateur y consulte les joueurs, les
+               clubs et les paramètres, sans rien pouvoir y changer. -->
+          <a mat-list-item routerLink="/admin" routerLinkActive="active">
+            <mat-icon matListItemIcon>admin_panel_settings</mat-icon>
+            <span matListItemTitle>Administration</span>
+          </a>
           <a mat-list-item routerLink="/aide" routerLinkActive="active">
             <mat-icon matListItemIcon>help_outline</mat-icon>
             <span matListItemTitle>Notice</span>

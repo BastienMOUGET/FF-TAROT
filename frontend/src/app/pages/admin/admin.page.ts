@@ -53,6 +53,17 @@ import { UserDialog } from './dialogs/user-dialog';
       <h1>Administration</h1>
     </div>
 
+    @if (!isAdmin()) {
+      <p class="readonly-banner">
+        <mat-icon>visibility</mat-icon>
+        <span>
+          <strong>Consultation seule.</strong> Seul un compte administrateur
+          peut modifier les joueurs, les clubs, les pénalités et les
+          paramètres, ou sauvegarder la base.
+        </span>
+      </p>
+    }
+
     <mat-tab-group>
       <!-- ====== JOUEURS ====== -->
       <mat-tab label="Joueurs">
@@ -74,10 +85,10 @@ import { UserDialog } from './dialogs/user-dialog';
             Adhérents uniquement
           </mat-checkbox>
           <span class="spacer"></span>
-          <button mat-stroked-button (click)="importPlayers()">
+          <button mat-stroked-button [disabled]="!isAdmin()" (click)="importPlayers()">
             <mat-icon>upload</mat-icon> Importer une liste
           </button>
-          <button mat-flat-button color="primary" (click)="newPlayer()">
+          <button mat-flat-button color="primary" [disabled]="!isAdmin()" (click)="newPlayer()">
             <mat-icon>person_add</mat-icon> Ajouter un joueur
           </button>
         </div>
@@ -111,11 +122,12 @@ import { UserDialog } from './dialogs/user-dialog';
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef class="actions-col"></th>
             <td mat-cell *matCellDef="let p" class="actions-col">
-              <button mat-icon-button (click)="editPlayer(p)" matTooltip="Modifier">
+              <button mat-icon-button [disabled]="!isAdmin()" (click)="editPlayer(p)" matTooltip="Modifier">
                 <mat-icon>edit</mat-icon>
               </button>
               <button
                 mat-icon-button color="warn"
+                [disabled]="!isAdmin()"
                 (click)="deletePlayer(p)" matTooltip="Supprimer"
               >
                 <mat-icon>delete</mat-icon>
@@ -131,7 +143,7 @@ import { UserDialog } from './dialogs/user-dialog';
       <mat-tab label="Clubs">
         <div class="tab-toolbar">
           <span class="spacer"></span>
-          <button mat-flat-button color="primary" (click)="newClub()">
+          <button mat-flat-button color="primary" [disabled]="!isAdmin()" (click)="newClub()">
             <mat-icon>add</mat-icon> Ajouter un club
           </button>
         </div>
@@ -151,10 +163,10 @@ import { UserDialog } from './dialogs/user-dialog';
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef class="actions-col"></th>
             <td mat-cell *matCellDef="let c" class="actions-col">
-              <button mat-icon-button (click)="editClub(c)">
+              <button mat-icon-button [disabled]="!isAdmin()" (click)="editClub(c)">
                 <mat-icon>edit</mat-icon>
               </button>
-              <button mat-icon-button color="warn" (click)="deleteClub(c)">
+              <button mat-icon-button color="warn" [disabled]="!isAdmin()" (click)="deleteClub(c)">
                 <mat-icon>delete</mat-icon>
               </button>
             </td>
@@ -168,7 +180,7 @@ import { UserDialog } from './dialogs/user-dialog';
       <mat-tab label="Types de pénalités">
         <div class="tab-toolbar">
           <span class="spacer"></span>
-          <button mat-flat-button color="primary" (click)="newPenaltyType()">
+          <button mat-flat-button color="primary" [disabled]="!isAdmin()" (click)="newPenaltyType()">
             <mat-icon>add</mat-icon> Ajouter un type
           </button>
         </div>
@@ -188,10 +200,10 @@ import { UserDialog } from './dialogs/user-dialog';
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef class="actions-col"></th>
             <td mat-cell *matCellDef="let p" class="actions-col">
-              <button mat-icon-button (click)="editPenaltyType(p)">
+              <button mat-icon-button [disabled]="!isAdmin()" (click)="editPenaltyType(p)">
                 <mat-icon>edit</mat-icon>
               </button>
-              <button mat-icon-button color="warn" (click)="deletePenaltyType(p)">
+              <button mat-icon-button color="warn" [disabled]="!isAdmin()" (click)="deletePenaltyType(p)">
                 <mat-icon>delete</mat-icon>
               </button>
             </td>
@@ -202,6 +214,7 @@ import { UserDialog } from './dialogs/user-dialog';
       </mat-tab>
 
       <!-- ====== UTILISATEURS ====== -->
+@if (isAdmin()) {
       <mat-tab label="Utilisateurs">
         <div class="tab-toolbar">
           <span class="spacer"></span>
@@ -241,6 +254,7 @@ import { UserDialog } from './dialogs/user-dialog';
           <tr mat-row *matRowDef="let row; columns: ['username', 'role', 'full_name', 'actions']"></tr>
         </table>
       </mat-tab>
+      }
 
       <!-- ====== PARAMÈTRES ====== -->
       <mat-tab label="Paramètres">
@@ -252,7 +266,7 @@ import { UserDialog } from './dialogs/user-dialog';
           <mat-card-content>
             <mat-form-field appearance="outline" class="setting">
               <mat-label>Club par défaut</mat-label>
-              <mat-select [value]="settingClubId()" (selectionChange)="saveSetting('default_club_id', $event.value)">
+              <mat-select [value]="settingClubId()" [disabled]="!isAdmin()" (selectionChange)="saveSetting('default_club_id', $event.value)">
                 <mat-option [value]="null">— aucun —</mat-option>
                 @for (c of clubs(); track c.id) {
                   <mat-option [value]="c.id">{{ c.name }} ({{ c.code }})</mat-option>
@@ -262,7 +276,7 @@ import { UserDialog } from './dialogs/user-dialog';
             </mat-form-field>
             <mat-form-field appearance="outline" class="setting">
               <mat-label>Nombre de manches par défaut</mat-label>
-              <input matInput type="number" min="1" max="12" [value]="settingRounds()" (change)="saveSetting('rounds_default', $any($event.target).value)" />
+              <input matInput type="number" min="1" max="12" [disabled]="!isAdmin()" [value]="settingRounds()" (change)="saveSetting('rounds_default', $any($event.target).value)" />
               <mat-hint>Proposé à la création d'un tournoi ; toutes les manches sont générées après le tirage au sort.</mat-hint>
             </mat-form-field>
           </mat-card-content>
@@ -347,6 +361,11 @@ import { UserDialog } from './dialogs/user-dialog';
     .settings-card { margin-top: 16px; max-width: 640px; }
     .settings-card mat-card-content { display: flex; flex-direction: column; gap: 20px; padding-top: 16px; }
     .setting { width: 100%; }
+    .readonly-banner {
+      display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+      padding: 10px 14px; border-radius: 4px;
+      background: #e3f2fd; color: #0d47a1; line-height: 1.4;
+    }
     .hint { margin: 0; color: rgba(0, 0, 0, 0.7); }
     .locked, .warn-restore {
       display: flex; align-items: flex-start; gap: 8px; margin: 0;
@@ -397,7 +416,9 @@ export class AdminPage implements OnInit {
     this.reloadPlayers();
     this.api.clubs().subscribe((d) => this.clubs.set(d));
     this.api.penaltyTypes().subscribe((d) => this.penaltyTypes.set(d));
-    this.api.users().subscribe((d) => this.users.set(d));
+    // /api/users est refusé à un non-admin : on ne le demande pas, sinon
+    // l'écran s'ouvrirait sur une erreur sans objet.
+    if (this.isAdmin()) this.api.users().subscribe((d) => this.users.set(d));
   }
 
   reloadPlayers() {

@@ -6,6 +6,47 @@
 
 ---
 
+## ✅ v3.0.36 — Retour terrain n°17 : Administration visible en consultation *(livré, 2026-09-30)*
+
+Essais du 30/09 au soir. **Pas de migration** : installation par-dessus la
+précédente, sans perte de données.
+
+### « En tant qu'utilisateur, je n'ai plus accès à Administration »
+
+Remarque juste, et troisième occurrence du **même défaut** après le
+remplacement du Relais (n°14) et l'export FFT (n°14) : une fonction annoncée
+mais inatteignable depuis l'écran. La v3.0.33 grisait bien Sauvegarder et
+Restaurer pour les non-administrateurs — sauf que tout le menu Administration
+était masqué par `adminGuard`. Le grisé promis n'était jamais visible, et un
+utilisateur perdait du même coup la consultation des joueurs, des clubs et
+des paramètres.
+
+L'écran est désormais accessible à tout compte connecté, **en lecture
+seule** :
+
+- un bandeau « Consultation seule » en tête, hors administrateur ;
+- listes joueurs / clubs / pénalités visibles, boutons d'action grisés ;
+- paramètres (club par défaut, nombre de manches) affichés, champs grisés ;
+- Sauvegarder et Restaurer grisés, comme annoncé ;
+- onglet **Utilisateurs masqué** : il expose la liste des comptes, et le
+  serveur la refuse de toute façon (403). On ne la demande donc plus, pour ne
+  pas ouvrir l'écran sur une erreur sans objet.
+
+Aucune permission n'a été élargie. La règle du serveur est inchangée, l'écran
+se contente de la dire avant le clic. Vérifié avec un vrai compte `arbitre` :
+
+```
+GET  /settings /players /clubs /penalty-types   200   (l'écran s'affiche)
+PUT  /settings                                  403
+POST /players /clubs /penalty-types             403
+GET  /users /backup   POST /restore             403
+```
+
+…et après ces tentatives, `rounds_default` valait toujours 4, aucun joueur
+« PIRATE » n'avait été créé.
+
+---
+
 ## ✅ v3.0.35 — Retour terrain n°16 : l'installation qui échouait une fois sur deux *(livré, 2026-09-30)*
 
 Essais du 30/09 après-midi. **Pas de migration** : installation par-dessus la

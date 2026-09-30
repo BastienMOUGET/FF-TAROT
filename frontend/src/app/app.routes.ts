@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { authGuard, adminGuard } from './core/auth.guard';
+import { authGuard } from './core/auth.guard';
 
 export const routes: Routes = [
   {
@@ -94,8 +94,13 @@ export const routes: Routes = [
           import('./pages/help/help.page').then((m) => m.HelpPage),
       },
       {
+        // Accessible à tout compte connecté, mais en lecture seule hors
+        // administrateur : masquer l'écran entier privait les utilisateurs de
+        // la simple consultation des joueurs, des clubs et des paramètres, et
+        // rendait invisible le grisé promis sur Sauvegarder/Restaurer
+        // (retour terrain n°17). Le serveur, lui, refuse toujours les
+        // écritures à un non-admin — l'écran ne fait que le dire avant le clic.
         path: 'admin',
-        canActivate: [adminGuard],
         loadComponent: () =>
           import('./pages/admin/admin.page').then((m) => m.AdminPage),
       },

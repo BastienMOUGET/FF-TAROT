@@ -271,6 +271,14 @@ import { environment } from '../../../environments/environment';
             se fait par les moyens habituels de la fédération : l'application
             ne s'y connecte pas.
           </dd>
+          <dt>Pourquoi tout est-il grisé dans Administration ?</dt>
+          <dd>
+            Parce que la connexion en cours n'est pas celle de
+            l'administrateur. Les listes et les réglages restent consultables,
+            mais seuls les comptes administrateurs peuvent les modifier,
+            sauvegarder ou restaurer la base. L'onglet Utilisateurs, lui,
+            n'apparaît que pour l'administrateur.
+          </dd>
           <dt>Le mot de passe n'est pas redemandé ?</dt>
           <dd>
             La session se ferme d'elle-même après quatre heures sans
