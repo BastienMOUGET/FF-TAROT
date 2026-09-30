@@ -141,3 +141,42 @@ jobs:
             if ($errs) { Write-Host "$f :"; $errs | ForEach-Object { Write-Host "  $_" }; exit 1 }
             Write-Host "$f OK"
           }
+
+  # ====================================================================
+  # Compilation de l'installeur. Le script Inno contient du Pascal Script
+  # (arrêt du service, migrations, environnement) que RIEN ne vérifiait :
+  # seul le workflow Release le compilait, et il ne part que sur un tag —
+  # une faute de syntaxe ne se serait donc vue qu'après avoir brûlé une
+  # version. On le compile ici à chaque poussée touchant l'installeur.
+  # ====================================================================
+  installer:
+    name: Compile l'installeur Windows (setup.iss)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Inno Setup (si absent)
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+
+      # Les sources que [Files] attend ne sont pas construites ici : on ne
+      # veut valider que le script. Des fichiers vides suffisent à ISCC.
+      - name: Fabriquer les fichiers attendus par [Files]
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path windows-dll, frontend\public, frontend\dist | Out-Null
+          Set-Content -Path server.exe -Value ''
+          Set-Content -Path windows-dll\placeholder.dll -Value ''
+          Set-Content -Path frontend\public\placeholder.txt -Value ''
+          Set-Content -Path frontend\dist\placeholder.txt -Value ''
+
+      - name: Compile setup.iss
+        shell: pwsh
+        working-directory: installer
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          & $iscc "/DAppVersion=0.0.0-ci" setup.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host 'setup.iss compile sans erreur'

@@ -87,7 +87,8 @@ l'aligner sur le cache local, toujours vérifier avec `git ls-remote`.
   le club n'utilise pas les pénalités. À traiter avant de s'en servir, ou si
   un ajustement manuel du classement du Challenge devient nécessaire.
 - Aucun test automatisé du back : la CI vérifie le build, des sentinelles
-  textuelles sur `migrations/` et le lint des scripts, pas le comportement.
+  textuelles sur `migrations/`, `tests/migrations.sh`, le lint des scripts et
+  la compilation de `installer/setup.iss` — pas le comportement du serveur.
   Les vérifications se font à la main avec `./server-ci` sur une base
   jetable (voir plus haut).
 

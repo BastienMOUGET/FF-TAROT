@@ -6,6 +6,48 @@
 
 ---
 
+## ✅ v3.0.35 — Retour terrain n°16 : l'installation qui échouait une fois sur deux *(livré, 2026-09-30)*
+
+Essais du 30/09 après-midi. **Pas de migration** : installation par-dessus la
+précédente, sans perte de données.
+
+### « Je dois m'y reprendre à deux fois pour que l'installation démarre »
+
+Le message exact :
+
+```
+Une erreur est survenue lors du remplacement d'un fichier existant :
+DeleteFile a échoué ; code 5. Accès refusé.   →  C:\PABB90\server.exe
+```
+
+**Le service PABB90 tournait encore pendant la copie des fichiers.** Windows
+refuse de remplacer le binaire d'un processus vivant. Le seul `sc stop` du
+script vivait dans `InstallService()`, qui s'exécute en `ssPostInstall` —
+c'est-à-dire **après** l'extraction. La deuxième tentative réussissait parce
+que la première, avortée, avait laissé le service arrêté.
+
+`PrepareToInstall()` s'exécute avant le premier fichier copié : le service y
+est maintenant arrêté, puis on **attend son arrêt effectif** (`sc stop` rend
+la main aussitôt, sans attendre), jusqu'à 15 secondes, avec `taskkill` en
+dernier recours. Une première installation, sans service existant, passe son
+chemin.
+
+### La CI compile désormais l'installeur
+
+Ce script Inno contient tout le Pascal Script de l'installation — arrêt du
+service, migrations, environnement — et **rien ne le vérifiait**. Seul le
+workflow Release le compilait, et il ne part que sur un tag : une faute de
+syntaxe ne se serait vue qu'après avoir livré. Un travail `installer` compile
+`setup.iss` à chaque poussée, avec des fichiers vides à la place des binaires,
+puisqu'on ne valide que le script.
+
+### Confirmé par le club sur la v3.0.34
+
+Le mot de passe est bien demandé au lancement, et la sauvegarde fonctionne —
+fichier copié sur clé USB. Les deux corrections du retour n°15 tiennent.
+
+---
+
 ## ✅ v3.0.34 — Retour terrain n°15 : la sauvegarde qui échouait *(livré, 2026-09-30)*
 
 Premiers essais de la v3.0.33 par le club, le 30/09. **Pas de migration** :

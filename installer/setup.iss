@@ -241,6 +241,72 @@ begin
   Log('[PABB90] ' + Msg);
 end;
 
+// ---------------------------------------------------------------------------
+// ARRET DU SERVICE AVANT L'EXTRACTION
+// ---------------------------------------------------------------------------
+// Une mise a jour par-dessus echouait une fois sur deux sur :
+//   « DeleteFile a echoue ; code 5. Acces refuse. » -> C:\PABB90\server.exe
+// Cause : le service PABB90 tournait encore pendant la copie des fichiers, et
+// Windows refuse de remplacer le binaire d'un processus vivant. Le seul
+// `sc stop` du script vivait dans InstallService(), qui s'execute en
+// ssPostInstall -- donc APRES l'extraction. Le beau-pere s'en sortait en
+// relancant : la tentative avortee avait laisse le service arrete.
+//
+// PrepareToInstall s'execute AVANT le premier fichier copie : c'est ici que
+// l'arret doit avoir lieu (retour terrain n°16).
+
+function ServiceIsStopped(const Sc: String): Boolean;
+var
+  ExitCode: Integer;
+begin
+  // findstr sort 0 si l'etat STOPPED apparait dans la sortie de sc query.
+  Result := ExecCmdShell('"' + Sc + '" query PABB90 | findstr /C:"STOPPED"',
+                         '', ExitCode) and (ExitCode = 0);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Sc: String;
+  ExitCode, I: Integer;
+begin
+  Result := '';
+  Sc := ExpandConstant('{sys}\sc.exe');
+
+  // Service absent (premiere installation) : sc query sort 1060, rien a faire.
+  if not (Exec(Sc, 'query PABB90', '', SW_HIDE, ewWaitUntilTerminated, ExitCode)
+          and (ExitCode = 0)) then
+  begin
+    Log('[PABB90] Pas de service PABB90 existant : installation neuve');
+    Exit;
+  end;
+
+  SetProgress('Arret du service PABB90 avant mise a jour...');
+  Exec(Sc, 'stop PABB90', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+
+  // `sc stop` rend la main aussitot, sans attendre l'arret effectif : on
+  // attend nous-memes, jusqu'a 15 secondes.
+  for I := 1 to 30 do
+  begin
+    if ServiceIsStopped(Sc) then Break;
+    Sleep(500);
+  end;
+
+  if ServiceIsStopped(Sc) then
+  begin
+    Log('[PABB90] Service arrete, les fichiers peuvent etre remplaces');
+    // Le SCM a lache le handle, mais le processus peut survivre une fraction
+    // de seconde : on laisse Windows liberer le verrou.
+    Sleep(1000);
+    Exit;
+  end;
+
+  // Dernier recours avant de faire echouer l'extraction : le processus.
+  Log('[PABB90] Service toujours actif apres 15 s : arret force de server.exe');
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM server.exe', '',
+       SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  Sleep(2000);
+end;
+
 // Télécharge un MSI (vérif SHA256) dans le dossier temp et l'installe en
 // silencieux. Renvoie True seulement si msiexec sort avec un code de succès
 // (0 ou 3010 = succès + reboot requis). ExtraProps = propriétés MSI publiques
