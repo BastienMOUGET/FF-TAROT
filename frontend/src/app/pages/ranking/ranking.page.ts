@@ -7,7 +7,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DatePipe, Location } from '@angular/common';
 
 import { MatTableModule } from '@angular/material/table';
@@ -33,6 +33,7 @@ import { ClubLogo } from '../../shared/club-logo';
     MatIconModule,
     MatChipsModule,
     MatProgressSpinnerModule,
+    RouterLink,
     ClubLogo,
   ],
   template: `
@@ -40,6 +41,19 @@ import { ClubLogo } from '../../shared/club-logo';
       <button type="button" class="back" (click)="goBack()">
         <mat-icon>arrow_back</mat-icon> Retour
       </button>
+      <!-- Consulter un classement au milieu d'une soirée ne doit pas coûter
+           un détour par la page du tournoi : on repart droit sur la manche
+           en cours de saisie (retour terrain n°15). -->
+      @if (resumeRound(); as r) {
+        <a
+          mat-flat-button
+          color="primary"
+          [routerLink]="['/rounds', r.id]"
+          class="resume"
+        >
+          <mat-icon>edit_note</mat-icon> Reprendre la manche {{ r.round_number }}
+        </a>
+      }
       <span class="spacer"></span>
       <button mat-flat-button color="primary" (click)="print()">
         <mat-icon>print</mat-icon> Imprimer
@@ -181,6 +195,7 @@ import { ClubLogo } from '../../shared/club-logo';
     }
     .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
     .spacer { flex: 1 1 auto; }
+    .resume { margin-left: 8px; }
     .head { margin-bottom: 24px; }
     .updated { margin-left: 12px; color: #757575; font-size: 0.85em; }
     table { width: 100%; }
@@ -221,6 +236,10 @@ export class RankingPage implements OnInit, OnDestroy {
   subTournamentId = signal<number>(0);
   throughRound = signal<number | null>(null);
   lastUpdate = signal<Date | null>(null);
+
+  // Manche encore en saisie : la première dont toutes les tables ne sont pas
+  // validées. Si tout est validé, la dernière — c'est là qu'on revient.
+  resumeRound = signal<{ id: number; round_number: number } | null>(null);
 
   detailRounds = signal<{ id: number; round_number: number }[]>([]);
   // Les colonnes de manches se glissent entre « Manches » et « Total ».
@@ -277,6 +296,7 @@ export class RankingPage implements OnInit, OnDestroy {
       },
       error: () => {},
     });
+    this.findResumeRound(id);
     // Le détail par manche vaut aussi pour un classement arrêté à la manche
     // N : il ne montre alors que les manches 1..N (retour terrain n°13).
     this.api.rankingDetail(id, this.throughRound() ?? undefined).subscribe({
@@ -335,6 +355,43 @@ export class RankingPage implements OnInit, OnDestroy {
       { duration: 7000 }
     );
     window.open(url, '_blank', 'noopener');
+  }
+
+  private findResumeRound(subTournamentId: number): void {
+    this.api.rounds(subTournamentId).subscribe({
+      next: (rounds) => {
+        if (rounds.length === 0) return;
+        const ordered = [...rounds].sort(
+          (a, b) => a.round_number - b.round_number
+        );
+        // On interroge les manches une à une et on garde la première
+        // incomplète ; à défaut, la dernière.
+        let pending = ordered.length;
+        const open: { id: number; round_number: number }[] = [];
+        const settle = () => {
+          if (--pending > 0) return;
+          open.sort((a, b) => a.round_number - b.round_number);
+          const last = ordered[ordered.length - 1];
+          const pick = open.length > 0 ? open[0] : last;
+          this.resumeRound.set({
+            id: pick.id,
+            round_number: pick.round_number,
+          });
+        };
+        for (const r of ordered) {
+          this.api.tableResults(r.id).subscribe({
+            next: (results) => {
+              const done =
+                results.length > 0 && results.every((t) => !!t.validated);
+              if (!done) open.push(r);
+              settle();
+            },
+            error: () => settle(),
+          });
+        }
+      },
+      error: () => {},
+    });
   }
 
   // Le CSV au masque fédéral existait côté serveur depuis la v3.0.30 mais

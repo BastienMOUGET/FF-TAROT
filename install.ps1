@@ -217,6 +217,7 @@ JWT_EXPIRES_IN=12h
 
 MYSQLDUMP=$MysqlDumpBin
 MYSQLCLIENT=$MysqlBin
+BACKUP_TMP=$InstallDir
 "@ | Out-File -FilePath $EnvFile -Encoding ASCII -Force
 Write-Ok ".env généré"
 

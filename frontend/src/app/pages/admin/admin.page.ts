@@ -612,13 +612,42 @@ export class AdminPage implements OnInit {
       },
       error: (err: any) => {
         this.busy.set(false);
-        this.snack.open(
-          err?.error?.error || 'La sauvegarde a échoué',
-          'Fermer',
-          { duration: 5000 }
-        );
+        // La réponse est demandée en Blob : en cas d'erreur, le corps JSON du
+        // serveur arrive lui aussi en Blob, et `err.error.error` est vide.
+        // Sans ce décodage, toute panne se résumait à « la sauvegarde a
+        // échoué », sans le diagnostic que le serveur avait pourtant écrit
+        // (retour terrain n°15).
+        this.showError('Sauvegarde impossible', err, 'La sauvegarde a échoué.');
       },
     });
+  }
+
+  // Un message d'erreur de sauvegarde tient sur plusieurs lignes (outil,
+  // dossier, message système) : une boîte de dialogue, pas un bandeau qui
+  // disparaît au bout de cinq secondes.
+  private showError(title: string, err: any, fallback: string): void {
+    const say = (message: string) =>
+      this.confirm({
+        title,
+        message,
+        confirmLabel: 'Fermer',
+        hideCancel: true,
+      }).subscribe();
+    const body = err?.error;
+    if (body instanceof Blob) {
+      body.text().then(
+        (t) => {
+          try {
+            say(JSON.parse(t)?.error || fallback);
+          } catch {
+            say(t || fallback);
+          }
+        },
+        () => say(fallback)
+      );
+      return;
+    }
+    say(body?.error || fallback);
   }
 
   pickRestoreFile(): void {
@@ -660,10 +689,10 @@ export class AdminPage implements OnInit {
             },
             error: (err: any) => {
               this.busy.set(false);
-              this.snack.open(
-                err?.error?.error || 'La restauration a échoué',
-                'Fermer',
-                { duration: 8000 }
+              this.showError(
+                'Restauration impossible',
+                err,
+                'La restauration a échoué.'
               );
             },
           });

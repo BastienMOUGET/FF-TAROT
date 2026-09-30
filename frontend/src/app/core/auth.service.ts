@@ -11,12 +11,25 @@ const STORAGE_KEY = 'fft.auth';
 interface StoredAuth {
   token: string;
   user: User;
+  // Dernier signe de vie, en millisecondes. Voir IDLE_MS.
+  seen?: number;
 }
 
-// La session vit dans sessionStorage et non localStorage : fermer le
-// programme (ou l'onglet) déconnecte, et le mot de passe est redemandé au
-// lancement suivant. Avant, la session survivait des heures et l'utilisateur
-// ne butait dessus qu'au moment d'enregistrer (retour terrain n°14).
+// Au-delà de ce délai sans activité, la session est jetée et le mot de passe
+// redemandé. Quatre heures : une soirée de tournoi est une suite ininterrompue
+// de saisies, personne n'est donc déconnecté en cours de route, mais d'une
+// soirée à l'autre la question est toujours posée.
+const IDLE_MS = 4 * 60 * 60 * 1000;
+
+// La session vit dans sessionStorage et non localStorage : fermer l'onglet
+// déconnecte (retour terrain n°14).
+//
+// Cela ne suffisait pas. Le raccourci du bureau est une simple URL vers
+// localhost:3000, et Chrome comme Edge restaurent le sessionStorage avec les
+// onglets qu'ils rouvrent : le programme se retrouvait déjà connecté au
+// lancement suivant, alors que le club demandait l'inverse (retour terrain
+// n°15). D'où le délai d'inactivité ci-dessus, qui ne dépend d'aucun
+// comportement de navigateur.
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private http = inject(HttpClient);
@@ -36,7 +49,11 @@ export class AuthService {
         { username, password }
       )
     );
-    const stored: StoredAuth = { token: res.token, user: res.user };
+    const stored: StoredAuth = {
+      token: res.token,
+      user: res.user,
+      seen: Date.now(),
+    };
     this.state.set(stored);
     this.writeStorage(stored);
     return res.user;
@@ -48,16 +65,48 @@ export class AuthService {
     this.router.navigate(['/login']);
   }
 
+  // Appelé à chaque requête à l'API : tant que le programme sert, la session
+  // reste ouverte.
+  touch(): void {
+    const s = this.state();
+    if (!s) return;
+    const now = Date.now();
+    // On n'écrit pas à chaque appel : une fois par minute suffit largement.
+    if (s.seen && now - s.seen < 60_000) return;
+    const next = { ...s, seen: now };
+    this.state.set(next);
+    this.writeStorage(next);
+  }
+
   private readStorage(): StoredAuth | null {
     try {
+      // Jusqu'à la v3.0.32 la session vivait dans localStorage. Plus rien ne
+      // la lit, mais un jeton y dormirait indéfiniment : on fait le ménage.
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Stockage refusé : rien à nettoyer.
+    }
+    try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as StoredAuth) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as StoredAuth;
+      // Une session restaurée par le navigateur mais vieille d'une soirée ne
+      // vaut plus : on repasse par le mot de passe.
+      if (!parsed.seen || Date.now() - parsed.seen > IDLE_MS) {
+        sessionStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
   }
 
   private writeStorage(value: StoredAuth): void {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    } catch {
+      // Navigation privée ou stockage refusé : la session reste en mémoire.
+    }
   }
 }

@@ -6,6 +6,91 @@
 
 ---
 
+## ✅ v3.0.34 — Retour terrain n°15 : la sauvegarde qui échouait *(livré, 2026-09-30)*
+
+Premiers essais de la v3.0.33 par le club, le 30/09. **Pas de migration** :
+installation par-dessus la précédente, sans perte de données.
+
+### « La sauvegarde a échoué » — et rien pour savoir pourquoi
+
+Deux défauts superposés, l'un masquant l'autre.
+
+**Le message.** Le front demandait la réponse en `Blob`, pour enregistrer le
+`.sql` tel quel. En cas d'erreur, le corps JSON du serveur arrive lui aussi
+en `Blob` : `err.error.error` était donc vide et toute panne se résumait au
+repli « la sauvegarde a échoué ». Le serveur écrivait un diagnostic que
+personne ne lisait. Le corps est maintenant décodé, et le message s'affiche
+dans une boîte de dialogue — il tient sur plusieurs lignes.
+
+**La cause.** Le service tourne en **LocalSystem**, dont le `PATH` ne
+contient pas `C:\Program Files\MariaDB 11.8\bin`. Or `Config.Get()` retombe
+sur son défaut dès que la variable est absente **ou vide** : si
+`FindMysqlDumpExe()` de l'installeur n'avait rien trouvé, le serveur lançait
+`mysqldump` tout court, introuvable pour lui. Et `.env` ne le rattrapait
+pas : `Config` le lit dans le répertoire courant, qui vaut `system32` pour
+un service — seul le registre compte.
+
+Trois corrections :
+
+- Le serveur **cherche lui-même** l'outil : la configuration d'abord, puis
+  les dossiers d'installation MariaDB (12.0 → 10.11, `mariadb-dump.exe` puis
+  `mysqldump.exe`), le PATH en dernier. Il ne dépend plus de ce que
+  l'installeur a su deviner.
+- Le **dossier de travail** n'est plus supposé : `BACKUP_TMP`, `TEMP`, `TMP`,
+  `/tmp`, `.` sont essayés dans l'ordre, et on garde le premier où l'on sait
+  réellement écrire. Le repli `/tmp` en dur n'existe pas sous Windows, et
+  l'échec d'écriture du fichier d'options n'était pas contrôlé — mysqldump
+  échouait alors sur un `--defaults-extra-file` introuvable. Les quatre
+  chemins d'installation écrivent désormais `BACKUP_TMP`.
+- `Process.RunCapture` remplace `Process.Run` : l'erreur porte maintenant le
+  code de sortie, **l'outil employé, le dossier de travail et le message du
+  système**. Un diagnostic à distance tient en une copie d'écran.
+
+Au passage, `--result-file=` remplace la redirection `>`, et `-e "source …"`
+la redirection `<` : les outils écrivent et lisent les fichiers eux-mêmes.
+(La redirection fonctionnait — `Process.Run` passe par `system()`, donc
+`cmd.exe /c` sous Windows — mais une dépendance de moins au shell est une
+cause de panne de moins.)
+
+Vérifié sur base jetable : cycle complet sauvegarde → suppression →
+restauration à l'identique ; 401 sans jeton ; fichier qui n'est pas une
+sauvegarde refusé ; aucun temporaire laissé. Et, outil rendu introuvable
+exprès, le message obtenu est :
+
+```
+Sauvegarde impossible (code 127).
+Outil : …/pas-la
+Dossier de travail : …
+Message : sh: 1: …/pas-la: not found
+```
+
+### Le mot de passe n'était toujours pas demandé au lancement
+
+`sessionStorage` ne suffisait pas. Le raccourci du bureau est une simple URL
+vers `localhost:3000`, et Chrome comme Edge **restaurent le sessionStorage**
+avec les onglets qu'ils rouvrent : le programme se retrouvait déjà connecté.
+Aucun choix de stockage ne corrige cela.
+
+La session porte donc un horodatage de dernière activité, rafraîchi à chaque
+appel à l'API, et elle est jetée au-delà de **4 heures d'inactivité**. Une
+soirée de tournoi étant une suite ininterrompue de saisies, personne n'est
+déconnecté en cours de route ; d'une soirée à l'autre, la question est
+toujours posée. Le jeton que la v3.0.32 avait laissé dans `localStorage` est
+effacé au premier lancement.
+
+*Si le club préfère la version stricte — mot de passe à chaque ouverture,
+quitte à le ressaisir après un simple rafraîchissement de page — c'est un
+réglage d'une ligne.*
+
+### Revenir à la saisie depuis un classement
+
+Consulter le classement de la manche 2 pendant la saisie de la 3e obligeait
+à repasser par la page du tournoi. Le classement général porte maintenant un
+bouton **« Reprendre la manche N »**, qui pointe la première manche dont
+toutes les tables ne sont pas validées — la dernière si tout l'est.
+
+---
+
 ## ✅ v3.0.33 — Retour terrain n°14 : sauvegarde intégrée, ajout d'un joueur après placement *(livré, 2026-09-30)*
 
 Conversation WhatsApp des 26 et 27/09, après plusieurs soirées sur la

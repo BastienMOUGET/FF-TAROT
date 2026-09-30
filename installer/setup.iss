@@ -560,7 +560,8 @@ begin
     'JWT_EXPIRES_IN=12h' + #13#10 + #13#10 +
     '# Sauvegarde / restauration depuis Administration > Parametres' + #13#10 +
     'MYSQLDUMP=' + FindMysqlDumpExe() + #13#10 +
-    'MYSQLCLIENT=' + MysqlExe + #13#10;
+    'MYSQLCLIENT=' + MysqlExe + #13#10 +
+    'BACKUP_TMP=' + ExpandConstant('{app}') + #13#10;
   SaveStringToFile(EnvFile, EnvContent, False);
 
   Result := True;
@@ -648,8 +649,16 @@ begin
     'JWT_SECRET=' + JwtSecret + #0 +
     'MYSQLDUMP=' + FindMysqlDumpExe() + #0 +
     'MYSQLCLIENT=' + FindMysqlExe() + #0 +
+    'BACKUP_TMP=' + AppDir + #0 +
     'FRONT_DIR=' + AppDir + '\frontend\dist\frontend\browser';
   RegWriteMultiStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\PABB90', 'Environment', EnvData);
+  // Le service tourne en LocalSystem : son PATH ne contient pas le bin\ de
+  // MariaDB, donc un nom nu ne se resout pas. Si on n'a pas su localiser
+  // mysqldump, les boutons Sauvegarder/Restaurer echoueront -- on le trace.
+  if FindMysqlDumpExe() = '' then
+    Log('[PABB90] mysqldump introuvable : sauvegarde depuis l''application indisponible')
+  else
+    Log('[PABB90] mysqldump : ' + FindMysqlDumpExe());
 
   Exec(Sc, 'start PABB90', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   Sleep(2000);

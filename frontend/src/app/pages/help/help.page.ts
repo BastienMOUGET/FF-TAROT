@@ -271,6 +271,21 @@ import { environment } from '../../../environments/environment';
             se fait par les moyens habituels de la fédération : l'application
             ne s'y connecte pas.
           </dd>
+          <dt>Le mot de passe n'est pas redemandé ?</dt>
+          <dd>
+            La session se ferme d'elle-même après quatre heures sans
+            activité : d'une soirée à l'autre, le mot de passe est toujours
+            demandé, mais personne n'est déconnecté au milieu d'une saisie.
+            Le bouton <strong>Déconnexion</strong> ferme la session tout de
+            suite.
+          </dd>
+          <dt>« La sauvegarde a échoué » ?</dt>
+          <dd>
+            Le message indique maintenant l'outil employé, le dossier de
+            travail et l'erreur exacte. Recopiez-le tel quel : il dit ce qui
+            manque, en général <code>mysqldump</code> que le programme n'a
+            pas su localiser. Réinstaller par-dessus le remet en place.
+          </dd>
           <dt>Un joueur pointé par erreur ?</dt>
           <dd>
             Sur l'écran « Joueurs » du tournoi, « Remplacer un joueur » :

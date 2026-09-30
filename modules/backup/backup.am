@@ -15,19 +15,75 @@ import Amalgame.IO
 // l'environnement du service, faute de quoi on tente le PATH.
 public class ModBackup {
 
-    static string DumpExe() { return Config.Get("MYSQLDUMP", "mysqldump") }
-    static string ClientExe() { return Config.Get("MYSQLCLIENT", "mysql") }
+    // Versions de MariaDB cherchées sous Windows, de la plus récente à la
+    // plus ancienne — la même liste que FindMysqlExe() de l'installeur.
+    static List<string> MariaDbVersions() {
+        let v: List<string> = new List<string>()
+        v.Add("12.0")
+        v.Add("11.8")
+        v.Add("11.7")
+        v.Add("11.6")
+        v.Add("11.5")
+        v.Add("11.4")
+        v.Add("11.3")
+        v.Add("11.2")
+        v.Add("10.11")
+        return v
+    }
 
-    // Dossier de travail : TEMP sous Windows, /tmp ailleurs.
+    // Cherche un exécutable MariaDB. La configuration a toujours le dernier
+    // mot ; sinon on balaie les dossiers d'installation Windows avant de se
+    // rabattre sur le PATH.
+    //
+    // Pourquoi ce balayage : le service tourne en LocalSystem, dont le PATH
+    // ne contient pas « C:\Program Files\MariaDB 11.8\bin ». Un nom nu ne
+    // s'y résout donc pas, et Config.Get() retombe sur ce nom nu dès que la
+    // variable est absente OU vide — ce qui arrive si l'installeur n'a pas
+    // su localiser l'outil (retour terrain n°15 : « la sauvegarde a échoué »).
+    static string FindExe(string key, string winName, string winAlt, string posixName) {
+        let configured: string = Config.Get(key, "")
+        if (String.Length(configured) > 0) { return configured }
+        let versions: List<string> = ModBackup.MariaDbVersions()
+        for i in 0..versions.Count() {
+            let base: string = "C:\\Program Files\\MariaDB " + versions.Get(i) + "\\bin\\"
+            if (File.Exists(base + winName)) { return base + winName }
+            if (File.Exists(base + winAlt)) { return base + winAlt }
+        }
+        return posixName
+    }
+
+    static string DumpExe() { return ModBackup.FindExe("MYSQLDUMP", "mariadb-dump.exe", "mysqldump.exe", "mysqldump") }
+    static string ClientExe() { return ModBackup.FindExe("MYSQLCLIENT", "mariadb.exe", "mysql.exe", "mysql") }
+
+    // Dossier de travail. On ne se contente pas de lire TEMP : un service
+    // Windows peut ne pas l'avoir, et le repli « /tmp » n'existe alors pas,
+    // si bien que mysqldump échouait sur un fichier d'options introuvable.
+    // On essaie donc les candidats dans l'ordre et on garde le premier où
+    // l'on sait réellement écrire.
     static string TempDir() {
+        let candidates: List<string> = new List<string>()
+        let configured: string = Config.Get("BACKUP_TMP", "")
+        if (String.Length(configured) > 0) { candidates.Add(configured) }
         let t: string = Config.Get("TEMP", "")
-        if (String.Length(t) > 0) { return t }
-        return "/tmp"
+        if (String.Length(t) > 0) { candidates.Add(t) }
+        let t2: string = Config.Get("TMP", "")
+        if (String.Length(t2) > 0) { candidates.Add(t2) }
+        candidates.Add("/tmp")
+        candidates.Add(".")
+        for i in 0..candidates.Count() {
+            let dir: string = candidates.Get(i)
+            let probe: string = dir + "/pabb90-ecriture.test"
+            if (File.WriteAll(probe, "ok")) {
+                File.Delete(probe)
+                return dir
+            }
+        }
+        return "."
     }
 
     // Fichier d'options jetable : le mot de passe passe par là et jamais par
     // la ligne de commande, qui est visible de tous les processus.
-    static string WriteOptionFile(string path) {
+    static bool WriteOptionFile(string path) {
         let host: string = Config.Get("DB_HOST", "127.0.0.1")
         let port: string = Config.Get("DB_PORT", "3306")
         let user: string = Config.Get("DB_USER", "fft_user")
@@ -37,8 +93,16 @@ public class ModBackup {
         content = content + "port=" + port + "\n"
         content = content + "user=" + user + "\n"
         if (String.Length(pass) > 0) { content = content + "password=" + pass + "\n" }
-        File.WriteAll(path, content)
-        return path
+        return File.WriteAll(path, content)
+    }
+
+    // Les sorties d'outils peuvent être longues ; on n'en garde que de quoi
+    // comprendre, le message part dans une boîte de dialogue.
+    static string Short(string s) {
+        let t: string = String.Trim(s)
+        if (String.Length(t) == 0) { return "(aucun message)" }
+        if (String.Length(t) <= 400) { return t }
+        return String.Substring(t, 0, 400) + "…"
     }
 
     static string Quote(string s) { return "\"" + s + "\"" }
@@ -60,20 +124,30 @@ public class ModBackup {
 
         let dbName: string = Config.Get("DB_NAME", "fft")
         let stamp: string = ModBackup.Stamp(db)
-        let optPath: string = ModBackup.TempDir() + "/pabb90-opt-" + stamp + ".cnf"
-        let outPath: string = ModBackup.TempDir() + "/pabb90-dump-" + stamp + ".sql"
-        ModBackup.WriteOptionFile(optPath)
+        let tmp: string = ModBackup.TempDir()
+        let exe: string = ModBackup.DumpExe()
+        let optPath: string = tmp + "/pabb90-opt-" + stamp + ".cnf"
+        let outPath: string = tmp + "/pabb90-dump-" + stamp + ".sql"
+        if (!ModBackup.WriteOptionFile(optPath)) {
+            return HttpErr.BadRequest("Sauvegarde impossible : le programme n'arrive à écrire dans aucun dossier temporaire (essayé : " + tmp + "). Définissez BACKUP_TMP sur un dossier accessible en écriture.")
+        }
 
         // --single-transaction : sauvegarde cohérente sans bloquer le jeu.
-        let cmd: string = ModBackup.Quote(ModBackup.DumpExe())
+        // --result-file plutôt qu'une redirection : mysqldump écrit alors le
+        // fichier lui-même, en binaire, sans que le shell s'en mêle.
+        let cmd: string = ModBackup.Quote(exe)
             + " --defaults-extra-file=" + ModBackup.Quote(optPath)
-            + " --single-transaction --default-character-set=utf8mb4 "
-            + dbName + " > " + ModBackup.Quote(outPath)
-        let code: int = Process.Run(cmd)
+            + " --single-transaction --default-character-set=utf8mb4"
+            + " --result-file=" + ModBackup.Quote(outPath)
+            + " " + dbName
+        // RunCapture et non Run : sans la sortie de mysqldump, toute panne se
+        // résumait à « la sauvegarde a échoué », sans rien pour la diagnostiquer
+        // à distance (retour terrain n°15).
+        let res = Process.RunCapture(cmd)
         File.Delete(optPath)
-        if (code != 0) {
+        if (res.Exit != 0) {
             File.Delete(outPath)
-            return HttpErr.BadRequest("Sauvegarde impossible : l'outil mysqldump n'a pas pu être lancé (code " + String.FromInt(code) + "). Vérifiez que MariaDB est installé.")
+            return HttpErr.BadRequest("Sauvegarde impossible (code " + String.FromInt(res.Exit) + ").\nOutil : " + exe + "\nDossier de travail : " + tmp + "\nMessage : " + ModBackup.Short(res.Stdout))
         }
         let sql: string = File.ReadAll(outPath)
         File.Delete(outPath)
@@ -103,23 +177,30 @@ public class ModBackup {
 
         let dbName: string = Config.Get("DB_NAME", "fft")
         let stamp: string = ModBackup.Stamp(db)
-        let optPath: string = ModBackup.TempDir() + "/pabb90-opt-" + stamp + ".cnf"
-        let inPath: string = ModBackup.TempDir() + "/pabb90-restore-" + stamp + ".sql"
-        ModBackup.WriteOptionFile(optPath)
+        let tmp: string = ModBackup.TempDir()
+        let exe: string = ModBackup.ClientExe()
+        let optPath: string = tmp + "/pabb90-opt-" + stamp + ".cnf"
+        let inPath: string = tmp + "/pabb90-restore-" + stamp + ".sql"
+        if (!ModBackup.WriteOptionFile(optPath)) {
+            return HttpErr.BadRequest("Restauration impossible : le programme n'arrive à écrire dans aucun dossier temporaire (essayé : " + tmp + ").")
+        }
         if (!File.WriteAll(inPath, sql)) {
             File.Delete(optPath)
-            return HttpErr.BadRequest("Impossible d'écrire le fichier temporaire de restauration.")
+            return HttpErr.BadRequest("Impossible d'écrire le fichier temporaire de restauration dans " + tmp + ".")
         }
 
-        let cmd: string = ModBackup.Quote(ModBackup.ClientExe())
+        // « source » plutôt qu'une redirection d'entrée : le client lit alors
+        // le fichier lui-même, sans dépendre de la façon dont le shell de la
+        // plateforme traite « < ».
+        let cmd: string = ModBackup.Quote(exe)
             + " --defaults-extra-file=" + ModBackup.Quote(optPath)
             + " --default-character-set=utf8mb4 "
-            + dbName + " < " + ModBackup.Quote(inPath)
-        let code: int = Process.Run(cmd)
+            + dbName + " -e " + ModBackup.Quote("source " + inPath)
+        let res = Process.RunCapture(cmd)
         File.Delete(optPath)
         File.Delete(inPath)
-        if (code != 0) {
-            return HttpErr.BadRequest("Restauration échouée (code " + String.FromInt(code) + "). La base n'est peut-être que partiellement restaurée : recommencez avec une sauvegarde valide.")
+        if (res.Exit != 0) {
+            return HttpErr.BadRequest("Restauration échouée (code " + String.FromInt(res.Exit) + ").\nOutil : " + exe + "\nMessage : " + ModBackup.Short(res.Stdout) + "\nLa base n'est peut-être que partiellement restaurée : recommencez avec une sauvegarde valide.")
         }
 
         // Le schéma de la sauvegarde peut être plus ancien que le programme.

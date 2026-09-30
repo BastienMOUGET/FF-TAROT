@@ -9,6 +9,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
+  // Toute requête à l'API vaut signe de vie : la session ne se referme que
+  // sur une vraie inactivité, jamais au milieu d'une soirée de saisie.
+  auth.touch();
   const token = auth.token();
   const authReq = token
     ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
