@@ -89,7 +89,7 @@ public class ModRanking {
 
         // 1. Joueurs inscrits (via team_players)
         let players: List<List<string>> = db.Rows(
-            "SELECT DISTINCT tp.player_id, p.name, p.firstname FROM team_players tp JOIN teams t ON t.id = tp.team_id JOIN players p ON p.id = tp.player_id WHERE t.sub_tournament_id = ?", Db.P1(subId))
+            "SELECT DISTINCT p.id, p.name, p.firstname FROM players p WHERE p.is_relais = FALSE AND (p.id IN (SELECT tp.player_id FROM team_players tp JOIN teams t ON t.id = tp.team_id WHERE t.sub_tournament_id = ?) OR p.id IN (SELECT s.player_id FROM seats s JOIN rounds r ON r.id = s.round_id WHERE r.sub_tournament_id = ?))", Db.P2(subId, subId))
 
         // 2. Rounds
         let rounds: List<List<string>> = db.Rows(

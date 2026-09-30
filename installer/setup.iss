@@ -197,6 +197,21 @@ begin
   Result := '';
 end;
 
+function FindMysqlDumpExe(): String;
+var
+  Base, Client: String;
+begin
+  // mysqldump vit dans le meme bin\ que le client : on part de celui qu'on a
+  // deja trouve plutot que de rescanner les versions. MariaDB 11.x livre
+  // 'mariadb-dump.exe' et garde 'mysqldump.exe' en compat.
+  Result := '';
+  Client := FindMysqlExe();
+  if Client = '' then Exit;
+  Base := ExtractFilePath(Client);
+  if FileExists(Base + 'mariadb-dump.exe') then Result := Base + 'mariadb-dump.exe'
+  else if FileExists(Base + 'mysqldump.exe') then Result := Base + 'mysqldump.exe';
+end;
+
 function ExecAndWait(const Cmd, Params, WorkDir: String;
                     var ExitCode: Integer): Boolean;
 begin
@@ -542,7 +557,10 @@ begin
     'DB_PASSWORD=' + DbPassword + #13#10 +
     'DB_NAME=fft' + #13#10 + #13#10 +
     'JWT_SECRET=' + JwtSecret + #13#10 +
-    'JWT_EXPIRES_IN=12h' + #13#10;
+    'JWT_EXPIRES_IN=12h' + #13#10 + #13#10 +
+    '# Sauvegarde / restauration depuis Administration > Parametres' + #13#10 +
+    'MYSQLDUMP=' + FindMysqlDumpExe() + #13#10 +
+    'MYSQLCLIENT=' + MysqlExe + #13#10;
   SaveStringToFile(EnvFile, EnvContent, False);
 
   Result := True;
@@ -628,6 +646,8 @@ begin
     'DB_PASSWORD=' + DbPassword + #0 +
     'DB_NAME=fft'      + #0 +
     'JWT_SECRET=' + JwtSecret + #0 +
+    'MYSQLDUMP=' + FindMysqlDumpExe() + #0 +
+    'MYSQLCLIENT=' + FindMysqlExe() + #0 +
     'FRONT_DIR=' + AppDir + '\frontend\dist\frontend\browser';
   RegWriteMultiStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\PABB90', 'Environment', EnvData);
 

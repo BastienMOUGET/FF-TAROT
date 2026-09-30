@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../environments/environment';
@@ -316,7 +316,21 @@ export class ApiService {
   /* ----- Export PCN ----- */
   exportPcn = (subTournamentId: number): Observable<Blob> =>
     this.http.get(
-      `${this.base}/sub-tournaments/${subTournamentId}/ranking/export-pcn.csv`,
+      `${this.base}/sub-tournaments/${subTournamentId}/export-pcn.csv`,
       { responseType: 'blob' }
     );
+
+  /* ----- Sauvegarde / restauration (administrateur) ----- */
+  // Le serveur renvoie le mysqldump complet ; on le laisse en Blob pour
+  // l'enregistrer tel quel, sans que le navigateur tente de l'interpréter.
+  backupDump = (): Observable<HttpResponse<Blob>> =>
+    this.http.get(`${this.base}/backup`, {
+      responseType: 'blob',
+      observe: 'response',
+    });
+
+  restoreDump = (sql: string): Observable<{ restored: boolean }> =>
+    this.http.post<{ restored: boolean }>(`${this.base}/restore`, sql, {
+      headers: { 'Content-Type': 'text/plain' },
+    });
 }

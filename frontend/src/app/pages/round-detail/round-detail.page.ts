@@ -179,8 +179,14 @@ export class RoundDetailPage implements OnInit {
   hasScores = signal(false);
 
   ngOnInit(): void {
-    const id = Number(this.route.snapshot.paramMap.get('id'));
-    this.refresh(id);
+    // Angular réutilise ce composant quand on passe de /rounds/5 à /rounds/6 :
+    // avec un `snapshot` lu une seule fois, le bouton « Manche N+1 » changeait
+    // l'adresse sans changer l'écran, et passait pour inactif (retour terrain
+    // n°14). On suit donc le paramètre plutôt que de le photographier.
+    this.route.paramMap.subscribe((pm) => {
+      const id = Number(pm.get('id'));
+      if (id) this.refresh(id);
+    });
   }
 
   refresh(id: number): void {

@@ -1,0 +1,131 @@
+namespace App
+
+import Amalgame.Web
+import Amalgame.Json
+import Amalgame.Process
+import Amalgame.IO
+
+// Module backup — sauvegarde et restauration de la base du club, réservées
+// à l'administrateur (retour terrain n°14 : « des boutons Sauvegarder et
+// Restaurer »). Le club ne doit pas avoir à ouvrir une invite de commandes
+// pour protéger un trimestre de résultats.
+//
+// On s'appuie sur les outils livrés avec MariaDB (mysqldump / mysql). Leur
+// chemin vient de la configuration : l'installeur Windows le renseigne dans
+// l'environnement du service, faute de quoi on tente le PATH.
+public class ModBackup {
+
+    static string DumpExe() { return Config.Get("MYSQLDUMP", "mysqldump") }
+    static string ClientExe() { return Config.Get("MYSQLCLIENT", "mysql") }
+
+    // Dossier de travail : TEMP sous Windows, /tmp ailleurs.
+    static string TempDir() {
+        let t: string = Config.Get("TEMP", "")
+        if (String.Length(t) > 0) { return t }
+        return "/tmp"
+    }
+
+    // Fichier d'options jetable : le mot de passe passe par là et jamais par
+    // la ligne de commande, qui est visible de tous les processus.
+    static string WriteOptionFile(string path) {
+        let host: string = Config.Get("DB_HOST", "127.0.0.1")
+        let port: string = Config.Get("DB_PORT", "3306")
+        let user: string = Config.Get("DB_USER", "fft_user")
+        let pass: string = Config.Get("DB_PASSWORD", "")
+        var content: string = "[client]\n"
+        content = content + "host=" + host + "\n"
+        content = content + "port=" + port + "\n"
+        content = content + "user=" + user + "\n"
+        if (String.Length(pass) > 0) { content = content + "password=" + pass + "\n" }
+        File.WriteAll(path, content)
+        return path
+    }
+
+    static string Quote(string s) { return "\"" + s + "\"" }
+
+    // Horodatage des fichiers temporaires : la base fait office d'horloge,
+    // le runtime n'expose pas le temps courant.
+    static string Stamp(Db db) {
+        let rows: List<List<string>> = db.Rows("SELECT DATE_FORMAT(NOW(), '%Y%m%d-%H%i%s')", Db.NoParams())
+        if (rows.Count() == 0) { return "sauvegarde" }
+        let r0: List<string> = rows.Get(0)
+        return r0.Get(0)
+    }
+
+    // GET /api/backup (admin) — renvoie le dump SQL en pièce jointe.
+    public static HttpResponse Dump(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let dbName: string = Config.Get("DB_NAME", "fft")
+        let stamp: string = ModBackup.Stamp(db)
+        let optPath: string = ModBackup.TempDir() + "/pabb90-opt-" + stamp + ".cnf"
+        let outPath: string = ModBackup.TempDir() + "/pabb90-dump-" + stamp + ".sql"
+        ModBackup.WriteOptionFile(optPath)
+
+        // --single-transaction : sauvegarde cohérente sans bloquer le jeu.
+        let cmd: string = ModBackup.Quote(ModBackup.DumpExe())
+            + " --defaults-extra-file=" + ModBackup.Quote(optPath)
+            + " --single-transaction --default-character-set=utf8mb4 "
+            + dbName + " > " + ModBackup.Quote(outPath)
+        let code: int = Process.Run(cmd)
+        File.Delete(optPath)
+        if (code != 0) {
+            File.Delete(outPath)
+            return HttpErr.BadRequest("Sauvegarde impossible : l'outil mysqldump n'a pas pu être lancé (code " + String.FromInt(code) + "). Vérifiez que MariaDB est installé.")
+        }
+        let sql: string = File.ReadAll(outPath)
+        File.Delete(outPath)
+        if (String.Length(sql) == 0) { return HttpErr.BadRequest("Sauvegarde vide : rien n'a été produit.") }
+
+        let fname: string = "pabb90-" + dbName + "-" + stamp + ".sql"
+        return HttpResponse.New().Status(200)
+            .Header("Content-Type", "application/sql; charset=utf-8")
+            .Header("Content-Disposition", "attachment; filename=\"" + fname + "\"")
+            .Text(sql)
+    }
+
+    // POST /api/restore (admin) — le corps est le contenu du fichier .sql.
+    // Écrase la base par celle de la sauvegarde.
+    public static HttpResponse Restore(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let sql: string = ctx.Body
+        if (String.Length(sql) < 50) { return HttpErr.BadRequest("Fichier de sauvegarde vide ou illisible.") }
+        // Garde-fou : un dump mysqldump s'annonce toujours ainsi. Évite
+        // d'exécuter un fichier choisi par erreur.
+        if (!String.Contains(sql, "MySQL dump") && !String.Contains(sql, "MariaDB dump")) {
+            return HttpErr.BadRequest("Ce fichier n'est pas une sauvegarde PABB90 (en-tête mysqldump absent).")
+        }
+
+        let dbName: string = Config.Get("DB_NAME", "fft")
+        let stamp: string = ModBackup.Stamp(db)
+        let optPath: string = ModBackup.TempDir() + "/pabb90-opt-" + stamp + ".cnf"
+        let inPath: string = ModBackup.TempDir() + "/pabb90-restore-" + stamp + ".sql"
+        ModBackup.WriteOptionFile(optPath)
+        if (!File.WriteAll(inPath, sql)) {
+            File.Delete(optPath)
+            return HttpErr.BadRequest("Impossible d'écrire le fichier temporaire de restauration.")
+        }
+
+        let cmd: string = ModBackup.Quote(ModBackup.ClientExe())
+            + " --defaults-extra-file=" + ModBackup.Quote(optPath)
+            + " --default-character-set=utf8mb4 "
+            + dbName + " < " + ModBackup.Quote(inPath)
+        let code: int = Process.Run(cmd)
+        File.Delete(optPath)
+        File.Delete(inPath)
+        if (code != 0) {
+            return HttpErr.BadRequest("Restauration échouée (code " + String.FromInt(code) + "). La base n'est peut-être que partiellement restaurée : recommencez avec une sauvegarde valide.")
+        }
+
+        // Le schéma de la sauvegarde peut être plus ancien que le programme.
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("restored", J.Bool(true))
+        o.AppendEntry("note", J.Str("Restauration terminée. Si la sauvegarde vient d'une version plus ancienne, relancez l'installeur pour appliquer les migrations manquantes."))
+        return J.Ok(o)
+    }
+}

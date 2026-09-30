@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, viewChild, ElementRef } from '@angular/core';
 
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
@@ -14,7 +14,10 @@ import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { FormsModule } from '@angular/forms';
 
+import { HttpResponse } from '@angular/common/http';
+
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
 import {
   Club,
   PenaltyType,
@@ -264,6 +267,65 @@ import { UserDialog } from './dialogs/user-dialog';
             </mat-form-field>
           </mat-card-content>
         </mat-card>
+
+        <!-- ====== SAUVEGARDE / RESTAURATION ====== -->
+        <mat-card class="settings-card">
+          <mat-card-header>
+            <mat-card-title>Sauvegarde des données du club</mat-card-title>
+            <mat-card-subtitle>
+              Réservé à l'administrateur
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            @if (!isAdmin()) {
+              <p class="locked">
+                <mat-icon>lock</mat-icon>
+                Seul un compte administrateur peut sauvegarder ou restaurer la
+                base. Demandez-lui de le faire.
+              </p>
+            }
+            <p class="hint">
+              La sauvegarde enregistre <strong>toute</strong> la base (joueurs,
+              challenges, tournois, manches, scores) dans un fichier
+              <code>.sql</code>. À faire avant chaque mise à jour du programme
+              et après chaque soirée.
+            </p>
+            <div class="backup-actions">
+              <button
+                mat-flat-button
+                color="primary"
+                [disabled]="!isAdmin() || busy()"
+                (click)="downloadBackup()"
+              >
+                <mat-icon>save</mat-icon> Sauvegarder
+              </button>
+              <button
+                mat-stroked-button
+                color="warn"
+                [disabled]="!isAdmin() || busy()"
+                (click)="pickRestoreFile()"
+              >
+                <mat-icon>restore</mat-icon> Restaurer…
+              </button>
+              @if (busy()) {
+                <span class="busy">{{ busyLabel() }}</span>
+              }
+            </div>
+            <p class="warn-restore">
+              <mat-icon>warning</mat-icon>
+              La restauration <strong>remplace</strong> les données actuelles
+              par celles du fichier. Tout ce qui a été saisi depuis cette
+              sauvegarde est perdu.
+            </p>
+            <input
+              #restoreInput
+              type="file"
+              accept=".sql"
+              hidden
+              (change)="restoreFrom($any($event.target))"
+            />
+          </mat-card-content>
+        </mat-card>
       </mat-tab>
     </mat-tab-group>
   `,
@@ -285,6 +347,16 @@ import { UserDialog } from './dialogs/user-dialog';
     .settings-card { margin-top: 16px; max-width: 640px; }
     .settings-card mat-card-content { display: flex; flex-direction: column; gap: 20px; padding-top: 16px; }
     .setting { width: 100%; }
+    .hint { margin: 0; color: rgba(0, 0, 0, 0.7); }
+    .locked, .warn-restore {
+      display: flex; align-items: flex-start; gap: 8px; margin: 0;
+      padding: 10px 12px; border-radius: 4px; line-height: 1.4;
+    }
+    .locked { background: #eceff1; color: #455a64; }
+    .warn-restore { background: #fff3e0; color: #e65100; }
+    .locked mat-icon, .warn-restore mat-icon { flex: 0 0 auto; }
+    .backup-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .busy { color: rgba(0, 0, 0, 0.6); font-style: italic; }
   `,
 })
 export class AdminPage implements OnInit {
@@ -296,6 +368,13 @@ export class AdminPage implements OnInit {
   players = signal<Player[]>([]);
   penaltyTypes = signal<PenaltyType[]>([]);
   users = signal<User[]>([]);
+
+  // Les deux boutons de sauvegarde sont grisés pour les non-administrateurs :
+  // le serveur refuse déjà la route, l'écran le dit avant le clic.
+  readonly isAdmin = inject(AuthService).isAdmin;
+  busy = signal(false);
+  busyLabel = signal('');
+  restoreInput = viewChild<ElementRef<HTMLInputElement>>('restoreInput');
 
   settingClubId = signal<number | null>(null);
   settingRounds = signal<number>(4);
@@ -490,6 +569,110 @@ export class AdminPage implements OnInit {
         onDone();
         this.snack.open('Enregistré', 'Fermer', { duration: 1500 });
       }
+    });
+  }
+
+  /* ----- Sauvegarde / restauration ----- */
+
+  // Le fichier .sql peut peser quelques Mo : on bloque les deux boutons le
+  // temps de l'aller-retour, sinon un double clic lance deux restaurations.
+  private downloadName(res: HttpResponse<Blob>): string {
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = /filename="([^"]+)"/.exec(cd);
+    return m ? m[1] : 'pabb90-sauvegarde.sql';
+  }
+
+  downloadBackup(): void {
+    if (!this.isAdmin()) return;
+    this.busy.set(true);
+    this.busyLabel.set('Sauvegarde en cours…');
+    this.api.backupDump().subscribe({
+      next: (res) => {
+        this.busy.set(false);
+        const blob = res.body;
+        if (!blob) {
+          this.snack.open('Sauvegarde vide', 'Fermer', { duration: 3000 });
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = this.downloadName(res);
+        a.click();
+        URL.revokeObjectURL(url);
+        this.confirm({
+          title: 'Sauvegarde enregistrée',
+          message:
+            'Le fichier « ' +
+            a.download +
+            ' » est dans votre dossier de téléchargements. Copiez-le sur une clé USB ou dans un dossier de sauvegarde : il contient toutes les données du club.',
+          confirmLabel: 'Compris',
+          hideCancel: true,
+        }).subscribe();
+      },
+      error: (err: any) => {
+        this.busy.set(false);
+        this.snack.open(
+          err?.error?.error || 'La sauvegarde a échoué',
+          'Fermer',
+          { duration: 5000 }
+        );
+      },
+    });
+  }
+
+  pickRestoreFile(): void {
+    if (!this.isAdmin()) return;
+    this.restoreInput()?.nativeElement.click();
+  }
+
+  restoreFrom(input: HTMLInputElement): void {
+    const file = input.files?.[0];
+    input.value = ''; // pour pouvoir reprendre le même fichier après un refus
+    if (!file || !this.isAdmin()) return;
+
+    this.confirm({
+      title: 'Restaurer la base ?',
+      message:
+        'Toutes les données actuelles seront remplacées par celles du fichier « ' +
+        file.name +
+        ' ». Ce qui a été saisi depuis cette sauvegarde sera définitivement perdu.',
+      confirmLabel: 'Restaurer',
+      danger: true,
+    }).subscribe((ok) => {
+      if (!ok) return;
+      this.busy.set(true);
+      this.busyLabel.set('Lecture du fichier…');
+      file.text().then(
+        (sql) => {
+          this.busyLabel.set('Restauration en cours…');
+          this.api.restoreDump(sql).subscribe({
+            next: () => {
+              this.busy.set(false);
+              this.reloadAll();
+              this.confirm({
+                title: 'Base restaurée',
+                message:
+                  'Les données de la sauvegarde sont en place. Fermez puis rouvrez le programme pour que tous les écrans soient relus.',
+                confirmLabel: 'Compris',
+                hideCancel: true,
+              }).subscribe();
+            },
+            error: (err: any) => {
+              this.busy.set(false);
+              this.snack.open(
+                err?.error?.error || 'La restauration a échoué',
+                'Fermer',
+                { duration: 8000 }
+              );
+            },
+          });
+        },
+        () => {
+          this.busy.set(false);
+          this.snack.open('Fichier illisible', 'Fermer', { duration: 3000 });
+        }
+      );
     });
   }
 

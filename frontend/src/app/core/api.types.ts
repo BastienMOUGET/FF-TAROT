@@ -233,6 +233,8 @@ export interface RoundSeat {
   licence: string | null;
   name: string;
   firstname: string;
+  // Place tenue par un joueur virtuel « Relais » (table de 3).
+  is_relais?: boolean;
 }
 
 export interface RoundTable {

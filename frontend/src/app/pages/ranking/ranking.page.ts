@@ -50,6 +50,13 @@ import { ClubLogo } from '../../shared/club-logo';
       <button mat-stroked-button (click)="mail()" title="Ouvre un brouillon Gmail, à compléter avec le PDF enregistré">
         <mat-icon>mail</mat-icon> Envoyer
       </button>
+      <button
+        mat-stroked-button
+        (click)="exportPcn()"
+        title="Fichier CSV au format du masque fédéral (licence, nom, prénom, PCN, PP)"
+      >
+        <mat-icon>table_view</mat-icon> Export FFT
+      </button>
     </div>
 
     <mat-card class="head">
@@ -328,6 +335,28 @@ export class RankingPage implements OnInit, OnDestroy {
       { duration: 7000 }
     );
     window.open(url, '_blank', 'noopener');
+  }
+
+  // Le CSV au masque fédéral existait côté serveur depuis la v3.0.30 mais
+  // aucun bouton ne l'appelait : il était inatteignable.
+  exportPcn(): void {
+    this.api.exportPcn(this.subTournamentId()).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `classement-fft-${this.subTournamentId()}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.snack.open(
+          'Fichier CSV enregistré : à coller dans la feuille « Masque » du classeur fédéral.',
+          'OK',
+          { duration: 6000 }
+        );
+      },
+      error: () =>
+        this.snack.open("L'export a échoué", 'Fermer', { duration: 4000 }),
+    });
   }
 
   goBack(): void {

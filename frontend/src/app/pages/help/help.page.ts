@@ -231,7 +231,9 @@ import { environment } from '../../../environments/environment';
           <dd>
             En ouvrant une table, le curseur est déjà dans la case Nord.
             Entrée valide et passe à Sud, puis Est, puis Ouest ; le dernier
-            score se calcule tout seul.
+            score se calcule tout seul. En saisie donne par donne, choisir le
+            preneur amène directement le curseur dans la case Score, et la
+            dernière donne s'enregistre toute seule.
           </dd>
           <dt>Supprimer ou refaire une manche ?</dt>
           <dd>
@@ -262,8 +264,10 @@ import { environment } from '../../../environments/environment';
           </dd>
           <dt>Envoyer les PCN à la fédération ?</dt>
           <dd>
-            Le bouton d'export du classement produit un CSV au format du
-            masque fédéral (licence, nom, prénom, Pcn, Pp). L'envoi lui-même
+            Le bouton <strong>Export FFT</strong>, sur le classement général
+            du tournoi, produit un CSV au format du masque fédéral (licence,
+            nom, prénom, Pcn, Pp) : son contenu se colle dans la feuille
+            « Masque » du classeur fédéral. L'envoi lui-même
             se fait par les moyens habituels de la fédération : l'application
             ne s'y connecte pas.
           </dd>
@@ -297,12 +301,22 @@ import { environment } from '../../../environments/environment';
           </dd>
           <dt>Comment sauvegarder les données du club ?</dt>
           <dd>
-            Tout est dans la base MariaDB, pas dans le dossier de
+            <strong>Administration &rsaquo; Paramètres &rsaquo; Sauvegarder.</strong>
+            Le programme enregistre toute la base dans un fichier
+            <code>.sql</code> daté, à copier sur une clé USB. Le bouton
+            <strong>Restaurer</strong>, juste à côté, remet la base dans l'état
+            de ce fichier — tout ce qui a été saisi depuis est perdu, il
+            demande donc confirmation. Les deux boutons sont grisés pour les
+            comptes qui ne sont pas administrateurs.
+          </dd>
+          <dt>La sauvegarde à la main, si besoin</dt>
+          <dd>
+            Tout est dans la base MariaDB, jamais dans le dossier de
             l'application. Une invite de commandes dans
             <code>C:\Program Files\MariaDB 11.8\bin</code> puis
-            <code>mysqldump -u root fft &gt; sauvegarde.sql</code> produit un
-            fichier unique à copier sur une clé. La marche à suivre complète,
-            restauration comprise, est dans le fichier INSTALL.md du projet.
+            <code>mysqldump -u root fft &gt; sauvegarde.sql</code> produit le
+            même fichier. La marche à suivre complète, restauration comprise,
+            est dans le fichier INSTALL.md du projet.
           </dd>
         </dl>
 
@@ -315,7 +329,10 @@ import { environment } from '../../../environments/environment';
         <p>
           Toutes les données du club vivent dans la base MariaDB, jamais dans
           le dossier de l'application. Sauvegarde conseillée après chaque
-          soirée : ouvrir une invite de commandes dans
+          soirée et avant chaque mise à jour du programme :
+          <strong>Administration &rsaquo; Paramètres &rsaquo; Sauvegarder</strong>,
+          puis copier le fichier obtenu sur une clé. À la main, si le bouton
+          n'est pas disponible : ouvrir une invite de commandes dans
           <code>C:\Program Files\MariaDB 11.8\bin</code> et lancer
           <code>mysqldump -u root fft &gt; sauvegarde.sql</code>, puis copier
           le fichier obtenu sur une clé. Pour restaurer :

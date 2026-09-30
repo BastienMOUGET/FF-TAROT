@@ -49,6 +49,14 @@ interface Row {
       <a [routerLink]="['/rounds', roundId()]" class="back">
         <mat-icon>arrow_back</mat-icon> Manche {{ round()?.round_number }}
       </a>
+      @if (nextRoundId(); as nid) {
+        <!-- Passer à la manche suivante sans repasser par la page de la
+             manche (retour terrain n°14). -->
+        <a mat-stroked-button class="next-round" [routerLink]="['/rounds', nid]">
+          <mat-icon>skip_next</mat-icon>
+          Manche {{ (round()?.round_number ?? 0) + 1 }}
+        </a>
+      }
       <!-- Raccourcis : les résultats arrivent dans un ordre aléatoire, on
            passe d'une table à l'autre sans repasser par la manche. -->
       <div class="tables-nav" [title]="validatedTables().size + ' table(s) validée(s) sur ' + allTables().length">
@@ -290,6 +298,7 @@ interface Row {
     .topbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
     .back { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; color: #1976d2; }
     .tables-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+    .next-round { margin-left: auto; }
     .tab {
       display: inline-flex; align-items: center; gap: 2px;
       padding: 4px 10px; border-radius: 16px; border: 1px solid #bdbdbd;
@@ -375,6 +384,7 @@ export class ScoringPage implements OnInit {
   seats = signal<RoundSeat[]>([]);
   table = signal<TableResult | null>(null);
   validatedTables = signal<Set<number>>(new Set());
+  nextRoundId = signal<number | null>(null);
   entryMode = signal<'global' | 'detail'>('global');
 
   rows = signal<Row[]>([]);
@@ -406,6 +416,10 @@ export class ScoringPage implements OnInit {
           (x) => x.table_number === this.tableNumber()
         );
         this.seats.set(tableSeats?.seats || []);
+        this.api.rounds(round.sub_tournament_id).subscribe((rounds) => {
+          const next = rounds.find((x) => x.round_number === round.round_number + 1);
+          this.nextRoundId.set(next ? next.id : null);
+        });
         this.api.tableResults(this.roundId()).subscribe((all) => {
           this.validatedTables.set(
             new Set(all.filter((t) => !!t.validated).map((t) => t.table_number))
@@ -640,6 +654,28 @@ export class ScoringPage implements OnInit {
     // Le preneur change : on recalcule la répartition si un score est déjà là.
     if (row.deal !== '') this.applyDeal(row);
     this.touch();
+    // Ordre de saisie du club : score, preneur, puis donne suivante. Le
+    // choix du preneur suffit à avancer, sans toucher au clavier ; à la
+    // dernière donne il enregistre et valide la table.
+    if (this.entryMode() === 'detail' && row.deal !== '') this.advanceAfterTaker(row);
+  }
+
+  private advanceAfterTaker(row: Row): void {
+    const rows = this.rows();
+    const idx = rows.indexOf(row);
+    const allFilled = rows.every((r) => !this.rowEmpty(r));
+    if (allFilled && this.canSave() && !this.saving()) {
+      setTimeout(() => this.save(true), 80);
+      return;
+    }
+    setTimeout(() => {
+      const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('input.deal'));
+      const next = idx >= 0 ? inputs[idx + 1] : null;
+      if (next) {
+        next.focus();
+        next.select();
+      }
+    }, 60);
   }
 
   // Score de la donne saisi : le preneur marque 3 × ce score, chacun des

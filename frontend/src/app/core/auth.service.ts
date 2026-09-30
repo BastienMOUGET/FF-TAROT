@@ -13,6 +13,10 @@ interface StoredAuth {
   user: User;
 }
 
+// La session vit dans sessionStorage et non localStorage : fermer le
+// programme (ou l'onglet) déconnecte, et le mot de passe est redemandé au
+// lancement suivant. Avant, la session survivait des heures et l'utilisateur
+// ne butait dessus qu'au moment d'enregistrer (retour terrain n°14).
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private http = inject(HttpClient);
@@ -40,13 +44,13 @@ export class AuthService {
 
   logout(): void {
     this.state.set(null);
-    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
     this.router.navigate(['/login']);
   }
 
   private readStorage(): StoredAuth | null {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = sessionStorage.getItem(STORAGE_KEY);
       return raw ? (JSON.parse(raw) as StoredAuth) : null;
     } catch {
       return null;
@@ -54,6 +58,6 @@ export class AuthService {
   }
 
   private writeStorage(value: StoredAuth): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(value));
   }
 }

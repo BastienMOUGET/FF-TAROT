@@ -142,6 +142,21 @@ if (-not $MysqlBin) {
 }
 Write-Ok "Client mysql : $MysqlBin"
 
+# mysqldump vit dans le meme bin\ : il sert a la sauvegarde depuis
+# Administration > Parametres. MariaDB 11 le nomme aussi mariadb-dump.
+$MysqlDumpBin = (Get-Command mysqldump -ErrorAction SilentlyContinue)?.Source
+if (-not $MysqlDumpBin) {
+    $dumpDir = Split-Path $MysqlBin -Parent
+    foreach ($n in @('mariadb-dump.exe', 'mysqldump.exe')) {
+        $c = Join-Path $dumpDir $n
+        if (Test-Path $c) { $MysqlDumpBin = $c; break }
+    }
+}
+if (-not $MysqlDumpBin) {
+    Write-Warning "mysqldump introuvable : la sauvegarde depuis l'application sera indisponible."
+    $MysqlDumpBin = 'mysqldump'
+}
+
 # ---------------------------- Configuration DB ----------------------------
 
 $DB_NAME = 'fft'
@@ -199,6 +214,9 @@ DB_NAME=$DB_NAME
 
 JWT_SECRET=$JWT_SECRET
 JWT_EXPIRES_IN=12h
+
+MYSQLDUMP=$MysqlDumpBin
+MYSQLCLIENT=$MysqlBin
 "@ | Out-File -FilePath $EnvFile -Encoding ASCII -Force
 Write-Ok ".env généré"
 

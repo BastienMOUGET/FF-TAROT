@@ -155,4 +155,6 @@ old/
 
 # Retours terrain (mémos, fichiers Excel du club) : données personnelles de joueurs, jamais versionnés (voir ROADMAP.md)
 /feedback/
-/server-ci	server-ci
+
+# Binaire de test construit par build-ci.sh (chaîne de la release)
+/server-ci

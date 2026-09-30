@@ -227,8 +227,11 @@ public class ModTeams {
         // Remplacer un Relais : le nouveau joueur prend sa place ET rejoint
         // l'équipe de la table, qui passe de 3 à 4 joueurs.
         if (fromRelais) {
+            // L'équipe visée est celle des voisins de table à la PREMIÈRE
+            // manche : après le mouvement, les voisins changent et on
+            // rattacherait le joueur à une équipe au hasard.
             let teamRows: List<List<string>> = db.Rows(
-                "SELECT DISTINCT tp.team_id FROM seats s JOIN rounds r ON r.id = s.round_id JOIN seats s2 ON s2.round_id = s.round_id AND s2.table_number = s.table_number JOIN team_players tp ON tp.player_id = s2.player_id JOIN teams t ON t.id = tp.team_id AND t.sub_tournament_id = r.sub_tournament_id WHERE r.sub_tournament_id = ? AND s.player_id = ? LIMIT 1",
+                "SELECT DISTINCT tp.team_id FROM seats s JOIN rounds r ON r.id = s.round_id JOIN seats s2 ON s2.round_id = s.round_id AND s2.table_number = s.table_number JOIN team_players tp ON tp.player_id = s2.player_id JOIN teams t ON t.id = tp.team_id AND t.sub_tournament_id = r.sub_tournament_id WHERE r.sub_tournament_id = ? AND s.player_id = ? ORDER BY r.round_number ASC LIMIT 1",
                 Db.P2(subId, fromId))
             if (teamRows.Count() > 0) {
                 let t0r: List<string> = teamRows.Get(0)

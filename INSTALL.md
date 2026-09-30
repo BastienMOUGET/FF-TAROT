@@ -182,6 +182,21 @@ touche pas, mais une panne de disque ou une désinstallation avec
 `DROP DATABASE`, si. À sauvegarder après chaque soirée, ou au moins en fin
 de trimestre.
 
+### Depuis l'application (le plus simple)
+
+**Administration ▸ Paramètres ▸ Sauvegarder** produit le même fichier `.sql`
+que `mysqldump`, daté, dans le dossier de téléchargements du navigateur.
+**Restaurer** le réinjecte après confirmation. Les deux boutons sont
+réservés aux comptes administrateurs et grisés pour les autres.
+
+Ils s'appuient sur `mysqldump` et `mysql`, dont les chemins sont écrits par
+l'installeur dans `.env` et dans l'environnement du service
+(`MYSQLDUMP`, `MYSQLCLIENT`). L'installeur les réécrit à chaque passage :
+installer la v3.0.33 par-dessus une version antérieure suffit. Si les deux
+boutons répondent en erreur, c'est que ces variables manquent — les ajouter
+à la main dans `.env` et redémarrer le service. La méthode en ligne de
+commande ci-dessous reste valable dans tous les cas.
+
 ### Windows
 
 Le mot de passe de `fft_user` est dans `.env`, à la racine du dossier

@@ -160,6 +160,12 @@ DB_NAME="$DB_NAME" MYSQL_BIN="$MYSQL_BIN" "$INSTALL_DIR/migrate.sh" "${MIGRATE_A
 
 # ---------------------------- .env ----------------------------
 
+# Sauvegarde / restauration depuis Administration > Paramètres : le back
+# appelle ces deux binaires. MariaDB 11 les nomme mariadb-dump / mariadb et
+# garde les anciens noms en compatibilité ; on prend ce qui est présent.
+MYSQLDUMP_BIN=$(command -v mariadb-dump || command -v mysqldump || echo mysqldump)
+MYSQLCLIENT_BIN=$(command -v mariadb || command -v mysql || echo mysql)
+
 cat > "$INSTALL_DIR/.env" <<EOF
 PORT=3000
 
@@ -170,6 +176,9 @@ DB_NAME=$DB_NAME
 
 JWT_SECRET=$JWT_SECRET
 JWT_EXPIRES_IN=12h
+
+MYSQLDUMP=$MYSQLDUMP_BIN
+MYSQLCLIENT=$MYSQLCLIENT_BIN
 EOF
 chmod 640 "$INSTALL_DIR/.env"
 chown "$APP_USER":"$APP_USER" "$INSTALL_DIR/.env"

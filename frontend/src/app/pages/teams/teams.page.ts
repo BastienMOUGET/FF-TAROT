@@ -2,7 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Location } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { from } from 'rxjs';
+import { Observable, from, of } from 'rxjs';
 import { concatMap, toArray } from 'rxjs/operators';
 
 import { MatCardModule } from '@angular/material/card';
@@ -19,7 +19,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 
 import { ApiService } from '../../core/api.service';
-import { Pair, Player, Seat, Team } from '../../core/api.types';
+import { Pair, Player, RoundSeat, Seat, Team } from '../../core/api.types';
 
 type Orientation = 'random' | Seat | 'not_north';
 import { PlayerDialog } from '../admin/dialogs/player-dialog';
@@ -62,8 +62,22 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
                cocher : on les rappelle ici pour vérifier le pointage. -->
           <div class="registered">
             <div class="registered-head">
-              {{ registeredPlayers().length }} joueur(s) déjà inscrit(s) dans ce tournoi
+              <span>
+                {{ registeredPlayers().length }} joueur(s) déjà inscrit(s) dans ce tournoi
+              </span>
+              @if (roundCount() > 0 && !recomposing()) {
+                <button mat-stroked-button (click)="startRecompose()">
+                  <mat-icon>group_add</mat-icon> Ajouter un joueur et refaire les tables
+                </button>
+              }
             </div>
+            @if (recomposing()) {
+              <p class="recompose-hint">
+                Les {{ registeredPlayers().length }} inscrits sont déjà cochés.
+                Cochez le ou les joueurs à ajouter, puis « Refaire les tables » :
+                les tables et la mise en place seront refaites pour tout le monde.
+              </p>
+            }
             <div class="registered-list">
               @for (p of registeredPlayers(); track p.id) {
                 <span class="chip-name">{{ p.name }} {{ p.firstname }}</span>
@@ -168,14 +182,27 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
         }
       </mat-card-content>
       <mat-card-actions align="end">
-        <button
-          mat-flat-button
-          color="primary"
-          [disabled]="!canDraw() || drawing()"
-          (click)="randomDraw()"
-        >
-          <mat-icon>shuffle</mat-icon> Tirer au sort et générer la manche 1
-        </button>
+        @if (recomposing()) {
+          <button mat-button (click)="cancelRecompose()">Annuler</button>
+          <button
+            mat-flat-button
+            color="warn"
+            [disabled]="!canDraw() || drawing()"
+            (click)="redrawTables()"
+          >
+            <mat-icon>shuffle</mat-icon>
+            Refaire les tables avec {{ drawCount() }} joueurs
+          </button>
+        } @else {
+          <button
+            mat-flat-button
+            color="primary"
+            [disabled]="!canDraw() || drawing()"
+            (click)="randomDraw()"
+          >
+            <mat-icon>shuffle</mat-icon> Tirer au sort et générer la manche 1
+          </button>
+        }
       </mat-card-actions>
     </mat-card>
 
@@ -195,6 +222,13 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
               <mat-select [value]="swapFrom()" (selectionChange)="swapFrom.set($event.value)">
                 @for (p of registeredPlayers(); track p.id) {
                   <mat-option [value]="p.id">{{ p.name }} {{ p.firstname }}</mat-option>
+                }
+                <!-- Une place « Relais » se cède à un joueur oublié au
+                     pointage : la table passe alors de 3 à 4. -->
+                @for (r of relaisSeats(); track r.player_id) {
+                  <mat-option [value]="r.player_id">
+                    {{ r.name }} {{ r.firstname }} — place libre, table {{ r.table_number }}
+                  </mat-option>
                 }
               </mat-select>
             </mat-form-field>
@@ -344,7 +378,11 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     .draw-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
     .draw-row mat-checkbox { flex: 1 1 auto; }
     .registered { margin: 4px 0 16px; padding: 10px 12px; background: #f1f8e9; border-radius: 8px; }
-    .registered-head { font-weight: 600; margin-bottom: 6px; }
+    .registered-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap; font-weight: 600; margin-bottom: 6px;
+    }
+    .recompose-hint { color: #33691e; margin: 4px 0 8px; font-size: 0.92em; }
     .registered-list { display: flex; flex-wrap: wrap; gap: 6px; }
     .chip-name {
       background: #fff; border: 1px solid #c5e1a5; border-radius: 12px;
@@ -390,6 +428,11 @@ export class TeamsPage implements OnInit {
   saving = signal(false);
 
   drawSelection = signal<Set<number>>(new Set());
+  roundCount = signal(0);
+  // Mode « refaire les tables » : le placement existe déjà et on veut y
+  // intégrer un joueur oublié. Tous les joueurs redeviennent cochables,
+  // les inscrits étant pré-cochés (retour terrain n°14).
+  recomposing = signal(false);
   drawFilter = signal('');
   drawing = signal(false);
   drawOrientation = signal<Map<number, Orientation>>(new Map());
@@ -417,16 +460,22 @@ export class TeamsPage implements OnInit {
       .filter((p) => this.registeredPlayerIds().has(p.id) && !p.is_relais)
       .sort((a, b) => `${a.name} ${a.firstname}`.localeCompare(`${b.name} ${b.firstname}`))
   );
+  // Places « Relais » du tournoi (tables de 3), proposées au remplacement.
+  relaisSeats = signal<RoundSeat[]>([]);
   swapFrom = signal<number | null>(null);
   swapTo = signal<number | null>(null);
   swapping = signal(false);
   availablePlayers = computed(() =>
     this.players().filter((p) => !this.registeredPlayerIds().has(p.id))
   );
+  // En recomposition, on repart de TOUS les joueurs connus.
+  selectablePlayers = computed(() =>
+    this.recomposing() ? this.players() : this.availablePlayers()
+  );
   filteredAvailablePlayers = computed(() => {
     const q = this.drawFilter().trim().toLowerCase();
-    if (!q) return this.availablePlayers();
-    return this.availablePlayers().filter((p) =>
+    if (!q) return this.selectablePlayers();
+    return this.selectablePlayers().filter((p) =>
       `${p.name} ${p.firstname} ${p.licence ?? ''}`.toLowerCase().includes(q)
     );
   });
@@ -507,6 +556,122 @@ export class TeamsPage implements OnInit {
 
   refreshTeams(): void {
     this.api.teams(this.subTournamentId()).subscribe((t) => this.teams.set(t));
+    this.loadRounds();
+  }
+
+  // Manches du tournoi : pour savoir si le placement est déjà fait et quelles
+  // places « Relais » y sont libres.
+  private loadRounds(): void {
+    this.api.rounds(this.subTournamentId()).subscribe({
+      next: (rounds) => {
+        this.roundCount.set(rounds.length);
+        if (rounds.length === 0) {
+          this.relaisSeats.set([]);
+          return;
+        }
+        const first = rounds.reduce((a, b) => (a.round_number <= b.round_number ? a : b));
+        this.api.round(first.id).subscribe({
+          next: (r) => {
+            const seats: RoundSeat[] = [];
+            for (const t of r.tables ?? []) {
+              for (const st of t.seats) if (st.is_relais) seats.push(st);
+            }
+            this.relaisSeats.set(seats);
+          },
+          error: () => this.relaisSeats.set([]),
+        });
+      },
+      error: () => this.roundCount.set(0),
+    });
+  }
+
+  // Repartir du pointage avec les inscrits pré-cochés, pour intégrer un
+  // joueur oublié quand le placement est déjà fait et qu'aucune place
+  // « Relais » n'est libre — toutes les tables sont complètes.
+  startRecompose(): void {
+    this.recomposing.set(true);
+    this.drawSelection.set(new Set(this.registeredPlayers().map((p) => p.id)));
+    this.persistDraw();
+    this.snack.open(
+      'Cochez le ou les joueurs à ajouter, puis « Refaire les tables ».',
+      'Fermer',
+      { duration: 6000 }
+    );
+  }
+
+  cancelRecompose(): void {
+    this.recomposing.set(false);
+    this.drawSelection.set(new Set());
+    this.persistDraw();
+  }
+
+  // Supprime manches et équipes, puis relance le tirage complet.
+  private wipeThenDraw(): void {
+    const subId = this.subTournamentId();
+    this.drawing.set(true);
+    const done: Observable<unknown> = of(null);
+    this.api.rounds(subId).subscribe({
+      next: (rounds) => {
+        const delRounds: Observable<unknown> = rounds.length
+          ? from(rounds).pipe(
+              concatMap((r) => this.api.deleteRound(r.id)),
+              toArray()
+            )
+          : done;
+        delRounds.subscribe({
+          next: () => {
+            const teams = this.teams();
+            const delTeams: Observable<unknown> = teams.length
+              ? from(teams).pipe(
+                  concatMap((t) => this.api.deleteTeam(t.id)),
+                  toArray()
+                )
+              : done;
+            delTeams.subscribe({
+              next: () => {
+                this.teams.set([]);
+                this.recomposing.set(false);
+                this.drawing.set(false);
+                this.randomDraw(true);
+              },
+              error: (err: unknown) => this.drawFailed(err),
+            });
+          },
+          error: (err: unknown) => this.drawFailed(err),
+        });
+      },
+      error: (err: unknown) => this.drawFailed(err),
+    });
+  }
+
+  // Refaire les tables : les manches et les équipes existantes sont
+  // supprimées, puis le tirage repart de la sélection complète.
+  redrawTables(): void {
+    const plan = this.drawPlan();
+    if (!plan || this.drawing()) return;
+    const nbTeams = plan.fours + plan.threes;
+    const detail =
+      plan.threes > 0
+        ? `${plan.fours} de 4 + ${plan.threes} de 3`
+        : `${plan.fours} de 4`;
+    if (
+      !confirm(
+        `Refaire les tables avec ${this.drawCount()} joueurs (${detail}) ?\n\n` +
+          `La mise en place actuelle et les scores éventuellement saisis seront perdus.`
+      )
+    ) {
+      return;
+    }
+    if (!confirm('Dernière vérification : confirmer la nouvelle répartition ?')) return;
+    this.wipeThenDraw();
+  }
+
+  private drawFailed(err: unknown): void {
+    this.drawing.set(false);
+    const e = err as { error?: { error?: string } };
+    this.snack.open(e?.error?.error || 'Opération impossible', 'Fermer', {
+      duration: 4000,
+    });
   }
 
   setTeamSize(size: 3 | 4): void {
@@ -743,7 +908,9 @@ export class TeamsPage implements OnInit {
     return payload;
   }
 
-  randomDraw(): void {
+  // `confirmed` : le nettoyage des manches et des équipes a déjà été
+  // confirmé par « Refaire les tables ».
+  randomDraw(confirmed = false): void {
     const plan = this.drawPlan();
     if (!plan || this.drawing()) return;
     const nbTeams = plan.fours + plan.threes;
@@ -752,6 +919,7 @@ export class TeamsPage implements OnInit {
         ? `${plan.fours} de 4 + ${plan.threes} de 3`
         : `${plan.fours} de 4`;
     if (
+      !confirmed &&
       !confirm(
         `Tirer au sort ${this.drawCount()} joueurs en ${nbTeams} équipe(s) (${detail}) et générer la mise en place de la manche 1 ?`
       )

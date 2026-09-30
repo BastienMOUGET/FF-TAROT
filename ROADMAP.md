@@ -6,6 +6,102 @@
 
 ---
 
+## ✅ v3.0.33 — Retour terrain n°14 : sauvegarde intégrée, ajout d'un joueur après placement *(livré, 2026-09-30)*
+
+Conversation WhatsApp des 26 et 27/09, après plusieurs soirées sur la
+v3.0.32. **Pas de migration de base** : rien ne change dans le schéma,
+l'installation se fait par-dessus la version précédente sans perte de
+données. Sauvegarder quand même avant, maintenant que c'est un bouton.
+
+### Ajouter un joueur quand les tables sont déjà faites *(priorité demandée)*
+
+Un retardataire arrive après le tirage au sort, et il n'y a pas de table de
+3 où l'asseoir. Il fallait tout reprendre à la main. La page des tables
+propose maintenant **« Ajouter un joueur et refaire les tables »** : le
+joueur est pointé, puis les places de la soirée sont retirées et retirées au
+sort avec l'effectif complet. Double confirmation, et le bouton disparaît
+dès qu'un score est saisi — ce qui est déjà joué ne peut pas être perdu par
+inadvertance.
+
+Quand il existe une table de 3, l'ancien chemin reste le bon : le joueur
+prend la place du Relais, sans rien retirer au sort.
+
+### Le remplaçant d'un Relais n'apparaissait dans aucun classement
+
+Signalé comme un bug de classement, c'en était un d'accessibilité : la
+substitution d'un Relais **n'était pas proposée** à l'écran. La liste
+déroulante était alimentée par la liste des joueurs, dont les Relais sont
+exclus par construction — la fonction existait côté serveur, elle était
+inatteignable. Les places tenues par un Relais sont maintenant listées, et
+le joueur qui en prend une est rattaché à l'équipe de la manche 1.
+
+Au passage, le classement d'un tournoi partait des seules équipes. Il part
+désormais des équipes **ou** des places occupées : un joueur entré en cours
+de soirée ne peut plus passer à travers.
+
+### Le bouton « Manche N+1 » semblait inactif
+
+Il changeait bien l'adresse, mais pas l'écran. La page d'une manche lisait
+son numéro une seule fois à l'ouverture (`snapshot`) ; Angular réutilisant
+le composant d'une manche à l'autre, l'affichage restait sur la manche
+précédente. Elle suit maintenant le paramètre de route. Le bouton a aussi
+été ajouté en tête des pages de saisie d'une table, d'où il manquait.
+
+### L'export vers la fédération n'avait aucun bouton
+
+Le CSV au masque fédéral, annoncé en v3.0.30, était produit par le serveur
+mais **aucun écran ne l'appelait**, et l'adresse utilisée par le front ne
+correspondait pas à la route (`/ranking/export-pcn.csv` contre
+`/export-pcn.csv`, soit un 404). Bouton **« Export FFT »** sur le classement
+général du tournoi, adresse corrigée. Vérifié sur une base jetable :
+l'ancienne adresse répondait 404, la nouvelle renvoie l'en-tête
+`NumLicenceJoueur;NomJoueur;PrenomJoueur;Pcn;Pp`.
+
+### Sauvegarder et restaurer depuis l'application
+
+Jusqu'ici la sauvegarde demandait une invite de commandes. **Administration
+▸ Paramètres** porte maintenant deux boutons, grisés hors compte
+administrateur (le serveur refuse la route de son côté) :
+
+- **Sauvegarder** : `mysqldump` de toute la base, téléchargé sous
+  `pabb90-<base>-<date>-<heure>.sql`, avec un rappel de le copier sur une
+  clé.
+- **Restaurer…** : choix d'un `.sql`, confirmation nommant le fichier et
+  disant ce qui sera perdu, puis réinjection. Le serveur refuse un fichier
+  qui ne porte pas l'en-tête `mysqldump`, pour qu'un fichier choisi par
+  erreur ne parte pas dans la base.
+
+Les chemins de `mysqldump` et `mysql` sont écrits par les quatre chemins
+d'installation (`setup.iss`, `install.sh`, `install.ps1`, image Docker) dans
+`.env` et dans l'environnement du service ; l'installeur les réécrit à
+chaque passage, une mise à jour par-dessus suffit donc.
+
+Vérifié de bout en bout sur une base jetable : 12 joueurs créés, sauvegarde
+(31 Ko, 23 tables), suppression des 12, restauration → 12 joueurs, relus par
+l'API. Sans jeton : HTTP 401. Fichier qui n'est pas une sauvegarde : refusé
+avec un message en clair. Aucun fichier temporaire laissé derrière.
+
+### Confort de saisie
+
+- Saisie donne par donne : choisir le preneur amène le curseur dans la case
+  Score de la même ligne, et la dernière donne s'enregistre d'elle-même.
+- Le mot de passe est redemandé à chaque lancement du programme : la session
+  ne survit plus à la fermeture du navigateur.
+
+### Confirmé par le club
+
+L'interprétation des mouvements fédéraux est la bonne : « le joueur de la
+table 8 en position N−1 se déplace à la table 5 en position N ». Rien à
+changer sur la v3.0.32.
+
+### En attente d'arbitrage
+
+Import de la liste fédérale des licenciés (plusieurs milliers, saisie par
+recherche), gestion multi-clubs, mode « tournoi simple » hors challenge,
+renommage du programme. Rien n'est engagé tant que ce n'est pas tranché.
+
+---
+
 ## ✅ v3.0.32 — Retour terrain n°13 : mouvements FFT conformes, tables de 3 espacées *(livré, 2026-09-25)*
 
 Mémo `feedback/2026-09-25/` (version 3.031), après une soirée à 37 joueurs.
@@ -932,7 +1028,7 @@ Backend fonctionnellement complet pour gérer un tournoi FFT en mode
 |---|---|---|---|
 | V1.1 | Multi-séance avec carryover `score_precedent` entre séances | 1-2 j | Schéma déjà compatible (juste FK `previous_sub_tournament_id`) |
 | V1.2 | Import CSV de joueurs | 1 j | Module `players` + endpoint `POST /players/import` |
-| V1.3 | Sauvegarde / restauration de tournois (JSON export/import) | 2 j | Lit/écrit toutes les tables liées à un tournament |
+| ~~V1.3~~ | ~~Sauvegarde / restauration de tournois (JSON export/import)~~ | — | Couvert autrement en v3.0.33 : sauvegarde/restauration de **toute** la base (`mysqldump`) depuis Administration ▸ Paramètres. L'export d'un tournoi isolé n'a jamais été demandé par le club. |
 | V1.4 | Tests automatisés (Jest + supertest) | 3-5 j | Indispensable avant prod |
 | V1.5 | PDF imprimables (feuille de route, feuille de score, étiquettes) | 1-2 sem | Lib pdfkit ou puppeteer |
 
