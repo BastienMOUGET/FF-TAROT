@@ -275,15 +275,21 @@ export class SubTournamentDialog implements OnInit {
               <thead>
                 <tr>
                   <th rowspan="2" class="num">Place</th>
-                  <th rowspan="2">Licence</th>
+                  @if (!printing()) {
+                    <th rowspan="2">Licence</th>
+                  }
                   <th rowspan="2">Joueur</th>
                   @for (st of challengeRanking()!.sub_tournaments; track st.id) {
-                    <th class="tour" [attr.colspan]="detailMode() === 'full' ? 3 : 1" [title]="st.players + ' joueurs'">
+                    <th class="tour" [attr.colspan]="dateSpan()" [title]="st.players + ' joueurs'">
                       {{ st.label }}
                     </th>
                   }
-                  <th rowspan="2" class="num total">Points</th>
-                  <th rowspan="2" class="num total">Pcn</th>
+                  @if (detailMode() === 'full' || !printing()) {
+                    <th rowspan="2" class="num total">Points</th>
+                  }
+                  @if (!printing()) {
+                    <th rowspan="2" class="num total">Pcn</th>
+                  }
                   <th rowspan="2" class="num total pc">PC</th>
                   <th rowspan="2" class="num total" title="Nombre de participations">
                     {{ density() === 'normal' ? 'Particip.' : 'Part.' }}
@@ -292,7 +298,11 @@ export class SubTournamentDialog implements OnInit {
                 <tr>
                   @for (st of challengeRanking()!.sub_tournaments; track st.id) {
                     @if (detailMode() === 'full') {
-                      <th class="num sub">Pts</th><th class="num sub">Pcn</th><th class="num sub">PC</th>
+                      <th class="num sub">Pts</th>
+                      @if (!printing()) {
+                        <th class="num sub">Pcn</th>
+                      }
+                      <th class="num sub">PC</th>
                     } @else {
                       <th class="num sub">PC</th>
                     }
@@ -303,19 +313,27 @@ export class SubTournamentDialog implements OnInit {
                 @for (e of challengeRanking()!.ranking; track e.player_id) {
                   <tr [class.first]="e.place === 1">
                     <td class="num">{{ e.place }}</td>
-                    <td class="lic">{{ e.licence || '' }}</td>
+                    @if (!printing()) {
+                      <td class="lic">{{ e.licence || '' }}</td>
+                    }
                     <td class="name">{{ e.name }} {{ e.firstname }}</td>
                     @for (d of e.details; track $index) {
                       @if (detailMode() === 'full') {
                         <td class="num">{{ d ? d.points : '' }}</td>
-                        <td class="num">{{ d ? d.pcn : '' }}</td>
+                        @if (!printing()) {
+                          <td class="num">{{ d ? d.pcn : '' }}</td>
+                        }
                         <td class="num pc">{{ d ? d.pc : '' }}</td>
                       } @else {
                         <td class="num pc">{{ d ? d.pc : '' }}</td>
                       }
                     }
-                    <td class="num total">{{ e.total_points }}</td>
-                    <td class="num total">{{ e.total_pcn }}</td>
+                    @if (detailMode() === 'full' || !printing()) {
+                      <td class="num total">{{ e.total_points }}</td>
+                    }
+                    @if (!printing()) {
+                      <td class="num total">{{ e.total_pcn }}</td>
+                    }
                     <td class="num total pc strong">{{ e.points }}</td>
                     <td class="num total">{{ e.sub_tournaments_played }}</td>
                   </tr>
@@ -383,7 +401,6 @@ export class SubTournamentDialog implements OnInit {
       .challenge-table th, .challenge-table td { padding: 1px 3px; }
       .challenge-table.dense { font-size: 7.5pt; }
       .challenge-table.very-dense { font-size: 6.5pt; letter-spacing: -0.2px; }
-      .challenge-table .lic { display: none; }
       .challenge-table tr.first td { background: #ffe082 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
     .sub-title { display: flex; align-items: center; gap: 8px; font-size: 1.15em; font-weight: 500; }
@@ -421,6 +438,16 @@ export class TournamentDetailPage implements OnInit {
   challengeRanking = signal<ChallengeRanking | null>(null);
   challengeLoading = signal(false);
   detailMode = signal<'pc' | 'full'>('pc');
+  // Vrai le temps de l'impression. Les colonnes superflues au papier sont
+  // alors retirées du RENDU, et non masquées en CSS : masquer une cellule
+  // sans masquer son en-tête décalait toute la ligne d'une colonne — c'est
+  // ce qui mettait les PC sous l'en-tête « Joueur » (retour terrain n°18).
+  printing = signal(false);
+  // Largeur d'un groupe de dates : Pts + Pcn + PC à l'écran, Pts + PC au
+  // papier, ou la seule colonne PC en vue « PC par tournoi ».
+  dateSpan = computed(() =>
+    this.detailMode() === 'full' ? (this.printing() ? 2 : 3) : 1
+  );
 
   // Densité d'affichage : une colonne par tournoi en vue compacte, trois en
   // vue détaillée. Au-delà d'une quinzaine de colonnes, la police est
@@ -485,8 +512,18 @@ export class TournamentDetailPage implements OnInit {
       : ['/sub-tournaments', sub.id];
   }
 
+  // On bascule en vue d'impression, on laisse Angular reconstruire le
+  // tableau, puis on imprime — et on rétablit la vue d'écran ensuite.
+  private withPrintView(run: () => void): void {
+    this.printing.set(true);
+    setTimeout(() => {
+      run();
+      setTimeout(() => this.printing.set(false), 500);
+    }, 50);
+  }
+
   print(): void {
-    window.print();
+    this.withPrintView(() => window.print());
   }
 
   // Le PDF passe par la fenêtre d'impression du navigateur : choisir
@@ -498,7 +535,7 @@ export class TournamentDetailPage implements OnInit {
       'OK',
       { duration: 6000 }
     );
-    setTimeout(() => window.print(), 400);
+    this.withPrintView(() => window.print());
   }
 
   private reloadSubs(tid: number): void {

@@ -67,6 +67,27 @@ import { UserDialog } from './dialogs/user-dialog';
     <mat-tab-group>
       <!-- ====== JOUEURS ====== -->
       <mat-tab label="Joueurs">
+        <!-- Deux fiches pour la même personne ont fait jouer un joueur à deux
+             tables le 30/09. La création d'un doublon est désormais refusée,
+             mais ceux déjà en base doivent être vus pour être corrigés. -->
+        @if (duplicates().length > 0) {
+          <p class="dup-banner">
+            <mat-icon>warning</mat-icon>
+            <span>
+              <strong>{{ duplicates().length }} fiches font doublon.</strong>
+              Une même personne inscrite deux fois peut se retrouver assise à
+              deux tables et bloquer le démarrage d'un tournoi. Supprimez la
+              fiche en trop — de préférence celle qui compte
+              <em>0 inscription</em> :
+              @for (d of duplicates(); track d.id) {
+                <span class="dup-chip"
+                  >{{ d.name }} {{ d.firstname }} (n°{{ d.id }},
+                  {{ d.inscriptions }} inscr.)</span
+                >
+              }
+            </span>
+          </p>
+        }
         <div class="tab-toolbar">
           <mat-form-field appearance="outline" class="search">
             <mat-label>Rechercher</mat-label>
@@ -361,6 +382,15 @@ import { UserDialog } from './dialogs/user-dialog';
     .settings-card { margin-top: 16px; max-width: 640px; }
     .settings-card mat-card-content { display: flex; flex-direction: column; gap: 20px; padding-top: 16px; }
     .setting { width: 100%; }
+    .dup-banner {
+      display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 0;
+      padding: 10px 14px; border-radius: 4px;
+      background: #fff3e0; color: #e65100; line-height: 1.5;
+    }
+    .dup-chip {
+      display: inline-block; margin: 2px 4px 0 0; padding: 1px 8px;
+      border-radius: 10px; background: #ffe0b2; font-size: 0.9em;
+    }
     .readonly-banner {
       display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
       padding: 10px 14px; border-radius: 4px;
@@ -395,6 +425,10 @@ export class AdminPage implements OnInit {
   busyLabel = signal('');
   restoreInput = viewChild<ElementRef<HTMLInputElement>>('restoreInput');
 
+  duplicates = signal<
+    { id: number; name: string; firstname: string; licence: string | null; inscriptions: number }[]
+  >([]);
+
   settingClubId = signal<number | null>(null);
   settingRounds = signal<number>(4);
 
@@ -419,6 +453,11 @@ export class AdminPage implements OnInit {
     // /api/users est refusé à un non-admin : on ne le demande pas, sinon
     // l'écran s'ouvrirait sur une erreur sans objet.
     if (this.isAdmin()) this.api.users().subscribe((d) => this.users.set(d));
+    if (this.isAdmin())
+      this.api.playerDuplicates().subscribe({
+        next: (d) => this.duplicates.set(d),
+        error: () => this.duplicates.set([]),
+      });
   }
 
   reloadPlayers() {

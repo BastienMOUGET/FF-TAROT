@@ -320,6 +320,21 @@ export class ApiService {
       { responseType: 'blob' }
     );
 
+  // Retire un joueur du placement : un Relais reprend sa place.
+  removePlacedPlayer = (
+    subTournamentId: number,
+    playerId: number
+  ): Observable<{ removed: boolean; player: string; rounds: number }> =>
+    this.http.delete<{ removed: boolean; player: string; rounds: number }>(
+      `${this.base}/sub-tournaments/${subTournamentId}/players/${playerId}`
+    );
+
+  playerDuplicates = (): Observable<
+    { id: number; name: string; firstname: string; licence: string | null; inscriptions: number }[]
+  > => this.http.get<
+    { id: number; name: string; firstname: string; licence: string | null; inscriptions: number }[]
+  >(`${this.base}/players/duplicates`);
+
   /* ----- Sauvegarde / restauration (administrateur) ----- */
   // Le serveur renvoie le mysqldump complet ; on le laisse en Blob pour
   // l'enregistrer tel quel, sans que le navigateur tente de l'interpréter.

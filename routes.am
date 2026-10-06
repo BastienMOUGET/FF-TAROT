@@ -67,6 +67,7 @@ public class Routes {
 
         // Référentiel — joueurs (recherche + CRUD admin)
         app.Get("/api/players", ctx => ModPlayers.List(ctx, db))
+        app.Get("/api/players/duplicates", ctx => ModPlayers.Duplicates(ctx, db))
         app.Post("/api/players/import", ctx => ModPlayers.Import(ctx, db))
         app.Get("/api/players/:id", ctx => ModPlayers.GetById(ctx, db))
         app.Post("/api/players", ctx => ModPlayers.Create(ctx, db))
@@ -105,6 +106,7 @@ public class Routes {
         app.Get("/api/sub-tournaments/:subTournamentId/teams", ctx => ModTeams.ListBySubTournament(ctx, db))
         app.Post("/api/sub-tournaments/:subTournamentId/teams", ctx => ModTeams.Create(ctx, db))
         app.Post("/api/sub-tournaments/:subTournamentId/substitute", ctx => ModTeams.Substitute(ctx, db))
+        app.Delete("/api/sub-tournaments/:subTournamentId/players/:playerId", ctx => ModTeams.RemovePlacedPlayer(ctx, db))
         app.Get("/api/teams/:id", ctx => ModTeams.GetById(ctx, db))
         app.Delete("/api/teams/:id", ctx => ModTeams.Remove(ctx, db))
 

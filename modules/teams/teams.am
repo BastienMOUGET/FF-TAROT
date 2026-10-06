@@ -223,6 +223,20 @@ public class ModTeams {
         let a0: List<string> = already.Get(0)
         if (Db.CellInt(a0.Get(0)) > 0) { return HttpErr.BadRequest(t0.Get(1) + " " + t0.Get(0) + " est déjà inscrit dans ce tournoi : il jouerait deux fois") }
 
+        // La garde ci-dessus compare des IDENTIFIANTS. Le 30/09, deux fiches
+        // existaient pour la meme personne (« MAZIMANN AURELIEN » et
+        // « MAZIMANN Aurélien ») : les ids differaient, le controle a laisse
+        // passer, et le joueur s'est retrouve assis a deux tables, bloquant le
+        // demarrage du tournoi. On compare donc aussi les NOMS — la collation
+        // de la base ignore casse et accents (retour terrain n°18).
+        let homonyme: List<List<string>> = db.Rows(
+            "SELECT p.id, p.name, p.firstname FROM players p WHERE p.name = ? AND p.firstname = ? AND p.id <> ? AND p.id IN (SELECT tp.player_id FROM team_players tp JOIN teams t ON t.id = tp.team_id WHERE t.sub_tournament_id = ? UNION SELECT s.player_id FROM seats s JOIN rounds r ON r.id = s.round_id WHERE r.sub_tournament_id = ?)",
+            Db.P5(t0.Get(0), t0.Get(1), toId, subId, subId))
+        if (homonyme.Count() > 0) {
+            let h0: List<string> = homonyme.Get(0)
+            return HttpErr.BadRequest(h0.Get(1) + " " + h0.Get(2) + " joue deja dans ce tournoi, sous une autre fiche (n°" + h0.Get(0) + " contre n°" + toId + "). Il s'agit vraisemblablement de deux fiches pour la meme personne : corrigez le doublon dans Administration > Joueurs avant de continuer.")
+        }
+
         db.Begin()
         // Remplacer un Relais : le nouveau joueur prend sa place ET rejoint
         // l'équipe de la table, qui passe de 3 à 4 joueurs.
@@ -282,5 +296,87 @@ public class ModTeams {
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
         if (db.Changes() == 0) { return HttpErr.NotFound() }
         return J.NoContent()
+    }
+
+    // Ids des Relais libres de la manche `roundId` (aucune place occupee).
+    static int FreeRelais(Db db, string roundId) {
+        let rows: List<List<string>> = db.Rows(
+            "SELECT p.id FROM players p WHERE p.is_relais = TRUE AND p.id NOT IN (SELECT s.player_id FROM seats s WHERE s.round_id = ?) ORDER BY CAST(p.firstname AS UNSIGNED) ASC, p.id ASC LIMIT 1",
+            Db.P1(roundId))
+        if (rows.Count() == 0) { return -1 }
+        let r0: List<string> = rows.Get(0)
+        return Db.CellInt(r0.Get(0))
+    }
+
+    // DELETE /api/sub-tournaments/:subTournamentId/players/:playerId (admin)
+    // Retire un joueur DEJA PLACE : un Relais reprend sa place a chaque
+    // manche, la table passe de 4 a 3. C'est l'exact inverse de Substitute,
+    // et le moyen de se sortir d'un placement errone sans tout refaire
+    // (retour terrain n°18).
+    public static HttpResponse RemovePlacedPlayer(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+
+        let subId: string = ctx.Param("subTournamentId")
+        let playerId: string = ctx.Param("playerId")
+
+        let pr: List<List<string>> = db.Rows("SELECT name, firstname, is_relais FROM players WHERE id = ?", Db.P1(playerId))
+        if (pr.Count() == 0) { return HttpErr.NotFound() }
+        let p0: List<string> = pr.Get(0)
+        if (Db.CellBool(p0.Get(2))) { return HttpErr.BadRequest("Un Relais n'est pas un joueur : il ne se retire pas.") }
+        let who: string = p0.Get(1) + " " + p0.Get(0)
+
+        // Un score deja valide sur une table ou il est assis : le retirer
+        // fausserait un resultat acquis.
+        let scored: List<List<string>> = db.Rows(
+            "SELECT COUNT(*) FROM seats s JOIN rounds r ON r.id = s.round_id JOIN table_results tr ON tr.round_id = s.round_id AND tr.table_number = s.table_number WHERE r.sub_tournament_id = ? AND s.player_id = ? AND tr.validated = TRUE",
+            Db.P2(subId, playerId))
+        let sc0: List<string> = scored.Get(0)
+        if (Db.CellInt(sc0.Get(0)) > 0) {
+            return HttpErr.BadRequest(who + " a deja une table validee : retirer un joueur fausserait un resultat acquis. Annulez d'abord la validation de cette table.")
+        }
+
+        // Places occupees, manche par manche.
+        let seats: List<List<string>> = db.Rows(
+            "SELECT s.id, s.round_id, s.table_number FROM seats s JOIN rounds r ON r.id = s.round_id WHERE r.sub_tournament_id = ? AND s.player_id = ? ORDER BY r.round_number ASC",
+            Db.P2(subId, playerId))
+
+        // Une table deja a 3 (donc avec un Relais) tomberait a 2 joueurs
+        // reels : le tarot ne se joue pas a deux, on refuse.
+        for i in 0..seats.Count() {
+            let st: List<string> = seats.Get(i)
+            let hasRelais: List<List<string>> = db.Rows(
+                "SELECT COUNT(*) FROM seats s JOIN players p ON p.id = s.player_id WHERE s.round_id = ? AND s.table_number = ? AND p.is_relais = TRUE",
+                Db.P2(st.Get(1), st.Get(2)))
+            let h0: List<string> = hasRelais.Get(0)
+            if (Db.CellInt(h0.Get(0)) > 0) {
+                return HttpErr.BadRequest(who + " est a une table de 3, deja completee par un Relais : la retirer la laisserait a deux joueurs. Refaites le tirage des places.")
+            }
+        }
+
+        db.Begin()
+        for i in 0..seats.Count() {
+            let st: List<string> = seats.Get(i)
+            let relais: int = ModTeams.FreeRelais(db, st.Get(1))
+            if (relais < 0) {
+                db.Rollback()
+                return HttpErr.BadRequest("Plus aucun Relais disponible sur cette manche. Refaites le tirage des places.")
+            }
+            let ok: bool = db.Exec("UPDATE seats SET player_id = ? WHERE id = ?", Db.P2(String.FromInt(relais), st.Get(0)))
+            if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        }
+
+        let ok2: bool = db.Exec(
+            "DELETE tp FROM team_players tp JOIN teams t ON t.id = tp.team_id WHERE t.sub_tournament_id = ? AND tp.player_id = ?",
+            Db.P2(subId, playerId))
+        if (!ok2) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        db.Commit()
+
+        let o: JsonValue = J.Obj()
+        o.AppendEntry("removed", J.Bool(true))
+        o.AppendEntry("player", J.Str(who))
+        o.AppendEntry("rounds", J.Int(seats.Count()))
+        return J.Ok(o)
     }
 }

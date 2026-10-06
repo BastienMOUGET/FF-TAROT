@@ -88,6 +88,45 @@ public class ModPlayers {
 
     // Remplit un builder INSERT/UPDATE-like via callbacks Set/SetNull.
     // name/firstname requis ; le reste nullable (sémantique || null / ?? null).
+    // Renvoie une erreur si un AUTRE joueur porte deja ce nom et ce prenom.
+    // `exceptId` vide = creation ; sinon on s'exclut soi-meme (modification).
+    static HttpResponse RefuseIfDuplicate(Db db, string name, string firstname, string exceptId) {
+        var sql: string = "SELECT id, name, firstname FROM players WHERE name = ? AND firstname = ? AND is_relais = FALSE"
+        var rows: List<List<string>> = new List<List<string>>()
+        if (String.Length(exceptId) > 0) {
+            sql = sql + " AND id <> ?"
+            rows = db.Rows(sql, Db.P3(name, firstname, exceptId))
+        } else {
+            rows = db.Rows(sql, Db.P2(name, firstname))
+        }
+        if (rows.Count() == 0) { return null }
+        let r0: List<string> = rows.Get(0)
+        return HttpErr.BadRequest(r0.Get(1) + " " + r0.Get(2) + " existe deja dans la liste des joueurs (fiche n°" + r0.Get(0) + "). Deux fiches pour la meme personne feraient jouer un joueur a deux tables : modifiez la fiche existante plutot que d'en creer une seconde.")
+    }
+
+    // GET /api/players/duplicates (admin) — fiches faisant doublon, pour
+    // nettoyer une base ou le mal est deja fait.
+    public static HttpResponse Duplicates(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let rows: List<List<string>> = db.Rows(
+            "SELECT p.id, p.name, p.firstname, p.licence, (SELECT COUNT(*) FROM team_players tp WHERE tp.player_id = p.id) AS inscriptions FROM players p JOIN (SELECT name, firstname FROM players WHERE is_relais = FALSE GROUP BY name, firstname HAVING COUNT(*) > 1) d ON d.name = p.name AND d.firstname = p.firstname WHERE p.is_relais = FALSE ORDER BY p.name ASC, p.firstname ASC, p.id ASC",
+            Db.NoParams())
+        let arr: JsonValue = J.Arr()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("id", J.CellInt(r.Get(0)))
+            o.AppendEntry("name", J.Str(r.Get(1)))
+            o.AppendEntry("firstname", J.Str(r.Get(2)))
+            o.AppendEntry("licence", J.CellStrN(r.Get(3)))
+            o.AppendEntry("inscriptions", J.CellInt(r.Get(4)))
+            arr.AppendItem(o)
+        }
+        return J.Ok(arr)
+    }
+
     public static HttpResponse Create(WebContext ctx, Db db) {
         let rc: int = Auth.CheckRole(ctx, "admin")
         if (rc == 401) { return HttpErr.Unauthorized() }
@@ -98,6 +137,15 @@ public class ModPlayers {
         let b: JsonValue = pr.Value
         if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
         if (!Fld.HasStr(b, "firstname")) { return HttpErr.BadRequest("firstname requis") }
+
+        // Deux fiches pour la même personne, ne differant que par la casse ou
+        // les accents, ont fait jouer un joueur a deux tables le 30/09 : la
+        // garde de la substitution compare des identifiants, elle ne pouvait
+        // pas les rapprocher (retour terrain n°18). La collation de la base
+        // (utf8mb4_unicode_ci) ignore casse et accents, une simple egalite
+        // SQL suffit donc a rapprocher « AURELIEN » et « Aurélien ».
+        let dup: HttpResponse = ModPlayers.RefuseIfDuplicate(db, Fld.Str(b, "name"), Fld.Str(b, "firstname"), "")
+        if (dup != null) { return dup }
 
         let ins: SqlIns = new SqlIns()
         if (Fld.HasStr(b, "licence")) { ins.Set("licence", Fld.Str(b, "licence")) } else { ins.SetNull("licence") }
@@ -126,6 +174,10 @@ public class ModPlayers {
         let b: JsonValue = pr.Value
         if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
         if (!Fld.HasStr(b, "firstname")) { return HttpErr.BadRequest("firstname requis") }
+
+        // Renommer une fiche ne doit pas davantage creer un doublon.
+        let dup: HttpResponse = ModPlayers.RefuseIfDuplicate(db, Fld.Str(b, "name"), Fld.Str(b, "firstname"), id)
+        if (dup != null) { return dup }
 
         let upd: SqlUpd = new SqlUpd()
         if (Fld.HasStr(b, "licence")) { upd.Set("licence", Fld.Str(b, "licence")) } else { upd.SetNull("licence") }
@@ -202,6 +254,10 @@ public class ModPlayers {
                 dw.AppendEntry("firstname", J.Str(firstname))
                 if (hasLicence) { dw.AppendEntry("new_licence", J.Str(licence)) } else { dw.AppendEntry("new_licence", J.Null()) }
                 dupWarnings.AppendItem(dw)
+                // L'import AVERTISSAIT puis inserait quand meme : c'est ainsi
+                // qu'une seconde fiche « MAZIMANN Aurélien » a cotoye
+                // « MAZIMANN AURELIEN ». On ignore desormais la ligne.
+                continue
             }
 
             let ins: SqlIns = new SqlIns()

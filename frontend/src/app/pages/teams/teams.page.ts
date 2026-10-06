@@ -18,6 +18,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 
+import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
+
 import { ApiService } from '../../core/api.service';
 import { Pair, Player, RoundSeat, Seat, Team } from '../../core/api.types';
 
@@ -250,6 +252,31 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
               <mat-icon>swap_horiz</mat-icon> Remplacer
             </button>
           </div>
+
+          <!-- Un joueur en trop dans le placement : le retirer sans refaire
+               le tirage. C'est ainsi qu'on se sort d'un doublon decouvert au
+               demarrage (retour terrain n°18). -->
+          <div class="swap-row remove-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Retirer un joueur du placement</mat-label>
+              <mat-select [value]="removeId()" (selectionChange)="removeId.set($event.value)">
+                @for (p of registeredPlayers(); track p.id) {
+                  <mat-option [value]="p.id">{{ p.name }} {{ p.firstname }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>
+                Sa place est reprise par un « Relais » : la table passe de 4 à 3.
+              </mat-hint>
+            </mat-form-field>
+            <button
+              mat-stroked-button
+              color="warn"
+              [disabled]="!removeId() || swapping()"
+              (click)="doRemovePlaced()"
+            >
+              <mat-icon>person_remove</mat-icon> Retirer
+            </button>
+          </div>
         </mat-card-content>
       </mat-card>
     }
@@ -462,6 +489,7 @@ export class TeamsPage implements OnInit {
   );
   // Places « Relais » du tournoi (tables de 3), proposées au remplacement.
   relaisSeats = signal<RoundSeat[]>([]);
+  removeId = signal<number | null>(null);
   swapFrom = signal<number | null>(null);
   swapTo = signal<number | null>(null);
   swapping = signal(false);
@@ -806,9 +834,56 @@ export class TeamsPage implements OnInit {
       },
       error: (err) => {
         this.swapping.set(false);
-        this.snack.open(err?.error?.error || 'Remplacement impossible', 'Fermer', {
-          duration: 6000,
-        });
+        // Le refus d'un homonyme explique deux fiches et renvoie vers
+        // Administration : trop long pour un bandeau de six secondes.
+        this.say('Remplacement impossible', err?.error?.error);
+      },
+    });
+  }
+
+  // Boîte d'information : un seul bouton, le message tient sur plusieurs
+  // lignes et ne disparaît pas tout seul.
+  private say(title: string, message: string | undefined): void {
+    const data: ConfirmDialogData = {
+      title,
+      message: message || 'Opération impossible.',
+      confirmLabel: 'Fermer',
+      hideCancel: true,
+    };
+    this.dialog.open(ConfirmDialog, { data, width: '520px' });
+  }
+
+  doRemovePlaced(): void {
+    const id = this.removeId();
+    if (!id) return;
+    const p = this.registeredPlayers().find((x) => x.id === id);
+    const who = p ? `${p.name} ${p.firstname}` : 'ce joueur';
+    if (
+      !confirm(
+        `Retirer ${who} du placement ?\n\n` +
+          `Sa place est reprise par un « Relais » sur toutes les manches : ` +
+          `sa table passe de 4 à 3 joueurs. Il reste dans la liste des ` +
+          `joueurs du club, il n'est retiré que de ce tournoi.`
+      )
+    ) {
+      return;
+    }
+    this.swapping.set(true);
+    this.api.removePlacedPlayer(this.subTournamentId(), id).subscribe({
+      next: (r) => {
+        this.swapping.set(false);
+        this.removeId.set(null);
+        this.snack.open(
+          `${r.player} retiré du placement (${r.rounds} manche(s))`,
+          'Fermer',
+          { duration: 5000 }
+        );
+        this.refreshTeams();
+        this.loadRounds();
+      },
+      error: (err) => {
+        this.swapping.set(false);
+        this.say('Retrait impossible', err?.error?.error);
       },
     });
   }

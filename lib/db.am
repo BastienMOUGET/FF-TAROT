@@ -154,4 +154,16 @@ public class Db {
         l.Add(c)
         return l
     }
+
+    public static List<string> P4(string a, string b, string c, string d) {
+        let l: List<string> = Db.P3(a, b, c)
+        l.Add(d)
+        return l
+    }
+
+    public static List<string> P5(string a, string b, string c, string d, string e) {
+        let l: List<string> = Db.P4(a, b, c, d)
+        l.Add(e)
+        return l
+    }
 }

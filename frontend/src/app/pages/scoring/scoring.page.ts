@@ -595,6 +595,20 @@ export class ScoringPage implements OnInit {
     } else if (row.auto && manual.length < active.length - 1) {
       row.scores[row.auto] = '';
       row.auto = null;
+    } else if (manual.length === active.length && free.length === 0) {
+      // Ligne complète sans case « auto » : c'est une donne relue depuis la
+      // base qu'on vient de corriger. Rien ne rééquilibrait, et la dernière
+      // valeur devait être refaite à la main (retour terrain n°18). On
+      // recalcule le dernier siège — par convention celui que la saisie
+      // calcule, Ouest — sauf si c'est justement celui qu'on corrige : dans
+      // ce cas la somme passe au rouge, et c'est à l'utilisateur de trancher.
+      const last = active[active.length - 1];
+      if (seat !== last) {
+        const others = active.filter((s) => s !== last);
+        const sum = others.reduce((acc, s) => acc + this.num(row.scores[s]), 0);
+        row.scores[last] = String(-sum);
+        row.auto = last;
+      }
     }
     this.touch();
   }

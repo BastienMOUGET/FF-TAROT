@@ -181,6 +181,26 @@ public class ModAuth {
         if (rc == 401) { return HttpErr.Unauthorized() }
         if (rc == 403) { return HttpErr.Forbidden() }
         let id: string = ctx.Param("id")
+
+        // Rien n'empechait de supprimer le dernier administrateur, ni son
+        // propre compte : plus personne n'aurait alors pu entrer dans
+        // Administration, ni creer un compte, puisque les deux exigent le
+        // role admin. Le club se serait retrouve dehors (retour terrain n°18).
+        let who: List<List<string>> = db.Rows("SELECT username, role FROM users WHERE id = ?", Db.P1(id))
+        if (who.Count() == 0) { return HttpErr.NotFound() }
+        let w0: List<string> = who.Get(0)
+        if (w0.Get(1) == "admin") {
+            let cnt: List<List<string>> = db.Rows("SELECT COUNT(*) FROM users WHERE role = 'admin'", Db.NoParams())
+            let c0: List<string> = cnt.Get(0)
+            if (Db.CellInt(c0.Get(0)) <= 1) {
+                return HttpErr.BadRequest("Impossible de supprimer « " + w0.Get(0) + " » : c'est le dernier compte administrateur. Sans lui, plus personne ne pourrait acceder a l'Administration ni creer de compte. Creez d'abord un autre administrateur.")
+            }
+        }
+        let me: int = Auth.SubOf(Auth.ClaimsOf(ctx))
+        if (String.FromInt(me) == id) {
+            return HttpErr.BadRequest("Vous ne pouvez pas supprimer le compte avec lequel vous etes connecte.")
+        }
+
         let ok: bool = db.Exec("DELETE FROM users WHERE id = ?", Db.P1(id))
         if (!ok) { return HttpErr.FromDb(db.LastError()) }
         if (db.Changes() == 0) { return HttpErr.NotFound() }

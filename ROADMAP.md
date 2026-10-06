@@ -6,6 +6,113 @@
 
 ---
 
+## ✅ v3.0.37 — Retour terrain n°18 : le doublon qui a bloqué la soirée *(livré, 2026-10-06)*
+
+Retour du tournoi du 30/09 et essais du 02/10. **Pas de migration** :
+installation par-dessus la précédente, sans perte de données.
+
+### Un joueur assis à deux tables — le défaut bloquant
+
+MAZIMANN Aurélien apparaissait **une seule fois** dans les joueurs présents,
+et pourtant deux fois dans le placement : table 2 en Sud
+(« MAZIMANN AURELIEN ») et table 6 en Nord (« MAZIMANN Aurélien »), à la
+place du Relais 1. Avec 37 présents, le placement correct est 7 tables de 4
+et 3 tables de 3 ; la 38ᵉ place n'aurait pas dû exister.
+
+**Deux fiches coexistaient pour la même personne**, ne différant que par la
+casse et un accent. Rien ne l'empêchait : `players` ne porte qu'un index
+`idx_players_name`, pas de contrainte d'unicité, et `Create` ne vérifiait
+rien. L'import, lui, *signalait* le doublon — puis insérait quand même.
+
+La garde de la substitution existait pourtant (`teams.am`), mais elle compare
+des **identifiants** : deux fiches, deux ids, elle laisse passer.
+
+Quatre corrections :
+
+- **Création refusée** si un joueur porte déjà ce nom et ce prénom. La
+  collation de la base (`utf8mb4_unicode_ci`) ignorant casse et accents, une
+  simple égalité SQL rapproche « AURELIEN » et « Aurélien » — aucune
+  normalisation maison n'est nécessaire. Le renommage d'une fiche est
+  contrôlé de la même façon.
+- **Import** : une ligne faisant doublon est désormais **ignorée**, plus
+  seulement signalée.
+- **Substitution** : en plus des identifiants, on compare les **noms**. Le
+  message nomme les deux fiches et renvoie vers Administration.
+- **Doublons existants** : `GET /api/players/duplicates` les liste, et
+  Administration ▸ Joueurs affiche un bandeau tant qu'il en reste, avec le
+  nombre d'inscriptions de chaque fiche — celle à `0 inscription` est celle à
+  supprimer.
+
+> **À faire sur la base du club :** le doublon MAZIMANN y est toujours. Le
+> bandeau d'Administration le désigne ; supprimer la fiche à 0 inscription.
+
+**Pas de contrainte `UNIQUE` en base**, volontairement : la base du club
+contient déjà le doublon, une migration `UNIQUE` échouerait à l'installation.
+Le contrôle est applicatif, et le nettoyage se fait depuis l'écran.
+
+### Retirer un joueur déjà placé
+
+Demandé après l'incident, et c'est le moyen de s'en sortir sans tout refaire.
+`DELETE /api/sub-tournaments/:id/players/:playerId` : un Relais reprend la
+place du joueur sur **toutes** les manches, la table passe de 4 à 3. Exact
+inverse de la substitution. Refusé si la table est déjà à 3 (elle tomberait à
+deux joueurs) ou si une table du joueur est déjà validée — un résultat acquis
+ne se fausse pas. Le bouton est sur la page des joueurs présents.
+
+### Le dernier administrateur pouvait être supprimé
+
+`DeleteUser` n'avait **aucune garde**. Supprimer le seul compte admin — ou le
+sien — fermait définitivement l'accès à Administration, puisque créer un
+compte exige déjà le rôle admin. Les deux cas sont refusés, avec un message
+qui dit quoi faire.
+
+### Correction d'une donne déjà enregistrée
+
+En saisie donne par donne, corriger un score ne recalculait plus le dernier
+siège (Ouest) : le rééquilibrage ne se déclenchait que sur une case marquée
+« auto », marque absente d'une donne relue depuis la base. Une ligne complète
+et sans case auto recalcule désormais le dernier siège — sauf si c'est
+justement celui qu'on corrige, auquel cas la somme passe au rouge et
+l'utilisateur tranche.
+
+### Impression du classement du Challenge : colonnes décalées
+
+Les en-têtes ne tombaient pas en face des colonnes : sous « Joueur »
+s'affichaient des PC. Le CSS d'impression masquait la **cellule** `.lic` sans
+masquer son **en-tête** — le corps perdait une colonne, l'en-tête non, et
+toute la ligne glissait d'un cran. Masquer une colonne en CSS ne peut pas
+fonctionner dans un tableau.
+
+Les colonnes superflues au papier sont donc **retirées du rendu**, en-tête
+comprise, et la largeur des groupes de dates suit. À l'impression :
+
+- vue « PC par tournoi » → Place, Joueur, PC par date, PC cumulés,
+  Participations ;
+- vue « Points / PCN » → Place, Joueur, Points par date, cumul des points,
+  PC, Participations.
+
+Licence et PCN ne sont plus imprimés dans aucune des deux. L'écran, lui, ne
+change pas.
+
+### Vérifié
+
+Scénario du 30/09 rejoué sur une base jetable contenant le doublon : la
+substitution du Relais par la seconde fiche est refusée en nommant les deux
+fiches, et une seule place reste occupée par un MAZIMANN ; un remplaçant
+légitime passe toujours et la table de 3 redevient une table de 4. Retrait
+d'un joueur placé : le Relais reprend sa place, l'inscription disparaît, et
+un second retrait sur la même table est refusé. Comptes : suppression du
+dernier admin refusée, suppression de son propre compte refusée, suppression
+d'un autre admin acceptée (204).
+
+### Reporté à sa demande
+
+Tableau PCN dédié, calculable sur une période donnée et transmissible à la
+fédération (imprimé ou fichier, format à définir) — « À DEFINIR POUR UNE
+VERSION FUTURE ».
+
+---
+
 ## ✅ v3.0.36 — Retour terrain n°17 : Administration visible en consultation *(livré, 2026-09-30)*
 
 Essais du 30/09 au soir. **Pas de migration** : installation par-dessus la
