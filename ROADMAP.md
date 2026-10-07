@@ -6,6 +6,61 @@
 
 ---
 
+## ✅ v3.0.38 — Retour terrain n°19 : le faux joueur était un Relais renommé *(livré, 2026-10-07)*
+
+Essais du 07/10 sur la v3.0.37. **Pas de migration.**
+
+### Ce que la v3.0.37 avait manqué
+
+La correction précédente traitait un doublon de **fiches joueur**. Ce n'en
+était pas un. Trois observations l'ont établi :
+
+1. Aucun bandeau orange n'apparaissait — or l'endpoint fonctionne : il n'y
+   avait donc pas deux fiches `is_relais = FALSE` de même nom.
+2. La liste « Retirer un joueur du placement », qui montre les **inscrits**,
+   ne proposait qu'un seul MAZIMANN : le second n'était pas un inscrit.
+3. Le retrait a répondu « Plus aucun Relais disponible sur cette manche » —
+   preuve que les **trois** Relais étaient déjà assis.
+
+**Une ligne `players` avec `is_relais = TRUE` portait le nom
+« MAZIMANN Aurélien ».** Elle est alors invisible partout : la liste des
+joueurs filtre les Relais, l'ancienne détection de doublons aussi. Mais la
+mise en place l'assoit en Nord d'une table de 3 — et la feuille de marque
+montre ce joueur à deux tables. D'où « Relais 1 » absent des placements des
+30/09 et 07/10.
+
+**Le placement était juste.** 29 joueurs = 5 tables de 4 + 3 tables de 3.
+Seul le nom affiché était faux : il ne fallait pas refaire le tirage.
+
+### Corrections
+
+- La détection d'anomalies couvre désormais les **deux** formes : fiches de
+  même nom, et Relais portant autre chose que « Relais N ». Le bandeau
+  d'Administration ▸ Joueurs les distingue et explique la conséquence.
+- Bouton **« Rendre aux Relais leur nom »** : réécrit « Relais 1 », « 2 », « 3 »…
+  Un Relais n'étant pas une personne, son nom ne porte aucune donnée.
+- **Un Relais ne se renomme plus** : `PUT /api/players/:id` le refuse.
+- L'import ne peut plus écraser un Relais (`is_relais = FALSE` ajouté aux
+  deux requêtes de rapprochement).
+
+### Comment la ligne a été corrompue : inconnu
+
+Aucun chemin du code actuel ne renomme un Relais — vérifié sur l'ensemble des
+écritures dans `players`, et sur l'historique git. L'origine est probablement
+une version antérieure ou une manipulation directe. Les portes sont fermées
+et l'état réparable ; la cause première reste non établie, et c'est dit ici
+plutôt que supposé.
+
+### Vérifié
+
+État de sa base reproduit sur une base jetable (un Relais renommé
+« MAZIMANN Aurélien », un joueur « MAZIMANN AURELIEN ») : la liste des
+joueurs n'en montre qu'un, l'ancienne détection ne voyait rien, la nouvelle
+nomme la fiche n°1 comme Relais, la réparation rend « Relais 1 », il ne reste
+aucune anomalie, et renommer un Relais est refusé.
+
+---
+
 ## ✅ v3.0.37 — Retour terrain n°18 : le doublon qui a bloqué la soirée *(livré, 2026-10-06)*
 
 Retour du tournoi du 30/09 et essais du 02/10. **Pas de migration** :

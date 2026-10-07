@@ -68,6 +68,7 @@ public class Routes {
         // Référentiel — joueurs (recherche + CRUD admin)
         app.Get("/api/players", ctx => ModPlayers.List(ctx, db))
         app.Get("/api/players/duplicates", ctx => ModPlayers.Duplicates(ctx, db))
+        app.Post("/api/players/repair-relais", ctx => ModPlayers.RepairRelais(ctx, db))
         app.Post("/api/players/import", ctx => ModPlayers.Import(ctx, db))
         app.Get("/api/players/:id", ctx => ModPlayers.GetById(ctx, db))
         app.Post("/api/players", ctx => ModPlayers.Create(ctx, db))

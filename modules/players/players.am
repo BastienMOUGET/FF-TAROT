@@ -104,14 +104,20 @@ public class ModPlayers {
         return HttpErr.BadRequest(r0.Get(1) + " " + r0.Get(2) + " existe deja dans la liste des joueurs (fiche n°" + r0.Get(0) + "). Deux fiches pour la meme personne feraient jouer un joueur a deux tables : modifiez la fiche existante plutot que d'en creer une seconde.")
     }
 
-    // GET /api/players/duplicates (admin) — fiches faisant doublon, pour
-    // nettoyer une base ou le mal est deja fait.
+    // GET /api/players/duplicates (admin) — anomalies de la liste des
+    // joueurs. Deux formes, et la seconde est celle qui a echappe a la
+    // v3.0.37 : un RELAIS portant le nom d'une vraie personne. Il est alors
+    // invisible partout (la liste des joueurs filtre les Relais, l'ancienne
+    // detection de doublons aussi), mais la mise en place l'assoit en Nord
+    // d'une table de 3 — et la feuille de marque montre ce joueur deux fois.
+    // C'est l'etat observe les 30/09 et 07/10 : « Relais 1 » absent du
+    // placement, « MAZIMANN Aurélien » a sa place (retour terrain n°19).
     public static HttpResponse Duplicates(WebContext ctx, Db db) {
         let rc: int = Auth.CheckRole(ctx, "admin")
         if (rc == 401) { return HttpErr.Unauthorized() }
         if (rc == 403) { return HttpErr.Forbidden() }
         let rows: List<List<string>> = db.Rows(
-            "SELECT p.id, p.name, p.firstname, p.licence, (SELECT COUNT(*) FROM team_players tp WHERE tp.player_id = p.id) AS inscriptions FROM players p JOIN (SELECT name, firstname FROM players WHERE is_relais = FALSE GROUP BY name, firstname HAVING COUNT(*) > 1) d ON d.name = p.name AND d.firstname = p.firstname WHERE p.is_relais = FALSE ORDER BY p.name ASC, p.firstname ASC, p.id ASC",
+            "SELECT p.id, p.name, p.firstname, p.licence, (SELECT COUNT(*) FROM team_players tp WHERE tp.player_id = p.id) AS inscriptions, p.is_relais FROM players p JOIN (SELECT name, firstname FROM players WHERE is_relais = FALSE GROUP BY name, firstname HAVING COUNT(*) > 1) d ON d.name = p.name AND d.firstname = p.firstname WHERE p.is_relais = FALSE UNION SELECT p.id, p.name, p.firstname, p.licence, (SELECT COUNT(*) FROM team_players tp WHERE tp.player_id = p.id) AS inscriptions, p.is_relais FROM players p WHERE p.is_relais = TRUE AND p.name <> 'Relais' ORDER BY name ASC, firstname ASC, id ASC",
             Db.NoParams())
         let arr: JsonValue = J.Arr()
         for i in 0..rows.Count() {
@@ -122,9 +128,42 @@ public class ModPlayers {
             o.AppendEntry("firstname", J.Str(r.Get(2)))
             o.AppendEntry("licence", J.CellStrN(r.Get(3)))
             o.AppendEntry("inscriptions", J.CellInt(r.Get(4)))
+            o.AppendEntry("is_relais", J.CellBool(r.Get(5)))
             arr.AppendItem(o)
         }
         return J.Ok(arr)
+    }
+
+    // POST /api/players/repair-relais (admin) — rend aux Relais leur nom
+    // canonique « Relais 1/2/3… ». Un Relais n'est pas une personne : son
+    // nom n'a aucune valeur, le reecrire ne perd rien, et cela sort la base
+    // d'un etat ou un joueur apparaissait a deux tables.
+    public static HttpResponse RepairRelais(WebContext ctx, Db db) {
+        let rc: int = Auth.CheckRole(ctx, "admin")
+        if (rc == 401) { return HttpErr.Unauthorized() }
+        if (rc == 403) { return HttpErr.Forbidden() }
+        let rows: List<List<string>> = db.Rows(
+            "SELECT id, name, firstname FROM players WHERE is_relais = TRUE ORDER BY id ASC", Db.NoParams())
+        let arr: JsonValue = J.Arr()
+        var k: int = 0
+        db.Begin()
+        for i in 0..rows.Count() {
+            let r: List<string> = rows.Get(i)
+            k = k + 1
+            let want: string = String.FromInt(k)
+            if (r.Get(1) == "Relais" && r.Get(2) == want) { continue }
+            let o: JsonValue = J.Obj()
+            o.AppendEntry("id", J.CellInt(r.Get(0)))
+            o.AppendEntry("was", J.Str(r.Get(1) + " " + r.Get(2)))
+            o.AppendEntry("now", J.Str("Relais " + want))
+            arr.AppendItem(o)
+            let ok: bool = db.Exec("UPDATE players SET name = 'Relais', firstname = ? WHERE id = ?", Db.P2(want, r.Get(0)))
+            if (!ok) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+        }
+        db.Commit()
+        let res: JsonValue = J.Obj()
+        res.AppendEntry("repaired", arr)
+        return J.Ok(res)
     }
 
     public static HttpResponse Create(WebContext ctx, Db db) {
@@ -179,6 +218,16 @@ public class ModPlayers {
         let dup: HttpResponse = ModPlayers.RefuseIfDuplicate(db, Fld.Str(b, "name"), Fld.Str(b, "firstname"), id)
         if (dup != null) { return dup }
 
+        // Un Relais n'est pas une personne : lui donner le nom d'un joueur le
+        // rendrait invisible dans les listes tout en l'asseyant en Nord d'une
+        // table de 3, ou il passerait pour ce joueur (retour terrain n°19).
+        let isRel: List<List<string>> = db.Rows("SELECT is_relais FROM players WHERE id = ?", Db.P1(id))
+        if (isRel.Count() == 0) { return HttpErr.NotFound() }
+        let ir0: List<string> = isRel.Get(0)
+        if (Db.CellBool(ir0.Get(0))) {
+            return HttpErr.BadRequest("Un Relais ne se renomme pas : ce n'est pas une personne, mais la place fixe en Nord d'une table de 3.")
+        }
+
         let upd: SqlUpd = new SqlUpd()
         if (Fld.HasStr(b, "licence")) { upd.Set("licence", Fld.Str(b, "licence")) } else { upd.SetNull("licence") }
         upd.Set("name", Fld.Str(b, "name"))
@@ -231,7 +280,7 @@ public class ModPlayers {
             if (Fld.HasStr(p, "licence")) { licence = Fld.Str(p, "licence") hasLicence = true }
 
             if (hasLicence) {
-                let existing: List<List<string>> = db.Rows("SELECT id, name, firstname FROM players WHERE licence = ?", Db.P1(licence))
+                let existing: List<List<string>> = db.Rows("SELECT id, name, firstname FROM players WHERE licence = ? AND is_relais = FALSE", Db.P1(licence))
                 if (existing.Count() > 0) {
                     let e0: List<string> = existing.Get(0)
                     let pid: string = e0.Get(0)
@@ -247,7 +296,7 @@ public class ModPlayers {
             }
 
             // Doublon potentiel : même nom+prénom déjà en base (licence différente ou absente).
-            let dupRows: List<List<string>> = db.Rows("SELECT licence FROM players WHERE name = ? AND firstname = ?", Db.P2(name, firstname))
+            let dupRows: List<List<string>> = db.Rows("SELECT licence FROM players WHERE name = ? AND firstname = ? AND is_relais = FALSE", Db.P2(name, firstname))
             if (dupRows.Count() > 0) {
                 let dw: JsonValue = J.Obj()
                 dw.AppendEntry("name", J.Str(name))

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, viewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, viewChild, ElementRef } from '@angular/core';
 
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
@@ -71,22 +71,53 @@ import { UserDialog } from './dialogs/user-dialog';
              tables le 30/09. La création d'un doublon est désormais refusée,
              mais ceux déjà en base doivent être vus pour être corrigés. -->
         @if (duplicates().length > 0) {
-          <p class="dup-banner">
+          <div class="dup-banner">
             <mat-icon>warning</mat-icon>
-            <span>
-              <strong>{{ duplicates().length }} fiches font doublon.</strong>
-              Une même personne inscrite deux fois peut se retrouver assise à
-              deux tables et bloquer le démarrage d'un tournoi. Supprimez la
-              fiche en trop — de préférence celle qui compte
-              <em>0 inscription</em> :
-              @for (d of duplicates(); track d.id) {
-                <span class="dup-chip"
-                  >{{ d.name }} {{ d.firstname }} (n°{{ d.id }},
-                  {{ d.inscriptions }} inscr.)</span
+            <div>
+              @if (renamedRelais().length > 0) {
+                <p class="m0">
+                  <strong
+                    >{{ renamedRelais().length }} « Relais » porte(nt) le nom
+                    d'un joueur.</strong
+                  >
+                  Un Relais est la place fixe en Nord d'une table de 3, pas une
+                  personne. Portant le nom d'un joueur, il n'apparaît dans
+                  aucune liste — mais la feuille de marque affiche ce joueur à
+                  deux tables. Le placement, lui, est correct : c'est le nom
+                  qui est faux. Le bouton ci-dessous le corrige, sans toucher
+                  aux places ni aux scores.
+                </p>
+                <p class="m0">
+                  @for (d of renamedRelais(); track d.id) {
+                    <span class="dup-chip">{{ d.name }} {{ d.firstname }} (n°{{ d.id }})</span>
+                  }
+                </p>
+                <button
+                  mat-flat-button
+                  color="warn"
+                  class="repair-btn"
+                  [disabled]="busy()"
+                  (click)="repairRelais()"
                 >
+                  <mat-icon>build</mat-icon> Rendre aux Relais leur nom
+                </button>
               }
-            </span>
-          </p>
+              @if (realDuplicates().length > 0) {
+                <p class="m0">
+                  <strong>{{ realDuplicates().length }} fiches font doublon.</strong>
+                  Une même personne inscrite deux fois peut se retrouver assise
+                  à deux tables. Supprimez la fiche en trop — de préférence
+                  celle qui compte <em>0 inscription</em> :
+                  @for (d of realDuplicates(); track d.id) {
+                    <span class="dup-chip"
+                      >{{ d.name }} {{ d.firstname }} (n°{{ d.id }},
+                      {{ d.inscriptions }} inscr.)</span
+                    >
+                  }
+                </p>
+              }
+            </div>
+          </div>
         }
         <div class="tab-toolbar">
           <mat-form-field appearance="outline" class="search">
@@ -382,6 +413,8 @@ import { UserDialog } from './dialogs/user-dialog';
     .settings-card { margin-top: 16px; max-width: 640px; }
     .settings-card mat-card-content { display: flex; flex-direction: column; gap: 20px; padding-top: 16px; }
     .setting { width: 100%; }
+    .m0 { margin: 0 0 8px; }
+    .repair-btn { margin: 4px 0 4px; }
     .dup-banner {
       display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 0;
       padding: 10px 14px; border-radius: 4px;
@@ -426,8 +459,19 @@ export class AdminPage implements OnInit {
   restoreInput = viewChild<ElementRef<HTMLInputElement>>('restoreInput');
 
   duplicates = signal<
-    { id: number; name: string; firstname: string; licence: string | null; inscriptions: number }[]
+    {
+      id: number;
+      name: string;
+      firstname: string;
+      licence: string | null;
+      inscriptions: number;
+      is_relais: boolean;
+    }[]
   >([]);
+
+  renamedRelais = computed(() => this.duplicates().filter((d) => d.is_relais));
+  realDuplicates = computed(() => this.duplicates().filter((d) => !d.is_relais));
+
 
   settingClubId = signal<number | null>(null);
   settingRounds = signal<number>(4);
@@ -762,6 +806,46 @@ export class AdminPage implements OnInit {
           this.snack.open('Fichier illisible', 'Fermer', { duration: 3000 });
         }
       );
+    });
+  }
+
+  // Rend aux Relais leur nom canonique. Un Relais n'est pas une personne :
+  // réécrire son nom ne perd aucune donnée.
+  repairRelais(): void {
+    this.confirm({
+      title: 'Rendre aux Relais leur nom ?',
+      message:
+        'Les places « Relais » reprendront les noms « Relais 1 », « Relais 2 »… ' +
+        "Aucune donnée de joueur n'est touchée : un Relais n'est pas une " +
+        'personne, c\'est la place fixe en Nord d\'une table de 3.',
+      confirmLabel: 'Réparer',
+    }).subscribe((ok) => {
+      if (!ok) return;
+      this.busy.set(true);
+      this.api.repairRelais().subscribe({
+        next: (r) => {
+          this.busy.set(false);
+          this.reloadAll();
+          const lignes = r.repaired
+            .map((x) => `« ${x.was} » → « ${x.now} »`)
+            .join('\n');
+          this.confirm({
+            title: 'Relais réparés',
+            message: r.repaired.length
+              ? lignes +
+                '\n\nLe placement lui-même était juste : seul le nom affiché ' +
+                'était faux. Réimprimez la feuille de marque, inutile de ' +
+                'refaire le tirage des places.'
+              : 'Aucun Relais à réparer.',
+            confirmLabel: 'Compris',
+            hideCancel: true,
+          }).subscribe();
+        },
+        error: (err: any) => {
+          this.busy.set(false);
+          this.showError('Réparation impossible', err, 'La réparation a échoué.');
+        },
+      });
     });
   }
 

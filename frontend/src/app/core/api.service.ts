@@ -10,6 +10,15 @@ import {
   Tournament, User,
 } from './api.types';
 
+export interface PlayerAnomaly {
+  id: number;
+  name: string;
+  firstname: string;
+  licence: string | null;
+  inscriptions: number;
+  is_relais: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private http = inject(HttpClient);
@@ -329,11 +338,14 @@ export class ApiService {
       `${this.base}/sub-tournaments/${subTournamentId}/players/${playerId}`
     );
 
-  playerDuplicates = (): Observable<
-    { id: number; name: string; firstname: string; licence: string | null; inscriptions: number }[]
-  > => this.http.get<
-    { id: number; name: string; firstname: string; licence: string | null; inscriptions: number }[]
-  >(`${this.base}/players/duplicates`);
+  playerDuplicates = (): Observable<PlayerAnomaly[]> =>
+    this.http.get<PlayerAnomaly[]>(`${this.base}/players/duplicates`);
+
+  repairRelais = (): Observable<{ repaired: { id: number; was: string; now: string }[] }> =>
+    this.http.post<{ repaired: { id: number; was: string; now: string }[] }>(
+      `${this.base}/players/repair-relais`,
+      {}
+    );
 
   /* ----- Sauvegarde / restauration (administrateur) ----- */
   // Le serveur renvoie le mysqldump complet ; on le laisse en Blob pour
