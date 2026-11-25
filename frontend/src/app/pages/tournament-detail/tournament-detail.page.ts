@@ -253,13 +253,38 @@ export class SubTournamentDialog implements OnInit {
             </button>
           </div>
 
+          <!-- Seuls les tournois terminés comptent, sans trou : on dit
+               jusqu'où va le classement et ce qui attend. -->
+          @if (challengeRanking()?.pending?.length) {
+            <div class="pending no-print">
+              <mat-icon>info</mat-icon>
+              <div>
+                <strong>
+                  @if (challengeRanking()!.sub_tournaments.length > 0) {
+                    Classement arrêté après « {{ challengeRanking()!.sub_tournaments[challengeRanking()!.sub_tournaments.length - 1].label }} ».
+                  } @else {
+                    Aucun tournoi terminé pour l'instant.
+                  }
+                </strong>
+                Un tournoi compte une fois toutes ses manches prévues jouées
+                et toutes ses tables validées, et seulement si les précédents
+                sont terminés.
+                <ul>
+                  @for (p of challengeRanking()!.pending!; track p.id) {
+                    <li>« {{ p.label }} » : {{ p.reason }}</li>
+                  }
+                </ul>
+              </div>
+            </div>
+          }
+
           @if (challengeLoading()) {
             <mat-progress-spinner mode="indeterminate" diameter="30" />
           } @else if (
             !challengeRanking() || challengeRanking()!.ranking.length === 0
           ) {
             <p class="empty">
-              Pas encore de classement (aucun résultat de tournoi validé).
+              Pas encore de classement : aucun tournoi terminé.
             </p>
           } @else {
             <!-- Format du classeur Excel du club (feuille « Général ») : une
@@ -384,6 +409,13 @@ export class SubTournamentDialog implements OnInit {
     }
     .sub-delete { flex: 0 0 auto; }
     .challenge-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .pending {
+      display: flex; gap: 10px; align-items: flex-start;
+      margin: 12px 0 4px; padding: 10px 14px; border-radius: 10px;
+      background: #fff8e1; color: #6d4c00; font-size: 0.92em; line-height: 1.4;
+    }
+    .pending mat-icon { color: #f9a825; flex: 0 0 auto; }
+    .pending ul { margin: 4px 0 0; padding-left: 18px; }
     .spacer { flex: 1 1 auto; }
     /* Un trimestre compte jusqu'à 15 tournois : en vue détaillée cela fait
        plus de 50 colonnes. La police se réduit avec le nombre de tournois

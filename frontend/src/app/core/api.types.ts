@@ -145,10 +145,20 @@ export interface ChallengeSubTournament {
   players: number;
 }
 
+// Tournoi du challenge pas (encore) compté : non terminé, ou terminé mais
+// après un tournoi non terminé.
+export interface ChallengePending {
+  id: number;
+  label: string;
+  reason: string;
+}
+
 export interface ChallengeRanking {
   challenge_mode: 'place' | 'raw';
   sub_tournaments_count: number;
+  // Tournois COMPTÉS (terminés, sans trou), dans l'ordre.
   sub_tournaments: ChallengeSubTournament[];
+  pending?: ChallengePending[];
   ranking: ChallengeRankingEntry[];
 }
 

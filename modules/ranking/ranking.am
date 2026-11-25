@@ -660,6 +660,37 @@ public class ModRanking {
         return resp.Status(201)
     }
 
+    // Raison pour laquelle un tournoi (soirée) n'est pas terminé, ou "" s'il
+    // l'est. Terminé = toutes les manches prévues générées et toutes les
+    // tables de toutes ses manches validées. Un tournoi importé (CSV d'un
+    // classeur Excel) est terminé par nature.
+    static string NotFinishedReason(Db db, List<string> srow) {
+        if (Db.CellBool(srow.Get(2))) { return "" }
+        let subId: string = srow.Get(0)
+        var planned: int = Db.CellInt(srow.Get(3))
+        if (planned < 1) { planned = 1 }
+        let rr: List<List<string>> = db.Rows(
+            "SELECT COUNT(DISTINCT r.id) FROM rounds r JOIN seats s ON s.round_id = r.id WHERE r.sub_tournament_id = ?",
+            Db.P1(subId))
+        let r0: List<string> = rr.Get(0)
+        let generated: int = Db.CellInt(r0.Get(0))
+        if (generated == 0) { return "pas encore joué" }
+        let ur: List<List<string>> = db.Rows(
+            "SELECT COUNT(*) FROM (SELECT s.round_id, s.table_number FROM seats s JOIN rounds r ON r.id = s.round_id WHERE r.sub_tournament_id = ? GROUP BY s.round_id, s.table_number) t LEFT JOIN table_results tr ON tr.round_id = t.round_id AND tr.table_number = t.table_number WHERE tr.id IS NULL OR tr.validated = FALSE",
+            Db.P1(subId))
+        let u0: List<string> = ur.Get(0)
+        let unvalidated: int = Db.CellInt(u0.Get(0))
+        var why: string = ""
+        if (generated < planned) {
+            why = String.FromInt(generated) + " manche(s) sur " + String.FromInt(planned) + " prévue(s)"
+        }
+        if (unvalidated > 0) {
+            if (String.Length(why) > 0) { why = why + ", " }
+            why = why + String.FromInt(unvalidated) + " table(s) non validée(s)"
+        }
+        return why
+    }
+
     public static HttpResponse GetChallengeRanking(WebContext ctx, Db db) {
         let tid: string = ctx.Param("tournamentId")
         let trows: List<List<string>> = db.Rows("SELECT id, challenge_mode FROM tournaments WHERE id = ?", Db.P1(tid))
@@ -667,7 +698,35 @@ public class ModRanking {
         let t0: List<string> = trows.Get(0)
         let mode: string = t0.Get(1)
 
-        let subs: List<List<string>> = db.Rows("SELECT id, label, imported FROM sub_tournaments WHERE tournament_id = ? ORDER BY id ASC", Db.P1(tid))
+        let allSubs: List<List<string>> = db.Rows("SELECT id, label, imported, rounds_planned FROM sub_tournaments WHERE tournament_id = ? ORDER BY id ASC", Db.P1(tid))
+
+        // Seuls les tournois TERMINÉS comptent, et le classement s'arrête au
+        // premier qui ne l'est pas (choix du club, 2026-11-25) : un tournoi
+        // en cours, dont le classement se recalcule à chaque table validée,
+        // ne fausse plus le Challenge, et un tournoi plus récent attend que
+        // le précédent soit terminé. Les autres sont renvoyés dans
+        // « pending », avec la raison, pour que l'écran l'explique.
+        let subs: List<List<string>> = new List<List<string>>()
+        let pendingArr: JsonValue = J.Arr()
+        var blockedBy: string = ""
+        for si in 0..allSubs.Count() {
+            let srow: List<string> = allSubs.Get(si)
+            let why: string = ModRanking.NotFinishedReason(db, srow)
+            if (String.Length(blockedBy) == 0 && String.Length(why) == 0) {
+                subs.Add(srow)
+            } else {
+                let po: JsonValue = J.Obj()
+                po.AppendEntry("id", J.CellInt(srow.Get(0)))
+                po.AppendEntry("label", J.CellStr(srow.Get(1)))
+                if (String.Length(why) > 0) {
+                    po.AppendEntry("reason", J.Str("non terminé : " + why))
+                } else {
+                    po.AppendEntry("reason", J.Str("terminé, compté quand « " + blockedBy + " » le sera"))
+                }
+                pendingArr.AppendItem(po)
+                if (String.Length(blockedBy) == 0) { blockedBy = srow.Get(1) }
+            }
+        }
 
         let pointsByPlayer: Map<string, string> = new Map<string, string>()
         let rawByPlayer: Map<string, string> = new Map<string, string>()
@@ -797,6 +856,7 @@ public class ModRanking {
         result.AppendEntry("challenge_mode", J.Str(mode))
         result.AppendEntry("sub_tournaments_count", J.Int(subs.Count()))
         result.AppendEntry("sub_tournaments", subsArr)
+        result.AppendEntry("pending", pendingArr)
         result.AppendEntry("ranking", arr)
         return J.Ok(result)
     }

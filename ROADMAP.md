@@ -183,6 +183,34 @@ choisissant un Relais, ce que rien n'indiquait.
 - Non-régression : 14 pages, impression identique ; à l'écran, seul
   l'indicateur du classement en direct diffère (connexion de test).
 
+### Classement du Challenge : seulement les tournois terminés, sans trou
+
+Demande du 2026-11-25. Le classement d'une soirée se recalcule à chaque
+table validée et le Challenge additionnait **tous** les tournois ayant des
+résultats : une soirée en cours y comptait dès sa première table validée.
+
+- **Terminé** = toutes les manches prévues générées et toutes leurs tables
+  validées ; un tournoi importé (CSV) est terminé par nature
+  (`ModRanking.NotFinishedReason`). Pas de migration.
+- Le classement **s'arrête au premier tournoi non terminé** (choix du
+  club) : un tournoi terminé plus récent attend que le précédent le soit.
+- Les tournois écartés sont renvoyés à part (`pending`) avec la raison ;
+  l'écran du Challenge affiche « Classement arrêté après « … » » et, pour
+  chacun : « non terminé : 1 table(s) non validée(s) », « 2 manche(s) sur
+  3 prévue(s) », « pas encore joué », ou « terminé, compté quand « … » le
+  sera ». Colonnes, « Cumul sur N tournoi(s) », impression et PDF ne
+  portent que sur les tournois comptés.
+
+#### Vérifié
+
+- API sur base neuve, Challenge de 6 tournois (importé, terminé, table non
+  validée, terminé après un non terminé, manches manquantes, pas joué) :
+  comptés et raisons exacts, points égaux au recalcul indépendant des seuls
+  tournois comptés ; après validation de la table manquante, les deux
+  tournois suivants entrent.
+- Écran capturé (bandeau, colonnes) ; non-régression sur la base de démo :
+  seule la page du Challenge change (son tournoi n'est pas terminé).
+
 ---
 
 ## ✅ v3.0.39 — Plus aucune référence à la fédération, habillage moderne *(livré, 2026-11-25)*
