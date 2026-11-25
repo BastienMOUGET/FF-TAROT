@@ -33,11 +33,11 @@ import { Role, User } from '../../../core/api.types';
       <form [formGroup]="form" class="form">
         @if (!data?.user) {
           <mat-form-field appearance="outline">
-            <mat-label>Identifiant *</mat-label>
+            <mat-label>Identifiant</mat-label>
             <input matInput formControlName="username" maxlength="50" />
           </mat-form-field>
           <mat-form-field appearance="outline">
-            <mat-label>Rôle *</mat-label>
+            <mat-label>Rôle</mat-label>
             <mat-select formControlName="role">
               <mat-option value="admin">admin</mat-option>
               <mat-option value="arbitre">arbitre</mat-option>
@@ -59,7 +59,7 @@ import { Role, User } from '../../../core/api.types';
         }
         <mat-form-field appearance="outline">
           <mat-label>
-            {{ data?.user ? 'Nouveau mot de passe' : 'Mot de passe' }} *
+            {{ data?.user ? 'Nouveau mot de passe' : 'Mot de passe' }}
           </mat-label>
           <input matInput type="password" formControlName="password" />
           <mat-hint>Minimum 6 caractères</mat-hint>

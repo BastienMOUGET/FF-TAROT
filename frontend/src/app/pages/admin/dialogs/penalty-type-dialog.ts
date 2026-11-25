@@ -30,16 +30,16 @@ import { PenaltyType } from '../../../core/api.types';
     <mat-dialog-content>
       <form [formGroup]="form" class="form">
         <mat-form-field appearance="outline">
-          <mat-label>Code *</mat-label>
+          <mat-label>Code</mat-label>
           <input matInput formControlName="code" maxlength="20"
                  placeholder="ex: RETARD" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Libellé *</mat-label>
+          <mat-label>Libellé</mat-label>
           <input matInput formControlName="label" maxlength="150" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Points par défaut *</mat-label>
+          <mat-label>Points par défaut</mat-label>
           <input matInput type="number" step="0.5" formControlName="default_points" />
           <mat-hint>Négatif pour une pénalité (ex: -2)</mat-hint>
         </mat-form-field>

@@ -7,6 +7,129 @@
 
 ---
 
+## 🚧 Prochaine version — Consignes de position, doublons de joueurs *(en test, non livrée)*
+
+Signalé le 2026-11-25 : à la préparation du placement, les consignes de
+position (Nord, Sud, Est, Ouest fixe, « Non Nord » ; aléatoire par défaut)
+n'étaient pas toujours respectées. **Une migration : `011_team_player_orientation.sql`.**
+Installation par-dessus la précédente, sans perte de données.
+
+### Deux causes
+
+1. **Le tirage formait les tables avant de regarder les consignes.** Les
+   joueurs étaient mélangés et découpés en tables, puis chaque table casait
+   ses consignes comme elle pouvait. Deux « Nord fixe » tombés à la même
+   table : l'un perdait le Nord alors qu'un Nord restait libre ailleurs
+   (3 fois sur 7 avec 8 joueurs). Même chose pour un « Nord fixe » envoyé
+   à une table de 3, dont le Nord est le Relais.
+2. **Les manches par niveau ignoraient les consignes.** Elles n'existaient
+   que dans l'écran du tirage ; le serveur reformait les tables par niveau
+   et tirait les places au hasard.
+
+### Corrections
+
+- Le tirage (`frontend/src/app/pages/teams/seat-draw.ts`) place chaque
+  joueur sur une place compatible parmi **toutes** les places de toutes les
+  tables : sièges fixes d'abord, puis « Non Nord », puis les autres ; tables
+  et places restent tirées au sort. Une consigne n'est manquée que si elle
+  est impossible (plus de demandes que de places), et l'appli l'annonce
+  **avant** le tirage, avec la raison.
+- La consigne est enregistrée avec l'inscription (`team_players.orientation`,
+  migration 011 ; NULL = aléatoire, valeur par défaut des inscriptions
+  existantes) et le serveur la respecte quand il reforme les tables par
+  niveau (`Placement.SeatsByPref`).
+- **Échange avec un voisin** (choix du club après le premier essai, où un
+  « Nord fixe » classé en bas tombait à une table de 3) : en mode par niveau,
+  un joueur à siège fixe dont la place n'existe pas à sa table (Nord d'une
+  table de 3 = Relais) ou y est déjà demandée par un mieux classé est échangé
+  avec le joueur **sans consigne** le plus proche au classement, assis à une
+  table où ce siège est libre (`Placement.BalanceLevelPrefs`). Un joueur
+  n'est jamais échangé deux fois : sans cette garde, un 7ᵉ du classement
+  finissait à la dernière table après deux échanges successifs.
+- **Consignes visibles à chaque manche** : la page d'une manche affiche la
+  consigne à côté du nom (« Nord fixe », « Non Nord »…), en rouge avec ⚠ si
+  elle n'a pas pu être tenue. Écran seulement (`no-print`) : les impressions
+  ne changent pas.
+- Une consigne inconnue est refusée par l'API (400).
+- La notice explique la règle.
+
+### Vérifié
+
+- Tests unitaires du tirage (`seat-draw.spec.ts`, `ng test`) : 20 000
+  tirages aléatoires (3 à 53 joueurs, consignes au hasard) — consignes
+  manquées = exactement le minimum impossible, chacun placé une fois, bonne
+  forme de tables ; cas signalé (2 « Nord » / 8 joueurs) sur 2 000 tirages.
+- Migration 011 par le chemin de l'installeur Windows : base vierge, base
+  v3.0.39 avec un tournoi en cours (inscriptions, sièges, accents conservés ;
+  anciennes inscriptions en aléatoire), rejeu complet.
+- API réelle, mode « par niveau » : manche 2 reformée 200 fois sur 3 soirées
+  différentes — consignes manquées uniquement dans les cas impossibles ;
+  joueurs sans consigne toujours tirés au sort parmi les places restantes.
+- Écran réel (navigateur piloté) : 14 tirages cliqués dans « Joueurs
+  présents », places de la manche 1 lues en base — toutes les consignes
+  respectées, avertissement affiché dans le cas impossible.
+- Échange par niveau : 40 soirées aléatoires (14 à 17 joueurs, tables de 3,
+  « Nord fixe », « Non Nord », doubles « Sud fixe »), manche 2 générée par le
+  serveur et comparée table par table à une réimplémentation indépendante de
+  la règle : identiques, toutes les consignes tenues (35 échanges).
+- Affichage : page de manche capturée, repère rouge sur la consigne
+  impossible, aucun repère visible à l'impression.
+- Non-régression : 14 pages recapturées sur la base de démo mise à jour —
+  impression et mise en page identiques à la v3.0.39 (seuls changent le
+  numéro de version, le paragraphe ajouté à la notice et les données de
+  test).
+
+### Doublons de joueurs : bloqués et signalés pendant la saisie
+
+Demande du 2026-11-25 : empêcher la création de doublons et le signaler à la
+création. La v3.0.37 refusait déjà un nom + prénom **identiques** (casse et
+accents ignorés : le cas MAZIMANN de 2026-09). Essai sur la v3.0.39 :
+6 variantes sur 10 passaient encore — espace en tête, nom et prénom
+inversés, espace ou tiret dans le nom (« DU BOIS », « Fran-çoise »), point,
+faute de frappe.
+
+- **Serveur** (`modules/players/players.am`) : deux fiches sont la même
+  personne si nom et prénom ont la même clé — sans espaces, tirets,
+  apostrophes ni points, casse et accents ignorés par la collation — ou si
+  nom et prénom sont inversés. Appliqué à la création, à la modification et
+  à l'import (une licence existante n'est plus renommée vers un doublon).
+  Les espaces superflus sont retirés à l'enregistrement. Le bandeau
+  d'anomalies de l'Administration rapproche aussi ces variantes parmi les
+  fiches déjà en base.
+- **Fenêtre « Nouveau joueur »** (`player-match.ts`) : pendant la saisie,
+  message rouge et bouton « Créer » bloqué si le joueur existe déjà ;
+  message orange listant les noms proches (faute de frappe, prénom composé)
+  et case « J'ai vérifié : ce n'est pas la même personne » à cocher pour
+  créer quand même. En modification, rien n'est demandé tant que le nom
+  n'est pas changé.
+- Pas de migration pour cette partie.
+
+#### Vérifié
+
+- API réelle sur une copie de la base de démo : les 10 variantes refusées,
+  vrais joueurs distincts acceptés (« MARTIN Élodie-Anne », « MARTINEZ
+  Élodie »), espaces retirés, nom vide refusé, renommage en doublon refusé,
+  import (doublon, inversé, doublon dans le même fichier, licence renommée
+  vers un doublon) : 1 créé, 4 signalés ; ancien doublon « Du-Bois » en base
+  détecté.
+- Tests unitaires `player-match.spec.ts` (6) et fenêtre réelle pilotée dans
+  le navigateur (9 vérifications : rouge, orange, case à cocher, création
+  confirmée, modification sans renommage).
+- Non-régression : 14 pages, écran et impression identiques (hors données
+  de test et paragraphe de la notice).
+
+### Libellés « Nom ** » : un seul astérisque
+
+Les fenêtres de saisie écrivaient « * » dans le libellé des champs
+obligatoires, alors qu'Angular Material en ajoute déjà un : « Nom ** ».
+Retiré de 14 libellés (joueur, club, comité, ligue, type de pénalité,
+utilisateur, dont le mot de passe écrit sur plusieurs lignes). Vérifié que
+chacun de ces champs est bien obligatoire (`Validators.required`), puis dans
+le navigateur : 18 libellés relevés, chaque champ obligatoire affiche un
+astérisque, les facultatifs aucun.
+
+---
+
 ## ✅ v3.0.39 — Plus aucune référence à la fédération, habillage moderne *(livré, 2026-11-25)*
 
 **Une migration : `010_neutral_movement_label.sql`.** Installation par-dessus

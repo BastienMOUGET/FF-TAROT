@@ -30,11 +30,11 @@ import { Club, Comite } from '../../../core/api.types';
     <mat-dialog-content>
       <form [formGroup]="form" class="form">
         <mat-form-field appearance="outline">
-          <mat-label>Code *</mat-label>
+          <mat-label>Code</mat-label>
           <input matInput formControlName="code" maxlength="15" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Nom *</mat-label>
+          <mat-label>Nom</mat-label>
           <input matInput formControlName="name" maxlength="150" />
         </mat-form-field>
         <mat-form-field appearance="outline">

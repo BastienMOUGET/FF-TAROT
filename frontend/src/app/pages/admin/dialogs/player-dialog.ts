@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import {
   FormBuilder,
   ReactiveFormsModule,
@@ -18,6 +18,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
 import { ApiService } from '../../../core/api.service';
 import { Club, Player } from '../../../core/api.types';
+import { matchPlayers } from './player-match';
 
 export interface PlayerDialogData {
   player?: Player;
@@ -47,14 +48,42 @@ export interface PlayerDialogData {
         </mat-form-field>
         <div class="row2">
           <mat-form-field appearance="outline">
-            <mat-label>Nom *</mat-label>
+            <mat-label>Nom</mat-label>
             <input matInput formControlName="name" />
           </mat-form-field>
           <mat-form-field appearance="outline">
-            <mat-label>Prénom *</mat-label>
+            <mat-label>Prénom</mat-label>
             <input matInput formControlName="firstname" />
           </mat-form-field>
         </div>
+        <!-- Doublons signalés pendant la saisie : le serveur refuse de toute
+             façon un doublon, mais l'apprendre après coup ne suffisait pas. -->
+        @if (matches().same; as d) {
+          <p class="dup dup-same">
+            <mat-icon>block</mat-icon>
+            <span>
+              <strong>{{ d.name }} {{ d.firstname }}</strong> existe déjà
+              (fiche n°{{ d.id }}). Les majuscules, accents, espaces, tirets et
+              l'ordre nom/prénom ne comptent pas : modifiez la fiche existante
+              plutôt que d'en créer une seconde.
+            </span>
+          </p>
+        } @else if (matches().similar.length > 0) {
+          <div class="dup dup-similar">
+            <p>
+              <mat-icon>warning</mat-icon>
+              <span>Joueur(s) au nom proche déjà dans la liste :</span>
+            </p>
+            <ul>
+              @for (s of matches().similar; track s.id) {
+                <li>{{ s.name }} {{ s.firstname }} (fiche n°{{ s.id }})</li>
+              }
+            </ul>
+            <mat-checkbox [checked]="distinctConfirmed()" (change)="distinctConfirmed.set($event.checked)">
+              J'ai vérifié : ce n'est pas la même personne
+            </mat-checkbox>
+          </div>
+        }
         <mat-form-field appearance="outline">
           <mat-label>Club</mat-label>
           <mat-select formControlName="club_id">
@@ -100,7 +129,7 @@ export interface PlayerDialogData {
       <button
         mat-flat-button
         color="primary"
-        [disabled]="form.invalid || saving()"
+        [disabled]="form.invalid || saving() || blockedByDuplicate()"
         (click)="submit()"
       >
         {{ data.player ? 'Enregistrer' : 'Créer' }}
@@ -125,6 +154,16 @@ export interface PlayerDialogData {
       gap: 12px;
     }
     mat-form-field { width: 100%; }
+    .dup {
+      display: flex; flex-direction: column; gap: 4px;
+      margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;
+      font-size: 0.9em; line-height: 1.35;
+    }
+    .dup p { display: flex; align-items: flex-start; gap: 8px; margin: 0; }
+    .dup ul { margin: 0 0 0 32px; padding: 0; }
+    .dup mat-icon { flex: 0 0 auto; }
+    .dup-same { flex-direction: row; align-items: flex-start; gap: 8px; background: #fdecea; color: #b71c1c; }
+    .dup-similar { background: #fff4e5; color: #8a4b00; }
     .err {
       color: #d32f2f;
       display: flex;
@@ -144,6 +183,25 @@ export class PlayerDialog implements OnInit {
   saving = signal(false);
   errorMsg = signal<string | null>(null);
 
+  // Liste des joueurs pour signaler un doublon pendant la saisie.
+  private allPlayers = signal<Player[]>([]);
+  private typedName = signal('');
+  private typedFirstname = signal('');
+  distinctConfirmed = signal(false);
+  matches = computed(() => {
+    // En modification, rien à signaler tant que le nom n'est pas changé
+    // (changer le club d'une fiche ne doit rien demander de plus).
+    const p = this.data.player;
+    if (p && this.typedName().trim() === p.name && this.typedFirstname().trim() === p.firstname) {
+      return { same: null, similar: [] as Player[] };
+    }
+    return matchPlayers(this.typedName(), this.typedFirstname(), this.allPlayers(), p?.id);
+  });
+  // Doublon exact : création impossible. Nom proche : il faut confirmer.
+  blockedByDuplicate = computed(
+    () => !!this.matches().same || (this.matches().similar.length > 0 && !this.distinctConfirmed())
+  );
+
   form = this.fb.nonNullable.group({
     licence: [''],
     name: ['', [Validators.required, Validators.maxLength(100)]],
@@ -157,6 +215,15 @@ export class PlayerDialog implements OnInit {
 
   ngOnInit(): void {
     this.api.clubs().subscribe((c) => this.clubs.set(c));
+    this.api.players().subscribe({ next: (p) => this.allPlayers.set(p), error: () => this.allPlayers.set([]) });
+    this.form.controls.name.valueChanges.subscribe((v) => {
+      this.typedName.set(v ?? '');
+      this.distinctConfirmed.set(false);
+    });
+    this.form.controls.firstname.valueChanges.subscribe((v) => {
+      this.typedFirstname.set(v ?? '');
+      this.distinctConfirmed.set(false);
+    });
     if (this.data.player) {
       const p = this.data.player;
       this.form.patchValue({

@@ -90,18 +90,36 @@ public class ModPlayers {
     // name/firstname requis ; le reste nullable (sémantique || null / ?? null).
     // Renvoie une erreur si un AUTRE joueur porte deja ce nom et ce prenom.
     // `exceptId` vide = creation ; sinon on s'exclut soi-meme (modification).
-    static HttpResponse RefuseIfDuplicate(Db db, string name, string firstname, string exceptId) {
-        var sql: string = "SELECT id, name, firstname FROM players WHERE name = ? AND firstname = ? AND is_relais = FALSE"
-        var rows: List<List<string>> = new List<List<string>>()
+    // Clé de comparaison SQL d'un nom : sans espaces, tirets, apostrophes ni
+    // points. La collation de la base (utf8mb4_unicode_ci) ignore déjà casse
+    // et accents : « Du Bois », « DUBOIS » et « du-bois » ont la même clé.
+    static string Key(string expr) {
+        return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(" + expr + ", ' ', ''), '-', ''), CHAR(39), ''), '.', ''), '’', '')"
+    }
+
+    // Condition « même personne » : nom ET prénom de même clé, ou inversés
+    // (nom saisi dans la case prénom). Paramètres : name, firstname,
+    // firstname, name.
+    static string SamePersonSql() {
+        return "((" + ModPlayers.Key("name") + " = " + ModPlayers.Key("?") + " AND " + ModPlayers.Key("firstname") + " = " + ModPlayers.Key("?") + ") OR (" + ModPlayers.Key("name") + " = " + ModPlayers.Key("?") + " AND " + ModPlayers.Key("firstname") + " = " + ModPlayers.Key("?") + "))"
+    }
+
+    // Première fiche (hors Relais, hors `exceptId`) de la même personne, ou
+    // liste vide.
+    static List<List<string>> SamePerson(Db db, string name, string firstname, string exceptId) {
+        var sql: string = "SELECT id, name, firstname FROM players WHERE is_relais = FALSE AND " + ModPlayers.SamePersonSql()
         if (String.Length(exceptId) > 0) {
             sql = sql + " AND id <> ?"
-            rows = db.Rows(sql, Db.P3(name, firstname, exceptId))
-        } else {
-            rows = db.Rows(sql, Db.P2(name, firstname))
+            return db.Rows(sql + " ORDER BY id LIMIT 1", Db.P5(name, firstname, firstname, name, exceptId))
         }
+        return db.Rows(sql + " ORDER BY id LIMIT 1", Db.P4(name, firstname, firstname, name))
+    }
+
+    static HttpResponse RefuseIfDuplicate(Db db, string name, string firstname, string exceptId) {
+        let rows: List<List<string>> = ModPlayers.SamePerson(db, name, firstname, exceptId)
         if (rows.Count() == 0) { return null }
         let r0: List<string> = rows.Get(0)
-        return HttpErr.BadRequest(r0.Get(1) + " " + r0.Get(2) + " existe deja dans la liste des joueurs (fiche n°" + r0.Get(0) + "). Deux fiches pour la meme personne feraient jouer un joueur a deux tables : modifiez la fiche existante plutot que d'en creer une seconde.")
+        return HttpErr.BadRequest(r0.Get(1) + " " + r0.Get(2) + " existe déjà dans la liste des joueurs (fiche n°" + r0.Get(0) + "). Les majuscules, les accents, les espaces, les tirets et l'ordre nom/prénom ne comptent pas. Deux fiches pour la même personne feraient jouer un joueur à deux tables : modifiez la fiche existante plutôt que d'en créer une seconde.")
     }
 
     // GET /api/players/duplicates (admin) — anomalies de la liste des
@@ -117,7 +135,7 @@ public class ModPlayers {
         if (rc == 401) { return HttpErr.Unauthorized() }
         if (rc == 403) { return HttpErr.Forbidden() }
         let rows: List<List<string>> = db.Rows(
-            "SELECT p.id, p.name, p.firstname, p.licence, (SELECT COUNT(*) FROM team_players tp WHERE tp.player_id = p.id) AS inscriptions, p.is_relais FROM players p JOIN (SELECT name, firstname FROM players WHERE is_relais = FALSE GROUP BY name, firstname HAVING COUNT(*) > 1) d ON d.name = p.name AND d.firstname = p.firstname WHERE p.is_relais = FALSE UNION SELECT p.id, p.name, p.firstname, p.licence, (SELECT COUNT(*) FROM team_players tp WHERE tp.player_id = p.id) AS inscriptions, p.is_relais FROM players p WHERE p.is_relais = TRUE AND p.name <> 'Relais' ORDER BY name ASC, firstname ASC, id ASC",
+            "SELECT p.id, p.name, p.firstname, p.licence, (SELECT COUNT(*) FROM team_players tp WHERE tp.player_id = p.id) AS inscriptions, p.is_relais FROM players p JOIN (SELECT " + ModPlayers.Key("name") + " AS kn, " + ModPlayers.Key("firstname") + " AS kf FROM players WHERE is_relais = FALSE GROUP BY kn, kf HAVING COUNT(*) > 1) d ON d.kn = " + ModPlayers.Key("p.name") + " AND d.kf = " + ModPlayers.Key("p.firstname") + " WHERE p.is_relais = FALSE UNION SELECT p.id, p.name, p.firstname, p.licence, (SELECT COUNT(*) FROM team_players tp WHERE tp.player_id = p.id) AS inscriptions, p.is_relais FROM players p WHERE p.is_relais = TRUE AND p.name <> 'Relais' ORDER BY name ASC, firstname ASC, id ASC",
             Db.NoParams())
         let arr: JsonValue = J.Arr()
         for i in 0..rows.Count() {
@@ -176,6 +194,10 @@ public class ModPlayers {
         let b: JsonValue = pr.Value
         if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
         if (!Fld.HasStr(b, "firstname")) { return HttpErr.BadRequest("firstname requis") }
+        // Espaces superflus retirés : « MARTIN » et « MARTIN » sont le même nom.
+        let name: string = String.Trim(Fld.Str(b, "name"))
+        let firstname: string = String.Trim(Fld.Str(b, "firstname"))
+        if (String.Length(name) == 0 || String.Length(firstname) == 0) { return HttpErr.BadRequest("Nom et prénom requis") }
 
         // Deux fiches pour la même personne, ne differant que par la casse ou
         // les accents, ont fait jouer un joueur a deux tables le 30/09 : la
@@ -183,13 +205,13 @@ public class ModPlayers {
         // pas les rapprocher (retour terrain n°18). La collation de la base
         // (utf8mb4_unicode_ci) ignore casse et accents, une simple egalite
         // SQL suffit donc a rapprocher « AURELIEN » et « Aurélien ».
-        let dup: HttpResponse = ModPlayers.RefuseIfDuplicate(db, Fld.Str(b, "name"), Fld.Str(b, "firstname"), "")
+        let dup: HttpResponse = ModPlayers.RefuseIfDuplicate(db, name, firstname, "")
         if (dup != null) { return dup }
 
         let ins: SqlIns = new SqlIns()
         if (Fld.HasStr(b, "licence")) { ins.Set("licence", Fld.Str(b, "licence")) } else { ins.SetNull("licence") }
-        ins.Set("name", Fld.Str(b, "name"))
-        ins.Set("firstname", Fld.Str(b, "firstname"))
+        ins.Set("name", name)
+        ins.Set("firstname", firstname)
         if (Fld.HasInt(b, "club_id")) { ins.Set("club_id", Fld.IntStr(b, "club_id")) } else { ins.SetNull("club_id") }
         if (Fld.HasStr(b, "category")) { ins.Set("category", Fld.Str(b, "category")) } else { ins.SetNull("category") }
         if (Fld.HasStr(b, "gender")) { ins.Set("gender", Fld.Str(b, "gender")) } else { ins.SetNull("gender") }
@@ -213,9 +235,12 @@ public class ModPlayers {
         let b: JsonValue = pr.Value
         if (!Fld.HasStr(b, "name")) { return HttpErr.BadRequest("name requis") }
         if (!Fld.HasStr(b, "firstname")) { return HttpErr.BadRequest("firstname requis") }
+        let name: string = String.Trim(Fld.Str(b, "name"))
+        let firstname: string = String.Trim(Fld.Str(b, "firstname"))
+        if (String.Length(name) == 0 || String.Length(firstname) == 0) { return HttpErr.BadRequest("Nom et prénom requis") }
 
         // Renommer une fiche ne doit pas davantage creer un doublon.
-        let dup: HttpResponse = ModPlayers.RefuseIfDuplicate(db, Fld.Str(b, "name"), Fld.Str(b, "firstname"), id)
+        let dup: HttpResponse = ModPlayers.RefuseIfDuplicate(db, name, firstname, id)
         if (dup != null) { return dup }
 
         // Un Relais n'est pas une personne : lui donner le nom d'un joueur le
@@ -230,8 +255,8 @@ public class ModPlayers {
 
         let upd: SqlUpd = new SqlUpd()
         if (Fld.HasStr(b, "licence")) { upd.Set("licence", Fld.Str(b, "licence")) } else { upd.SetNull("licence") }
-        upd.Set("name", Fld.Str(b, "name"))
-        upd.Set("firstname", Fld.Str(b, "firstname"))
+        upd.Set("name", name)
+        upd.Set("firstname", firstname)
         if (Fld.HasInt(b, "club_id")) { upd.Set("club_id", Fld.IntStr(b, "club_id")) } else { upd.SetNull("club_id") }
         if (Fld.HasStr(b, "category")) { upd.Set("category", Fld.Str(b, "category")) } else { upd.SetNull("category") }
         if (Fld.HasStr(b, "gender")) { upd.Set("gender", Fld.Str(b, "gender")) } else { upd.SetNull("gender") }
@@ -272,9 +297,10 @@ public class ModPlayers {
         for i in 0..n {
             let p: JsonValue = playersV.At(i)
             if (!Fld.HasStr(p, "name")) { continue }
-            let name: string = Fld.Str(p, "name")
+            let name: string = String.Trim(Fld.Str(p, "name"))
+            if (String.Length(name) == 0) { continue }
             var firstname: string = ""
-            if (Fld.HasStr(p, "firstname")) { firstname = Fld.Str(p, "firstname") }
+            if (Fld.HasStr(p, "firstname")) { firstname = String.Trim(Fld.Str(p, "firstname")) }
             var licence: string = ""
             var hasLicence: bool = false
             if (Fld.HasStr(p, "licence")) { licence = Fld.Str(p, "licence") hasLicence = true }
@@ -286,17 +312,25 @@ public class ModPlayers {
                     let pid: string = e0.Get(0)
                     if (e0.Get(1) == name && e0.Get(2) == firstname) {
                         unchanged = unchanged + 1
+                    } else { if (ModPlayers.SamePerson(db, name, firstname, pid).Count() > 0) {
+                        // Renommer cette fiche la rendrait identique à une
+                        // autre : on ne touche à rien et on le signale.
+                        let dw0: JsonValue = J.Obj()
+                        dw0.AppendEntry("name", J.Str(name))
+                        dw0.AppendEntry("firstname", J.Str(firstname))
+                        dw0.AppendEntry("new_licence", J.Str(licence))
+                        dupWarnings.AppendItem(dw0)
                     } else {
                         let updOk: bool = db.Exec("UPDATE players SET name = ?, firstname = ? WHERE id = ?", Db.P3(name, firstname, pid))
                         if (!updOk) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
                         updated = updated + 1
-                    }
+                    } }
                     continue
                 }
             }
 
             // Doublon potentiel : même nom+prénom déjà en base (licence différente ou absente).
-            let dupRows: List<List<string>> = db.Rows("SELECT licence FROM players WHERE name = ? AND firstname = ? AND is_relais = FALSE", Db.P2(name, firstname))
+            let dupRows: List<List<string>> = ModPlayers.SamePerson(db, name, firstname, "")
             if (dupRows.Count() > 0) {
                 let dw: JsonValue = J.Obj()
                 dw.AppendEntry("name", J.Str(name))

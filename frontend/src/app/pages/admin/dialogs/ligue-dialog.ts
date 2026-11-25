@@ -28,11 +28,11 @@ import { Ligue } from '../../../core/api.types';
     <mat-dialog-content>
       <form [formGroup]="form" class="form">
         <mat-form-field appearance="outline">
-          <mat-label>Code *</mat-label>
+          <mat-label>Code</mat-label>
           <input matInput formControlName="code" maxlength="10" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Nom *</mat-label>
+          <mat-label>Nom</mat-label>
           <input matInput formControlName="name" maxlength="100" />
         </mat-form-field>
         @if (errorMsg()) {
