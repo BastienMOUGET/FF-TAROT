@@ -213,6 +213,8 @@ export interface TeamPlayer {
   firstname: string;
   club_id: number | null;
   category: string | null;
+  // Consigne de position du tirage (migration 011), null = aléatoire.
+  orientation?: string | null;
 }
 
 export interface Team {

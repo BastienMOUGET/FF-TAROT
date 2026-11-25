@@ -15,6 +15,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { Player, Round, RoundSeat } from '../../core/api.types';
 import { PlayerDialog } from '../admin/dialogs/player-dialog';
+import { PlacementFix } from './placement-fix';
 
 @Component({
   selector: 'app-round-detail-page',
@@ -26,6 +27,7 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     MatChipsModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    PlacementFix,
   ],
   template: `
     @if (round(); as r0) {
@@ -82,6 +84,12 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
           </button>
         }
       </div>
+
+      <!-- Juste après le tirage : corriger le placement avant d'imprimer et
+           de jouer (retardataire, erreur de pointage, retrait). -->
+      @if (auth.isAdmin() && r.round_number === 1 && scoresChecked() && !hasScores() && r.tables && r.tables.length > 0) {
+        <app-placement-fix [round]="r" (changed)="refresh(r.id)" />
+      }
 
       @if (!r.tables || r.tables.length === 0) {
         <p class="empty">Aucune mise en place. Clique sur Régénérer.</p>
@@ -197,6 +205,9 @@ export class RoundDetailPage implements OnInit {
   // sort) et présence de scores, qui interdit de refaire le tirage.
   nextRoundId = signal<number | null>(null);
   hasScores = signal(false);
+  // Vrai une fois les scores relus : évite d'afficher un instant le bloc
+  // de correction sur une manche déjà jouée.
+  scoresChecked = signal(false);
 
   ngOnInit(): void {
     // Angular réutilise ce composant quand on passe de /rounds/5 à /rounds/6 :
@@ -211,6 +222,7 @@ export class RoundDetailPage implements OnInit {
 
   refresh(id: number): void {
     this.loading.set(true);
+    this.scoresChecked.set(false);
     this.api.round(id).subscribe({
       next: (r) => {
         this.round.set(r);
@@ -225,6 +237,7 @@ export class RoundDetailPage implements OnInit {
               (t) => !!t.validated || (t.hands?.length ?? 0) > 0
             )
           );
+          this.scoresChecked.set(true);
         });
       },
       error: () => {

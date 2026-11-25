@@ -141,6 +141,48 @@ partout en v3.0.39, limité à ce champ.
 Vérifié : page Administration et fiche joueur dans le navigateur ; les
 13 autres pages identiques à l'écran et à l'impression.
 
+### Corriger le placement juste après le tirage, avant impression
+
+Demande du 2026-11-25 : pouvoir ajuster le placement initial avant
+d'imprimer — retardataire, erreur de pointage. Les opérations existaient
+(v3.0.29, v3.0.33, v3.0.37) mais sur la page « Joueurs présents », qui
+après le tirage se présente encore comme un tirage à faire ; ajouter un
+retardataire à une table de 3 passait par « Remplacer un joueur » en
+choisissant un Relais, ce que rien n'indiquait.
+
+- **Manche 1, bloc « Corriger le placement avant impression »**
+  (`round-detail/placement-fix.ts`), là où l'appli amène après le tirage,
+  tant qu'aucun score n'est saisi, pour l'administrateur, invisible à
+  l'impression :
+  - **Ajouter un joueur** (ou « Nouveau joueur ») : l'appli annonce ce
+    qui va se passer — place d'un Relais (table et siège nommés) s'il en
+    reste, sinon tables entièrement refaites ;
+  - **Remplacer un joueur** pointé par erreur : à sa place exacte, à
+    toutes les manches ;
+  - **Retirer un joueur** : un Relais reprend sa place ; si une de ses
+    tables passerait à 2 joueurs, le serveur refuse et l'appli propose de
+    refaire les tables sans lui.
+- « Refaire les tables » reprend désormais les **consignes de position**
+  des inscrits (enregistrées par la migration 011) : elles ne sont plus
+  perdues au nouveau tirage. Le bandeau indique qui entre et qui sort
+  (inscrit retiré barré).
+- Les opérations serveur sont celles déjà en place, inchangées.
+
+#### Vérifié
+
+- API sur une copie de la base de démo (14 joueurs, 2 tables de 3,
+  4 manches) : retardataire à la place exacte du Relais aux 4 manches,
+  remplacement à l'identique, gardes (joueur déjà inscrit, même joueur sur
+  deux Relais) ; 16 joueurs en 4 tables de 4 quand les deux Relais sont
+  pris.
+- Parcours complet cliqué dans le navigateur (20 contrôles) : ajout sur
+  Relais, remplacement, retrait simple puis remise, ajout sans table de 3
+  (17 joueurs retirés au sort, consignes conservées et respectées),
+  retrait refusé puis tables refaites sans le joueur, bloc absent en
+  manche 2, sur une manche déjà jouée et à l'impression.
+- Non-régression : 14 pages, impression identique ; à l'écran, seul
+  l'indicateur du classement en direct diffère (connexion de test).
+
 ---
 
 ## ✅ v3.0.39 — Plus aucune référence à la fédération, habillage moderne *(livré, 2026-11-25)*

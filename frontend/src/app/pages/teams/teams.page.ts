@@ -2,7 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Location } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Observable, from, of } from 'rxjs';
+import { Observable, forkJoin, from, of } from 'rxjs';
 import { concatMap, toArray } from 'rxjs/operators';
 
 import { MatCardModule } from '@angular/material/card';
@@ -79,10 +79,27 @@ import { DrawnSeat, Orientation, drawSeats } from './seat-draw';
                 Cochez le ou les joueurs à ajouter, puis « Refaire les tables » :
                 les tables et la mise en place seront refaites pour tout le monde.
               </p>
+              @if (redrawAdded().length > 0) {
+                <p class="recompose-change in">
+                  <mat-icon>person_add</mat-icon>
+                  Ajouté{{ redrawAdded().length > 1 ? 's' : '' }} au nouveau tirage :
+                  <strong>{{ names(redrawAdded()) }}</strong>
+                </p>
+              }
+              @if (redrawRemoved().length > 0) {
+                <p class="recompose-change out">
+                  <mat-icon>person_remove</mat-icon>
+                  Retiré{{ redrawRemoved().length > 1 ? 's' : '' }} du nouveau tirage :
+                  <strong>{{ names(redrawRemoved()) }}</strong>
+                </p>
+              }
             }
             <div class="registered-list">
               @for (p of registeredPlayers(); track p.id) {
-                <span class="chip-name">{{ p.name }} {{ p.firstname }}</span>
+                <span
+                  class="chip-name"
+                  [class.chip-out]="recomposing() && !drawSelection().has(p.id)"
+                >{{ p.name }} {{ p.firstname }}</span>
               }
             </div>
           </div>
@@ -415,6 +432,15 @@ import { DrawnSeat, Orientation, drawSeats } from './seat-draw';
       background: #fff; border: 1px solid #c5e1a5; border-radius: 12px;
       padding: 2px 10px; font-size: 0.9em;
     }
+    /* Inscrit qui ne fera pas partie du nouveau tirage. */
+    .chip-name.chip-out { text-decoration: line-through; color: #9e9e9e; border-color: #e0e0e0; }
+    .recompose-change {
+      display: flex; align-items: center; gap: 6px;
+      margin: 2px 0 8px; font-size: 0.92em;
+    }
+    .recompose-change mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .recompose-change.in { color: #1565c0; }
+    .recompose-change.out { color: #c62828; }
     .swap-card mat-card-content { padding-top: 16px; }
     .swap-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .swap-row mat-form-field { min-width: 240px; }
@@ -508,6 +534,18 @@ export class TeamsPage implements OnInit {
     );
   });
   drawCount = computed(() => this.drawSelection().size);
+  // En « refaire les tables » : qui entre et qui sort par rapport aux inscrits.
+  redrawAdded = computed(() =>
+    this.recomposing()
+      ? this.players().filter((p) => this.drawSelection().has(p.id) && !this.registeredPlayerIds().has(p.id))
+      : []
+  );
+  redrawRemoved = computed(() =>
+    this.recomposing() ? this.registeredPlayers().filter((p) => !this.drawSelection().has(p.id)) : []
+  );
+  names(list: Player[]): string {
+    return list.map((p) => `${p.name} ${p.firstname}`).join(', ');
+  }
   drawPlan = computed(() => this.decompose(this.drawCount()));
   canDraw = computed(() => this.drawPlan() !== null);
 
@@ -535,6 +573,37 @@ export class TeamsPage implements OnInit {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.subTournamentId.set(id);
     this.restoreDraw();
+    // Venu de la manche 1 (« Ajouter / retirer et refaire les tables ») : on
+    // passe directement en mode « refaire les tables », le joueur à ajouter
+    // coché ou le joueur à retirer décoché.
+    const toAdd = Number(this.route.snapshot.queryParamMap.get('ajouter'));
+    const toRemove = Number(this.route.snapshot.queryParamMap.get('retirer'));
+    if (toAdd || toRemove) {
+      forkJoin([this.api.players(), this.api.teams(id)]).subscribe(([p, t]) => {
+        this.players.set(p);
+        this.teams.set(t);
+        this.loadRounds();
+        this.startRecompose();
+        this.drawSelection.update((s) => {
+          const next = new Set(s);
+          if (toAdd) next.add(toAdd);
+          if (toRemove) next.delete(toRemove);
+          return next;
+        });
+        this.persistDraw();
+        const who = p.find((x) => x.id === (toAdd || toRemove));
+        const name = who ? who.name + ' ' + who.firstname : 'Le joueur';
+        this.snack.open(
+          toAdd
+            ? `${name} est coché avec les inscrits : vérifiez, puis « Refaire les tables ».`
+            : `${name} est décoché : vérifiez, puis « Refaire les tables ».`,
+          'Fermer',
+          { duration: 8000 }
+        );
+        this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+      });
+      return;
+    }
     this.api.players().subscribe((p) => this.players.set(p));
     this.refreshTeams();
   }
@@ -619,6 +688,15 @@ export class TeamsPage implements OnInit {
   startRecompose(): void {
     this.recomposing.set(true);
     this.drawSelection.set(new Set(this.registeredPlayers().map((p) => p.id)));
+    // Les consignes de position des inscrits sont en base (migration 011) :
+    // on les reprend pour que le nouveau tirage les respecte encore.
+    const orient = new Map(this.drawOrientation());
+    for (const t of this.teams()) {
+      for (const tp of t.players) {
+        if (tp.orientation && !orient.has(tp.player_id)) orient.set(tp.player_id, tp.orientation as Orientation);
+      }
+    }
+    this.drawOrientation.set(orient);
     this.persistDraw();
     this.snack.open(
       'Cochez le ou les joueurs à ajouter, puis « Refaire les tables ».',
