@@ -1,8 +1,76 @@
 # PABB90 — Roadmap & versions
 
-> Refonte from-scratch d'un logiciel ASP de gestion de tournois FFT
-> (Fédération Française de Tarot). Stack : Node.js + Express + MariaDB +
-> Socket.IO côté back ; Angular côté front (à venir).
+> Refonte from-scratch d'un ancien logiciel ASP de gestion de tournois de
+> tarot. Stack actuelle : Amalgame/Mosaic + MariaDB + Socket.IO côté back ;
+> Angular 21 + Material côté front. Les sections plus bas sont l'historique
+> des versions, conservé tel qu'il a été écrit.
+
+---
+
+## ✅ v3.0.39 — Plus aucune référence à la fédération, habillage moderne *(livré, 2026-11-25)*
+
+**Une migration : `010_neutral_movement_label.sql`.** Installation par-dessus
+la précédente, sans perte de données.
+
+### Références à la fédération retirées
+
+Le logiciel n'a plus de lien avec la fédération dont il est issu. Tout ce
+qui est **visible** est renommé : « Règle FFT (mouvement) » devient
+« Mouvement standard », « Export FFT » devient « Export CSV » (fichier
+`classement-N.csv`), « Licence FFT » devient « N° de licence », l'aide ne
+parle plus de la fédération, l'API répond `PABB90 API`, le service Windows
+et l'unité systemd se décrivent « Gestion de tournois de tarot », les
+scripts d'installation affichent `[PABB90]`. Les fonctions restent
+identiques (l'export produit le même CSV).
+
+Le libellé du mouvement de base, enregistré en base par 009, est renommé par
+la **migration 010**. Seul le libellé change : les décalages, donc les
+placements, sont inchangés, et le libellé n'est lu par aucun calcul. La
+migration ne touche pas un libellé que le club aurait déjà modifié.
+
+**Volontairement conservés**, car ce sont des identifiants techniques
+invisibles pour l'utilisateur et les renommer casserait l'installation
+par-dessus : la base `fft`, l'utilisateur `fft_user`, le volume Docker
+`fft-db-data`, la variable `FFT_SEED_DEMO`, la clé de session `fft.auth`,
+le fichier `lib/fft.am`, le nom du dépôt GitHub (lien « Signaler un
+problème ») et le contenu des migrations 001 à 009 (règle n°1).
+
+Corrigé au passage : l'aide et l'écran du tournoi annonçaient « Ouest −1 »
+alors que le mouvement est « Ouest −2 » depuis la v3.0.32 (le calcul, lui,
+était juste).
+
+### Habillage moderne
+
+Fond bleuté, cartes blanches à liseré et ombre douce, barre latérale avec
+pastille de marque, bandeau du haut translucide, menu en pastilles, page de
+connexion retravaillée, en-têtes de tableau plus lisibles, barres de
+défilement fines. Uniquement du style : aucun bouton, champ ni lien
+modifié, police inchangée.
+
+### Vérifié
+
+- Migrations par le chemin de l'installeur Windows (`cmd /c mariadb < fichier`)
+  sur MariaDB 11.8 jetable : base vierge (10 migrations), base v3.0.38
+  peuplée (seule la 010 s'applique, joueurs, accents et compte admin
+  conservés), libellé personnalisé par le club laissé intact, rejeu forcé de
+  toutes les migrations sans perte ni doublon de Relais.
+- 14 pages capturées sur une soirée de démo (15 joueurs, table de 3 avec
+  Relais, manches saisies) : **rendu d'impression identique au pixel près**
+  avec et sans le nouvel habillage ; relevé de mise en page écran sans
+  aucun retour à la ligne, débordement ni texte tronqué nouveau.
+- Front compilé (`npm run build`), `server.exe` compilé sous Windows avec
+  `amc` 0.8.88, API testée (connexion, routes authentifiées, écritures
+  refusées sans jeton).
+- Non vérifié ici : `tests/migrations.sh` (Linux, tourne en CI).
+
+### `amalgame.lock` réaligné
+
+L'historique des paquets `amalgame-lang` a été réécrit en amont après la
+v3.0.38 : les 13 `rev` épinglés n'étaient plus ceux des tags, et l'étape CI
+« Verify locked versions unchanged » aurait échoué. Vérifié pour les 13 :
+même `tree` git (contenu identique) entre l'ancien et le nouveau commit,
+nouveaux `rev` confirmés par `git ls-remote`, et lock identique à celui que
+produit `amc package add` dans la chaîne de la release. Commit séparé.
 
 ---
 

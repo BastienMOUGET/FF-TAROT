@@ -1,6 +1,6 @@
 namespace App
 
-// Portage de src/utils/fft.js — logique de notation FFT (pure).
+// Portage de src/utils/fft.js — logique de notation (pure).
 // computeTopage reste porté dans le module scoring (son seul appelant,
 // où la forme des données est concrète). Ici : notes spéciales + score joueur.
 

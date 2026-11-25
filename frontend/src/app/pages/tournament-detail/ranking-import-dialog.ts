@@ -16,7 +16,7 @@ import { ApiService } from '../../core/api.service';
 import { RankingImportResult, RankingImportRow } from '../../core/api.types';
 import { parseCsv, splitFullName } from '../admin/dialogs/players-import-dialog';
 
-// Import d'un tournoi joué hors PABB90 (Excel FFT « Classement JJMMAAAA »)
+// Import d'un tournoi joué hors PABB90 (classeur Excel « Classement JJMMAAAA »)
 // dans le Challenge. Format observé (fichier du club, séparateur « ; ») :
 // quelques lignes d'en-tête, puis une ligne de titres
 //   Place;N° Licence;Nom Prénom;Départ;Points;Pcn
@@ -67,7 +67,7 @@ function labelFromFilename(filename: string): string {
     <h2 mat-dialog-title>Importer un tournoi (classement CSV)</h2>
     <mat-dialog-content>
       <p class="hint">
-        Pour un tournoi géré sur l'Excel FFT : enregistrer la feuille
+        Pour un tournoi géré sur un classeur Excel : enregistrer la feuille
         « Classement » au format CSV, puis la choisir ici. Le classement
         entre dans le Challenge tel quel ; les joueurs inconnus sont créés.
       </p>

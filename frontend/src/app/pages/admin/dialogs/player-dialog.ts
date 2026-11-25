@@ -42,7 +42,7 @@ export interface PlayerDialogData {
     <mat-dialog-content>
       <form [formGroup]="form" class="form">
         <mat-form-field appearance="outline">
-          <mat-label>Licence FFT (optionnel)</mat-label>
+          <mat-label>N° de licence (optionnel)</mat-label>
           <input matInput formControlName="licence" />
         </mat-form-field>
         <div class="row2">

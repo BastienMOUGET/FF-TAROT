@@ -11,7 +11,7 @@ public class Routes {
     public static void Register(WebApp app, Db db) {
         // Racine : index.html du front Angular (SPA). /api = santé.
         app.Get("/", ctx => Front.Index())
-        app.Get("/api", ctx => HttpResponse.New().Json("{\"app\":\"FFT TAROT API\",\"version\":\"2.0.0\"}"))
+        app.Get("/api", ctx => HttpResponse.New().Json("{\"app\":\"PABB90 API\",\"version\":\"2.0.0\"}"))
 
         // Référentiel — cartes (lecture publique)
         app.Get("/api/cards", ctx => ModCards.List(ctx, db))

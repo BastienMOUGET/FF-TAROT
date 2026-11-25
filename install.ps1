@@ -39,7 +39,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-function Write-Step([string]$msg) { Write-Host "[FFT] $msg" -ForegroundColor Cyan }
+function Write-Step([string]$msg) { Write-Host "[PABB90] $msg" -ForegroundColor Cyan }
 function Write-Ok([string]$msg)   { Write-Host "[OK]  $msg" -ForegroundColor Green }
 function Write-Warn2([string]$msg){ Write-Host "[!!]  $msg" -ForegroundColor Yellow }
 function Write-Err2([string]$msg) { Write-Host "[KO]  $msg" -ForegroundColor Red }
@@ -258,7 +258,7 @@ Start-Sleep -Seconds 1
 
 Write-Step "Creation du service Windows natif '$ServiceName'..."
 & sc.exe create $ServiceName binPath= "`"$ServerExe`"" start= auto DisplayName= "PABB90" | Out-Null
-& sc.exe description $ServiceName "PABB90 - Gestion de tournois FFT (Libre par 4)" | Out-Null
+& sc.exe description $ServiceName "PABB90 - Gestion de tournois de tarot (Libre par 4)" | Out-Null
 & sc.exe failure $ServiceName reset= 60 actions= restart/5000/restart/5000/restart/15000 | Out-Null
 
 $FrontDir = Join-Path $InstallDir 'frontend\dist\frontend\browser'
@@ -288,9 +288,9 @@ if %ERRORLEVEL% EQU 0 (
     net start "PABB90" >nul 2>&1
     timeout /t 1 /nobreak >nul
     start http://localhost:3000
-    echo [FFT] Service demarre. http://localhost:3000  (admin / admin123)
+    echo [PABB90] Service demarre. http://localhost:3000  (admin / admin123)
 ) else (
-    echo [FFT] Service introuvable, demarrage en mode standalone...
+    echo [PABB90] Service introuvable, demarrage en mode standalone...
     cd /d "%~dp0"
     if not exist logs mkdir logs
     start /b "" "%~dp0server.exe" > logs\server.log 2>&1
@@ -305,12 +305,12 @@ REM Arrête le service PABB90 (ou les processus standalone en fallback)
 sc query "PABB90" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     net stop "PABB90" >nul 2>&1
-    echo [FFT] Service arrete
+    echo [PABB90] Service arrete
 ) else (
     for /f "tokens=2" %%P in ('tasklist /fi "imagename eq node.exe" /fo table /nh ^| findstr /v "INFO"') do (
         taskkill /pid %%P /f >nul 2>&1
     )
-    echo [FFT] Processus standalone arretes
+    echo [PABB90] Processus standalone arretes
 )
 '@ | Out-File -FilePath $StopBat -Encoding ASCII -Force
 

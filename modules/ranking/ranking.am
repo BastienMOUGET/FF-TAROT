@@ -572,7 +572,7 @@ public class ModRanking {
     }
 
     // POST /api/tournaments/:tournamentId/import-ranking (admin)
-    // Importe un classement de tournoi tenu hors PABB90 (CSV de l'Excel FFT)
+    // Importe un classement de tournoi tenu hors PABB90 (CSV d'un classeur Excel)
     // dans le Challenge : crée un tournoi marqué `imported` et ses lignes de
     // `rankings`. Corps : { label, rows: [{place, licence, name, firstname,
     // points, pcn}] }. Joueur reconnu par licence, sinon par nom + prénom
@@ -830,8 +830,7 @@ public class ModRanking {
 
         var indPcnInt: string = "0"
         if (String.Length(indicePcn) > 0) { indPcnInt = String.FromInt(Db.CellInt(indicePcn)) }
-        // En-tête du masque FFT (feuille « Masque » du classeur de challenge
-        // fédéral) : nom et prénom en DEUX colonnes distinctes. L'export les
+        // En-tête du masque (feuille « Masque » du classeur de challenge) : nom et prénom en DEUX colonnes distinctes. L'export les
         // fusionnait, ce que le masque ne sait pas relire.
         var csv: string = code + ";" + String.FromInt(rows.Count()) + ";" + indPcnInt + ";1\n"
         csv = csv + tname + " - " + label + "\n"

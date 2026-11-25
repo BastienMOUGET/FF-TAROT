@@ -67,7 +67,7 @@ import { PlacementMode, Round, SubTournament, TableResult } from '../../core/api
                   [value]="s.placement_mode ?? 'movement'"
                   (selectionChange)="setPlacementMode(s, $event.value)"
                 >
-                  <mat-option value="movement">Règle FFT (mouvement)</mat-option>
+                  <mat-option value="movement">Mouvement standard</mat-option>
                   <mat-option value="level_last">Dernière manche par niveau</mat-option>
                   <mat-option value="level">Par niveau dès la manche 2</mat-option>
                 </mat-select>
@@ -355,9 +355,9 @@ export class SubTournamentDetailPage implements OnInit {
       case 'level':
         return 'Chaque manche regroupe les joueurs de même niveau, d’après le classement en cours.';
       case 'level_last':
-        return 'Mouvement fédéral, puis dernière manche entre joueurs de même niveau.';
+        return 'Mouvement standard, puis dernière manche entre joueurs de même niveau.';
       default:
-        return 'Mouvement fédéral : Nord fixe, Sud +1, Est +2, Ouest −1.';
+        return 'Mouvement standard : Nord fixe, Sud +1, Est +2, Ouest −2.';
     }
   }
 

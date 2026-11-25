@@ -26,6 +26,7 @@ import { environment } from '../../../environments/environment';
   template: `
     <div class="login-wrapper">
       <mat-card class="login-card">
+        <div class="logo" aria-hidden="true"><mat-icon>casino</mat-icon></div>
         <mat-card-header>
           <mat-card-title>PABB90 <small class="version">v{{ version }}</small></mat-card-title>
           <mat-card-subtitle>Connexion arbitre</mat-card-subtitle>
@@ -75,14 +76,29 @@ import { environment } from '../../../environments/environment';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);
+      background:
+        radial-gradient(1200px 600px at 15% 10%, rgba(100, 181, 246, 0.35), transparent 60%),
+        radial-gradient(900px 500px at 90% 90%, rgba(13, 71, 161, 0.55), transparent 60%),
+        linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);
       padding: 16px;
     }
     .login-card {
       width: 100%;
       max-width: 400px;
-      padding: 24px;
+      padding: 28px 28px 20px;
+      border-radius: 20px;
+      background: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 30px 60px -20px rgba(6, 30, 80, 0.55), 0 8px 20px -10px rgba(6, 30, 80, 0.35);
     }
+    .logo {
+      width: 56px; height: 56px; margin: 0 0 12px 16px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #2b8af0 0%, #1565c0 55%, #0d47a1 100%);
+      box-shadow: 0 8px 18px -6px rgba(21, 101, 192, 0.65);
+    }
+    .logo mat-icon { color: #fff; font-size: 30px; width: 30px; height: 30px; }
     .full-width {
       width: 100%;
       display: block;

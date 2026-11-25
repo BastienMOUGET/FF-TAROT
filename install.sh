@@ -25,7 +25,7 @@ set -euo pipefail
 
 # ---------------------------- Helpers ----------------------------
 
-log()  { printf '\033[1;34m[FFT]\033[0m %s\n' "$*"; }
+log()  { printf '\033[1;34m[PABB90]\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m[OK]\033[0m  %s\n' "$*"; }
 warn() { printf '\033[1;33m[!!]\033[0m  %s\n' "$*"; }
 err()  { printf '\033[1;31m[KO]\033[0m  %s\n' "$*" >&2; }
@@ -221,13 +221,13 @@ cat > "$INSTALL_DIR/start.sh" <<'STARTSH'
 cd "$(dirname "$(readlink -f "$0")")"
 mkdir -p logs
 if pgrep -x server > /dev/null; then
-  echo "[FFT] déjà démarré. http://localhost:3000"
+  echo "[PABB90] déjà démarré. http://localhost:3000"
   exit 0
 fi
 nohup ./server > logs/server.log 2>&1 &
 echo $! > logs/server.pid
 sleep 0.5
-echo "[FFT] démarré (pid $(cat logs/server.pid)). http://localhost:3000"
+echo "[PABB90] démarré (pid $(cat logs/server.pid)). http://localhost:3000"
 STARTSH
 
 cat > "$INSTALL_DIR/stop.sh" <<'STOPSH'
@@ -236,13 +236,13 @@ cd "$(dirname "$(readlink -f "$0")")"
 if [[ -f logs/server.pid ]]; then
   PID=$(cat logs/server.pid)
   if kill "$PID" 2>/dev/null; then
-    echo "[FFT] arrêté (pid $PID)"
+    echo "[PABB90] arrêté (pid $PID)"
   else
-    echo "[FFT] pid $PID introuvable, nettoyage"
+    echo "[PABB90] pid $PID introuvable, nettoyage"
   fi
   rm -f logs/server.pid
 else
-  pkill -x server && echo "[FFT] arrêté" || echo "[FFT] pas en cours"
+  pkill -x server && echo "[PABB90] arrêté" || echo "[PABB90] pas en cours"
 fi
 STOPSH
 
@@ -256,7 +256,7 @@ if [[ "$INSTALL_SYSTEMD" -eq 1 ]] && command -v systemctl >/dev/null 2>&1; then
   log "Création du service systemd pabb90.service..."
   cat > /etc/systemd/system/pabb90.service <<EOF
 [Unit]
-Description=PABB90 — Gestion de tournois FFT
+Description=PABB90 — Gestion de tournois de tarot
 After=network.target mariadb.service mysql.service
 Wants=mariadb.service
 

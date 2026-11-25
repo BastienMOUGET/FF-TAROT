@@ -67,9 +67,9 @@ import { ClubLogo } from '../../shared/club-logo';
       <button
         mat-stroked-button
         (click)="exportPcn()"
-        title="Fichier CSV au format du masque fédéral (licence, nom, prénom, PCN, PP)"
+        title="Fichier CSV au format du masque (licence, nom, prénom, PCN, PP)"
       >
-        <mat-icon>table_view</mat-icon> Export FFT
+        <mat-icon>table_view</mat-icon> Export CSV
       </button>
     </div>
 
@@ -394,7 +394,7 @@ export class RankingPage implements OnInit, OnDestroy {
     });
   }
 
-  // Le CSV au masque fédéral existait côté serveur depuis la v3.0.30 mais
+  // Le CSV au format du masque existait côté serveur depuis la v3.0.30 mais
   // aucun bouton ne l'appelait : il était inatteignable.
   exportPcn(): void {
     this.api.exportPcn(this.subTournamentId()).subscribe({
@@ -402,11 +402,11 @@ export class RankingPage implements OnInit, OnDestroy {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `classement-fft-${this.subTournamentId()}.csv`;
+        a.download = `classement-${this.subTournamentId()}.csv`;
         a.click();
         URL.revokeObjectURL(url);
         this.snack.open(
-          'Fichier CSV enregistré : à coller dans la feuille « Masque » du classeur fédéral.',
+          'Fichier CSV enregistré : à coller dans la feuille « Masque » du classeur de challenge.',
           'OK',
           { duration: 6000 }
         );

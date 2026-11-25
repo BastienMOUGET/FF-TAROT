@@ -47,8 +47,8 @@ V2 (front), V3 (autres disciplines).
 
 1. Login → tournois → création tournoi
 2. Sous-tournois (parallèles) → inscription équipes (4 joueurs NS+EO)
-3. Rounds : génération automatique de la mise en place (mouvement FFT)
+3. Rounds : génération automatique de la mise en place (mouvement standard)
 4. Saisie scores donne par donne (preneur + 4 scores)
 5. Validation table par table → **classement live diffusé via Socket.IO**
 6. Pénalités, grille PP, feuille de route imprimable, export PCN au
-   format CSV FFT
+   format CSV (masque du classeur de challenge)

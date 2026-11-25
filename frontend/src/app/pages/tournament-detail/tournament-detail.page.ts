@@ -67,7 +67,7 @@ function todayLabel(): string {
         <mat-form-field appearance="outline" class="full">
           <mat-label>Formation des tables</mat-label>
           <mat-select formControlName="placement_mode">
-            <mat-option value="movement">Règle FFT (mouvement)</mat-option>
+            <mat-option value="movement">Mouvement standard</mat-option>
             <mat-option value="level_last">Dernière manche par niveau</mat-option>
             <mat-option value="level">Par niveau dès la manche 2</mat-option>
           </mat-select>
@@ -104,9 +104,9 @@ export class SubTournamentDialog implements OnInit {
       case 'level':
         return 'À chaque manche, les 4 meilleurs du classement en cours jouent ensemble. Chaque manche se génère après la précédente.';
       case 'level_last':
-        return 'Mouvement fédéral, puis dernière manche entre joueurs de même niveau.';
+        return 'Mouvement standard, puis dernière manche entre joueurs de même niveau.';
       default:
-        return 'Mouvement fédéral. Toutes les manches sont générées après le tirage au sort : feuilles de marque imprimables dès le début.';
+        return 'Mouvement standard. Toutes les manches sont générées après le tirage au sort : feuilles de marque imprimables dès le début.';
     }
   }
 

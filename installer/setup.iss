@@ -773,7 +773,7 @@ begin
   end
   else
     Log('[PABB90] Pas de service "MariaDB" : dépendance de service non posée');
-  Exec(Sc, 'description PABB90 "PABB90 - Gestion de tournois FFT"',
+  Exec(Sc, 'description PABB90 "PABB90 - Gestion de tournois de tarot"',
        '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   // Restart automatique en cas de crash (3 essais : 5s, 5s, 15s)
   Exec(Sc, 'failure PABB90 reset= 60 actions= restart/5000/restart/5000/restart/15000',

@@ -163,7 +163,7 @@ export interface SubTournament {
   donne_set_id: number | null;
   tournament_code?: string;
   tournament_name?: string;
-  // Classement importé (CSV Excel FFT) : ni équipes ni manches, seulement
+  // Classement importé (CSV d'un classeur Excel) : ni équipes ni manches, seulement
   // des lignes de rankings figées.
   imported?: boolean;
   // Nombre de manches prévu (toutes générées après le tirage au sort).
@@ -172,7 +172,7 @@ export interface SubTournament {
   placement_mode?: PlacementMode;
 }
 
-// movement   : mouvement fédéral Libre par 4 (N fixe, S+1, E+2, O-1)
+// movement   : mouvement standard Libre par 4 (N fixe, S+1, E+2, O-2)
 // level      : dès la manche 2, tables formées par niveau (classement cumulé)
 // level_last : mouvement, sauf la dernière manche formée par niveau
 export type PlacementMode = 'movement' | 'level' | 'level_last';

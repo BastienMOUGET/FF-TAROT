@@ -1,5 +1,5 @@
 -- =====================================================
--- FFT TAROT - SEED minimal pour dev / tests manuels
+-- PABB90 - SEED minimal pour dev / tests manuels
 -- =====================================================
 
 -- ----- nettoyage (ordre inverse des FK) -----
@@ -34,7 +34,7 @@ INSERT INTO comites (id, code, name, ligue_id) VALUES
   (1, '75', 'Comité de Paris', 1);
 
 INSERT INTO clubs (id, code, name, comite_id) VALUES
-  (1, '75001', 'Club Test FFT', 1);
+  (1, '75001', 'Club Test', 1);
 
 -- ----- joueurs (8 = 2 équipes complètes) -----
 INSERT INTO players (id, licence, name, firstname, club_id) VALUES
@@ -55,7 +55,7 @@ INSERT INTO penalty_types (id, code, label, default_points) VALUES
 
 -- ----- tournoi de démo -----
 INSERT INTO tournaments (id, code, name, date, type, status, current_round, coef_default, club_id, comite_id)
-VALUES (1, 'TEST-2026', 'Tournoi Test FFT', CURDATE(), 'libre', 'open', 0, 1.00, 1, 1);
+VALUES (1, 'TEST-2026', 'Tournoi Test', CURDATE(), 'libre', 'open', 0, 1.00, 1, 1);
 
 INSERT INTO sub_tournaments (id, tournament_id, label, color, color_name)
 VALUES (1, 1, 'Open', '#1976D2', 'Bleu');

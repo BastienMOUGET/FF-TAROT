@@ -64,8 +64,9 @@ par tous les installeurs du projet.
 | `005_relais_and_imported.sql` | `players.is_relais` + 3 joueurs « Relais » (Nord fixe des tables de 3) ; `sub_tournaments.imported` (classement importé, jamais recalculé) |
 | `006_club_logo.sql` | `clubs.logo` : image du club en data URL, miniature sur les classements imprimés |
 | `007_rounds_planned_and_settings.sql` | `sub_tournaments.rounds_planned` (manches prévues, 4) + paramètre global `rounds_default` |
-| `008_placement_mode.sql` | `sub_tournaments.placement_mode` : mouvement fédéral, tables par niveau, ou dernière manche par niveau |
-| `009_fft_movements.sql` | mouvements FFT par nombre de tables **et par position** : `movement_patterns.position`, mouvement de base corrigé en Ouest −2, tableaux 6/8/9/10/12/14/15/16/18/20 tables |
+| `008_placement_mode.sql` | `sub_tournaments.placement_mode` : mouvement standard, tables par niveau, ou dernière manche par niveau |
+| `009_fft_movements.sql` | mouvements par nombre de tables **et par position** : `movement_patterns.position`, mouvement de base corrigé en Ouest −2, tableaux 6/8/9/10/12/14/15/16/18/20 tables |
+| `010_neutral_movement_label.sql` | libellé du mouvement de base renommé « Mouvement de base (N fixe, S+1, E+2, O-2) », sans référence à une fédération ; décalages inchangés |
 
 ### Interdit dans une migration
 

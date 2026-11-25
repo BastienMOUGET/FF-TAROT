@@ -84,7 +84,7 @@ import { environment } from '../../../environments/environment';
             <strong>Tirer au sort</strong> — le bouton forme les tables de 4 et,
             s'il le faut, des tables de 3 où le Nord est tenu par un joueur
             virtuel « Relais », fixe à sa table toute la soirée et qui marque
-            des points comme les autres. En mouvement fédéral, toutes les
+            des points comme les autres. En mouvement standard, toutes les
             manches prévues sont générées d'un coup ; par niveau, elles se
             forment une par une.
           </li>
@@ -142,10 +142,10 @@ import { environment } from '../../../environments/environment';
           soirée.
         </p>
         <dl>
-          <dt>Règle FFT (mouvement)</dt>
+          <dt>Mouvement standard</dt>
           <dd>
             Le mode habituel : Nord reste, Sud avance d'une table, Est de
-            deux, Ouest recule d'une. Toutes les manches sont générées dès le
+            deux, Ouest recule de deux. Toutes les manches sont générées dès le
             tirage au sort, donc toutes les feuilles de marque s'impriment au
             début.
           </dd>
@@ -172,9 +172,9 @@ import { environment } from '../../../environments/environment';
           table de 2.
         </p>
 
-        <h2>Les mouvements FFT</h2>
+        <h2>Les mouvements</h2>
         <p>
-          En mode « Règle FFT », chaque joueur garde son orientation toute la
+          En mode « Mouvement standard », chaque joueur garde son orientation toute la
           soirée et change de table à chaque manche. Le mouvement de base est :
         </p>
         <table class="mvt">
@@ -215,7 +215,7 @@ import { environment } from '../../../environments/environment';
           Deux modes : <strong>Par place</strong> (le premier d'un tournoi
           marque autant de points qu'il y a de joueurs, le dernier 1 point) ou
           <strong>Par points</strong> (les scores bruts cumulés). Un tournoi
-          joué sur l'Excel de la fédération s'ajoute avec « Importer un tournoi
+          joué sur un classeur Excel s'ajoute avec « Importer un tournoi
           (CSV) », et la corbeille sur une carte retire un tournoi du
           challenge.
         </p>
@@ -257,19 +257,18 @@ import { environment } from '../../../environments/environment';
           </dd>
           <dt>« Mise à jour automatique » ou « Rafraîchir à la main » ?</dt>
           <dd>
-            C'est l'état du classement live, pas un lien avec la fédération.
+            C'est l'état du classement live, pas un lien avec un site extérieur.
             Quand il indique la mise à jour automatique, le classement se
             rafraîchit dès qu'une table est validée ; sinon, recharger la page
             suffit.
           </dd>
-          <dt>Envoyer les PCN à la fédération ?</dt>
+          <dt>Exporter les PCN ?</dt>
           <dd>
-            Le bouton <strong>Export FFT</strong>, sur le classement général
-            du tournoi, produit un CSV au format du masque fédéral (licence,
-            nom, prénom, Pcn, Pp) : son contenu se colle dans la feuille
-            « Masque » du classeur fédéral. L'envoi lui-même
-            se fait par les moyens habituels de la fédération : l'application
-            ne s'y connecte pas.
+            Le bouton <strong>Export CSV</strong>, sur le classement général
+            du tournoi, produit un CSV (licence, nom, prénom, Pcn, Pp) : son
+            contenu se colle dans la feuille « Masque » du classeur de
+            challenge. L'application n'envoie rien elle-même : le fichier se
+            transmet par les moyens habituels.
           </dd>
           <dt>Pourquoi tout est-il grisé dans Administration ?</dt>
           <dd>

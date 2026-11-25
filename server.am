@@ -50,7 +50,7 @@ public class Program {
 
         var port: int = String.ToInt(Config.Get("PORT", "3000"))
 
-        Console.WriteLine("FFT TAROT API — port " + String.FromInt(port))
+        Console.WriteLine("PABB90 API — port " + String.FromInt(port))
         app.Serve(port)
     }
 }

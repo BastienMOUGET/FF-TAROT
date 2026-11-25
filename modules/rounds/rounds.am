@@ -203,7 +203,7 @@ public class ModRounds {
         let subId: string = rr.Get(1)
         let roundNumber: int = Db.CellInt(rr.Get(2))
 
-        // Mode de placement du tournoi (migration 008) : mouvement fédéral,
+        // Mode de placement du tournoi (migration 008) : mouvement standard,
         // ou tables formées par niveau d'après le classement en cours.
         let subRows: List<List<string>> = db.Rows("SELECT placement_mode, rounds_planned FROM sub_tournaments WHERE id = ?", Db.P1(subId))
         if (subRows.Count() == 0) { return HttpErr.NotFound() }

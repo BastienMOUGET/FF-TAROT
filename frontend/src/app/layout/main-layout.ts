@@ -108,10 +108,14 @@ import { RoundTimer } from './round-timer';
   `,
   styles: `
     .container { height: 100vh; }
+    /* Écran seulement : laisse voir le fond bleuté de la page. L'impression
+       garde le fond d'origine du conteneur. */
+    @media screen { .container { background: transparent; } }
     .sidenav {
       width: 240px;
-      background: #f5f5f5;
-      border-right: 1px solid #e0e0e0;
+      background: #fbfcfe;
+      border-right: 1px solid rgba(15, 40, 80, 0.08);
+      border-radius: 0;
     }
     /* Colonne : marque, nav, minuterie, puis le logo poussé en bas. */
     .sidenav ::ng-deep .mat-drawer-inner-container { display: flex; flex-direction: column; }
@@ -123,25 +127,51 @@ import { RoundTimer } from './round-timer';
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 20px 16px;
-      color: #1976d2;
-      border-bottom: 1px solid #e0e0e0;
+      padding: 18px 16px;
+      color: #10203f;
+      border-bottom: 1px solid rgba(15, 40, 80, 0.08);
     }
-    .brand mat-icon { color: #1976d2; }
+    /* Pastille de marque : dégradé bleu, icône blanche. */
+    .brand mat-icon {
+      width: 40px; height: 40px; font-size: 24px; line-height: 40px;
+      text-align: center; flex: 0 0 auto;
+      color: #fff;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2b8af0 0%, #1565c0 55%, #0d47a1 100%);
+      box-shadow: 0 4px 12px -4px rgba(21, 101, 192, 0.6);
+    }
     .brand-text { display: flex; flex-direction: column; }
-    .brand-name { font-weight: 600; font-size: 1.1em; line-height: 1; }
-    .brand-version { font-size: 0.75em; color: #757575; line-height: 1.4; }
+    .brand-name { font-weight: 700; font-size: 1.15em; line-height: 1; letter-spacing: 0.02em; }
+    .brand-version { font-size: 0.75em; color: #7a8499; line-height: 1.5; }
     .club-head {
       display: flex; align-items: center; justify-content: center; gap: 10px;
-      margin: 12px 12px 4px; padding: 10px 12px; border-radius: 8px;
-      background: #1976d2; color: #fff; text-decoration: none;
+      margin: 14px 12px 6px; padding: 10px 12px; border-radius: 12px;
+      background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%);
+      color: #fff; text-decoration: none;
       font-weight: 600; line-height: 1.2; text-align: center;
+      box-shadow: 0 6px 16px -8px rgba(21, 101, 192, 0.7);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
+    .club-head:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -8px rgba(21, 101, 192, 0.8); }
     .club-head-name { flex: 0 1 auto; }
+    /* Menu : éléments en pastille, l'actif sur fond bleu pâle. */
+    /* Pastille décollée de 6 px des bords. Pas de retrait supplémentaire :
+       les marges d'icône de Material suffisent, et « Signaler un problème »
+       garde la place de s'afficher en entier (vérifié par mesure). */
+    .sidenav a.mat-mdc-list-item {
+      border-radius: 12px;
+      margin: 0 6px;
+      width: auto;
+      padding-left: 0;
+      padding-right: 0;
+    }
     .topbar {
       position: sticky;
       top: 0;
       z-index: 10;
+      background: rgba(242, 245, 250, 0.82);
+      backdrop-filter: saturate(180%) blur(10px);
+      border-bottom: 1px solid rgba(15, 40, 80, 0.06);
     }
     .spacer { flex: 1 1 auto; }
     .content {
@@ -151,7 +181,8 @@ import { RoundTimer } from './round-timer';
     }
     a.active {
       background: rgba(25, 118, 210, 0.1);
-      color: #1976d2;
+      color: #1565c0;
+      font-weight: 600;
     }
     a.active mat-icon { color: #1976d2; }
   `,

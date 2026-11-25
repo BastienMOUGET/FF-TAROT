@@ -115,7 +115,7 @@ public class ModMovementPatterns {
     // Offsets à appliquer pour produire la manche `position` sur un tournoi
     // de `tableCount` tables. Du plus précis au plus général :
     // (tables, position) → (tables, toutes positions) → mouvement de base.
-    // Le défaut de secours est le mouvement FFT : N fixe, S+1, E+2, O-2.
+    // Le défaut de secours est le mouvement standard : N fixe, S+1, E+2, O-2.
     public static List<int> OffsetsForPosition(Db db, int tableCount, int position) {
         let ps: List<string> = new List<string>()
         ps.Add(String.FromInt(tableCount))
