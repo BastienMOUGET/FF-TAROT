@@ -4,76 +4,76 @@
 name = "crypto"
 git  = "github.com/amalgame-lang/amalgame-crypto"
 tag  = "v0.8.0"
-rev  = "1f908c0c"
+rev  = "f9447d02"
 
 [[package]]
 name = "tls"
 git  = "github.com/amalgame-lang/amalgame-tls"
 tag  = "v0.3.5"
-rev  = "70a7f8f3"
+rev  = "d1a1a8d8"
 
 [[package]]
 name = "async"
 git  = "github.com/amalgame-lang/amalgame-async"
 tag  = "v0.4.0"
-rev  = "1f44b8f7"
+rev  = "2d0a800f"
 
 [[package]]
 name = "http"
 git  = "github.com/amalgame-lang/amalgame-net-http"
 tag  = "v0.26.1"
-rev  = "d86ff5b1"
+rev  = "e2cd56ce"
 
 [[package]]
 name = "datetime"
 git  = "github.com/amalgame-lang/amalgame-datetime"
 tag  = "v0.2.2"
-rev  = "f28d6556"
+rev  = "a747e1e5"
 
 [[package]]
 name = "random"
 git  = "github.com/amalgame-lang/amalgame-random"
 tag  = "v0.1.0"
-rev  = "da4ff0f7"
+rev  = "e06d6b82"
 
 [[package]]
 name = "logging"
 git  = "github.com/amalgame-lang/amalgame-logging"
 tag  = "v0.2.0"
-rev  = "ba89bd8d"
+rev  = "bff44f74"
 
 [[package]]
 name = "redis"
 git  = "github.com/amalgame-lang/amalgame-database-nosql-redis"
 tag  = "v0.2.0"
-rev  = "93104295"
+rev  = "fb276ee3"
 
 [[package]]
 name = "threading"
 git  = "github.com/amalgame-lang/amalgame-threading"
 tag  = "v0.1.0"
-rev  = "bfb5d018"
+rev  = "998ec8d8"
 
 [[package]]
 name = "compress"
 git  = "github.com/amalgame-lang/amalgame-compress"
 tag  = "v0.1.0"
-rev  = "2db55bb0"
+rev  = "43d18a8f"
 
 [[package]]
 name = "web"
 git  = "github.com/amalgame-lang/amalgame-web"
 tag  = "v0.36.3"
-rev  = "09ab9fcd"
+rev  = "aa6150cc"
 
 [[package]]
 name = "service"
 git  = "github.com/amalgame-lang/amalgame-service"
 tag  = "v0.2.0"
-rev  = "c4e1ce4a"
+rev  = "9acf1a63"
 
 [[package]]
 name = "mysql"
 git  = "github.com/amalgame-lang/amalgame-database-mysql"
 tag  = "v0.3.0"
-rev  = "a812621f"
+rev  = "85da45d6"
