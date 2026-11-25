@@ -13,7 +13,12 @@ concurrency:
 jobs:
   build:
     name: Build back AM + front (Linux)
-    runs-on: ubuntu-latest
+    # Épinglé : depuis novembre 2026, ubuntu-latest = 26.04, dont le gcc
+    # refuse (erreurs, plus avertissements) des conversions int/pointeur du
+    # paquet amalgame-web v0.36.3 → la façade ne compile pas et le link du
+    # back échoue. 24.04 garde le gcc 13 utilisé jusqu'à la v3.0.38, comme
+    # le MinGW 13.2 de la release Windows. À revoir en montant amalgame-web.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
