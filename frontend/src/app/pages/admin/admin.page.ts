@@ -146,7 +146,7 @@ import { UserDialog } from './dialogs/user-dialog';
         </div>
         <table mat-table [dataSource]="players()" class="mat-elevation-z2">
           <ng-container matColumnDef="licence">
-            <th mat-header-cell *matHeaderCellDef>Licence</th>
+            <th mat-header-cell *matHeaderCellDef>Licence FFT</th>
             <td mat-cell *matCellDef="let p">{{ p.licence || '—' }}</td>
           </ng-container>
           <ng-container matColumnDef="name">

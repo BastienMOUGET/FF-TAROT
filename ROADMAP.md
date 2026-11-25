@@ -128,6 +128,19 @@ chacun de ces champs est bien obligatoire (`Validators.required`), puis dans
 le navigateur : 18 libellés relevés, chaque champ obligatoire affiche un
 astérisque, les facultatifs aucun.
 
+### Colonne « Licence FFT »
+
+Demande du 2026-11-25 : dans Administration ▸ Joueurs, la colonne
+« Licence » s'appelle « Licence FFT », et le champ de la fiche joueur
+« Licence FFT (optionnel) ». Renommage seul, choix du club : les numéros
+déjà saisis (jusqu'ici un numéro propre au club) restent dans ce champ et
+sont à corriger à la main ; ils figurent toujours dans le classement du
+Challenge et dans l'Export CSV. Retour délibéré du sigle FFT, retiré
+partout en v3.0.39, limité à ce champ.
+
+Vérifié : page Administration et fiche joueur dans le navigateur ; les
+13 autres pages identiques à l'écran et à l'impression.
+
 ---
 
 ## ✅ v3.0.39 — Plus aucune référence à la fédération, habillage moderne *(livré, 2026-11-25)*
