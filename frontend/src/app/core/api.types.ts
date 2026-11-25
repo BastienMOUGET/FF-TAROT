@@ -235,6 +235,9 @@ export interface RoundSeat {
   firstname: string;
   // Place tenue par un joueur virtuel « Relais » (table de 3).
   is_relais?: boolean;
+  // Consigne de position donnée au tirage (migration 011) :
+  // 'N' | 'S' | 'E' | 'O' | 'not_north', null = aléatoire.
+  orientation?: string | null;
 }
 
 export interface RoundTable {

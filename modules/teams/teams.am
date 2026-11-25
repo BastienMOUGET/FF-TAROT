@@ -9,7 +9,7 @@ public class ModTeams {
     // Joueurs d'une équipe → tableau JSON (jointure team_players + players).
     static JsonValue PlayersJson(Db db, string teamId) {
         let rows: List<List<string>> = db.Rows(
-            "SELECT tp.player_id, tp.pair, tp.player_number, p.licence, p.name, p.firstname, p.club_id, p.category, tp.seat FROM team_players tp JOIN players p ON p.id = tp.player_id WHERE tp.team_id = ? ORDER BY tp.player_number",
+            "SELECT tp.player_id, tp.pair, tp.player_number, p.licence, p.name, p.firstname, p.club_id, p.category, tp.seat, tp.orientation FROM team_players tp JOIN players p ON p.id = tp.player_id WHERE tp.team_id = ? ORDER BY tp.player_number",
             Db.P1(teamId))
         let arr: JsonValue = J.Arr()
         for i in 0..rows.Count() {
@@ -19,6 +19,7 @@ public class ModTeams {
             o.AppendEntry("pair", J.CellStr(r.Get(1)))
             o.AppendEntry("player_number", J.CellInt(r.Get(2)))
             o.AppendEntry("seat", J.CellStrN(r.Get(8)))
+            o.AppendEntry("orientation", J.CellStrN(r.Get(9)))
             o.AppendEntry("licence", J.CellStrN(r.Get(3)))
             o.AppendEntry("name", J.CellStr(r.Get(4)))
             o.AppendEntry("firstname", J.CellStr(r.Get(5)))
@@ -85,6 +86,10 @@ public class ModTeams {
         // "" = non fourni : la mise en place retombe sur l'ordre des joueurs.
         let nsSeats: List<string> = new List<string>()
         let eoSeats: List<string> = new List<string>()
+        // Consigne de position du tirage (migration 011), alignée de même.
+        // "" = aléatoire.
+        let nsOrients: List<string> = new List<string>()
+        let eoOrients: List<string> = new List<string>()
         let seen: List<string> = new List<string>()
         let seenSeats: List<string> = new List<string>()
         for i in 0..n {
@@ -107,8 +112,13 @@ public class ModTeams {
                 if ((seat == "N" || seat == "S") && pair != "NS") { return HttpErr.BadRequest("Le siège " + seat + " appartient à la paire NS") }
                 if ((seat == "E" || seat == "O") && pair != "EO") { return HttpErr.BadRequest("Le siège " + seat + " appartient à la paire EO") }
             }
-            if (pair == "NS") { nsIds.Add(pid) nsSeats.Add(seat) }
-            else { if (pair == "EO") { eoIds.Add(pid) eoSeats.Add(seat) } else { return HttpErr.BadRequest("pair doit être NS ou EO") } }
+            var orient: string = ""
+            if (Fld.HasStr(p, "orientation")) {
+                orient = Fld.Str(p, "orientation")
+                if (orient != "N" && orient != "S" && orient != "E" && orient != "O" && orient != "not_north") { return HttpErr.BadRequest("orientation doit être N, S, E, O ou not_north") }
+            }
+            if (pair == "NS") { nsIds.Add(pid) nsSeats.Add(seat) nsOrients.Add(orient) }
+            else { if (pair == "EO") { eoIds.Add(pid) eoSeats.Add(seat) eoOrients.Add(orient) } else { return HttpErr.BadRequest("pair doit être NS ou EO") } }
         }
         if (n == 4) {
             if (nsIds.Count() != 2 || eoIds.Count() != 2) { return HttpErr.BadRequest("Une équipe de 4 doit avoir exactement 2 joueurs NS et 2 joueurs EO") }
@@ -133,11 +143,11 @@ public class ModTeams {
         // NS d'abord (player_number 1,2) puis EO (3,4)
         var num: int = 1
         for k in 0..nsIds.Count() {
-            if (!ModTeams.InsTp(db, teamIdS, nsIds.Get(k), "NS", num, nsSeats.Get(k))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+            if (!ModTeams.InsTp(db, teamIdS, nsIds.Get(k), "NS", num, nsSeats.Get(k), nsOrients.Get(k))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
             num = num + 1
         }
         for k in 0..eoIds.Count() {
-            if (!ModTeams.InsTp(db, teamIdS, eoIds.Get(k), "EO", num, eoSeats.Get(k))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
+            if (!ModTeams.InsTp(db, teamIdS, eoIds.Get(k), "EO", num, eoSeats.Get(k), eoOrients.Get(k))) { db.Rollback() return HttpErr.FromDb(db.LastError()) }
             num = num + 1
         }
         db.Commit()
@@ -148,17 +158,18 @@ public class ModTeams {
         return resp.Status(201)
     }
 
-    static bool InsTp(Db db, string teamId, string playerId, string pair, int num, string seat) {
+    // `seat` et `orient` : "" = non fourni (NULL en base).
+    static bool InsTp(Db db, string teamId, string playerId, string pair, int num, string seat, string orient) {
         let ps: List<string> = new List<string>()
         ps.Add(teamId)
         ps.Add(playerId)
         ps.Add(pair)
         ps.Add(String.FromInt(num))
-        if (String.Length(seat) == 0) {
-            return db.Exec("INSERT INTO team_players (team_id, player_id, pair, player_number, seat) VALUES (?, ?, ?, ?, NULL)", ps)
-        }
-        ps.Add(seat)
-        return db.Exec("INSERT INTO team_players (team_id, player_id, pair, player_number, seat) VALUES (?, ?, ?, ?, ?)", ps)
+        var seatSql: string = "NULL"
+        if (String.Length(seat) > 0) { seatSql = "?" ps.Add(seat) }
+        var orientSql: string = "NULL"
+        if (String.Length(orient) > 0) { orientSql = "?" ps.Add(orient) }
+        return db.Exec("INSERT INTO team_players (team_id, player_id, pair, player_number, seat, orientation) VALUES (?, ?, ?, ?, " + seatSql + ", " + orientSql + ")", ps)
     }
 
     // POST /api/sub-tournaments/:subTournamentId/substitute (admin)

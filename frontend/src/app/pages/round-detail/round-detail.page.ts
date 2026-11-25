@@ -105,6 +105,18 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
                     <li>
                       <span class="seat" [attr.data-seat]="s.seat">{{ s.seat }}</span>
                       <span class="pname">{{ s.name }} {{ s.firstname }}</span>
+                      <!-- Consigne du tirage, pour vérifier qu'elle est tenue
+                           à chaque manche (écran seulement). -->
+                      @if (s.orientation) {
+                        <span
+                          class="consigne no-print"
+                          [class.ko]="!consigneTenue(s)"
+                          [title]="consigneTenue(s) ? 'Consigne respectée' : 'Consigne impossible à respecter à cette table'"
+                        >
+                          @if (!consigneTenue(s)) {<mat-icon>warning</mat-icon>}
+                          {{ consigneLabel(s.orientation) }}
+                        </span>
+                      }
                       @if (auth.isAdmin()) {
                         <button
                           mat-icon-button
@@ -157,6 +169,14 @@ import { PlayerDialog } from '../admin/dialogs/player-dialog';
     .seat[data-seat="E"] { background: #ff8a65; color: #4e342e; }
     .seat[data-seat="O"] { background: #aed581; color: #33691e; }
     .pname { flex: 1 1 auto; }
+    .consigne {
+      display: inline-flex; align-items: center; gap: 2px;
+      font-size: 0.72em; font-weight: 600; white-space: nowrap;
+      padding: 2px 8px; border-radius: 10px;
+      background: #e8f0fe; color: #1565c0;
+    }
+    .consigne.ko { background: #fdecea; color: #c62828; }
+    .consigne mat-icon { font-size: 14px; width: 14px; height: 14px; }
     .edit-player { opacity: 0.45; }
     .table li:hover .edit-player { opacity: 1; }
   `,
@@ -309,6 +329,19 @@ export class RoundDetailPage implements OnInit {
 
   // Une faute de frappe sur un nom se corrige même une fois la mise en
   // place faite : on modifie la fiche du joueur, les places ne bougent pas.
+  consigneLabel(o: string): string {
+    const labels: Record<string, string> = {
+      N: 'Nord fixe', S: 'Sud fixe', E: 'Est fixe', O: 'Ouest fixe', not_north: 'Non Nord',
+    };
+    return labels[o] ?? o;
+  }
+
+  consigneTenue(s: RoundSeat): boolean {
+    if (!s.orientation) return true;
+    if (s.orientation === 'not_north') return s.seat !== 'N';
+    return s.seat === s.orientation;
+  }
+
   editPlayer(seat: RoundSeat): void {
     this.api.player(seat.player_id).subscribe({
       next: (player) => {

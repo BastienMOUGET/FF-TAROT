@@ -23,8 +23,8 @@ import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
 import { ApiService } from '../../core/api.service';
 import { Pair, Player, RoundSeat, Seat, Team } from '../../core/api.types';
 
-type Orientation = 'random' | Seat | 'not_north';
 import { PlayerDialog } from '../admin/dialogs/player-dialog';
+import { DrawnSeat, Orientation, drawSeats } from './seat-draw';
 
 @Component({
   selector: 'app-teams-page',
@@ -901,15 +901,6 @@ export class TeamsPage implements OnInit {
     });
   }
 
-  private shuffle<T>(arr: T[]): T[] {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
-
   // Décompose n joueurs en tables de 4 (prioritaire) + tables de 3 pour
   // finir correctement quand n n'est pas un multiple de 4. Infaisable
   // seulement pour n < 3 ou n === 5.
@@ -922,63 +913,29 @@ export class TeamsPage implements OnInit {
     return { fours: remaining / 4, threes };
   }
 
-  // Répartit un groupe de joueurs sur les sièges disponibles en respectant
-  // au mieux les orientations demandées (fixe N/S/E/O, ou non-Nord) :
-  // 1) préférences fixes, 2) non-Nord sur un siège != N si possible,
-  // 3) le reste au hasard sur les sièges restants. `unmet` compte les
-  // préférences qui n'ont pas pu être honorées (conflit à la même table).
-  private assignSeats(
-    group: number[],
-    seatPool: Seat[]
-  ): { assigned: { id: number; seat: Seat }[]; unmet: number } {
-    const orient = this.drawOrientation();
-    const remaining = new Set<Seat>(seatPool);
-    const result: { id: number; seat: Seat }[] = [];
-    let unmet = 0;
-
-    for (const id of group) {
-      const o = orient.get(id);
-      if (o && o !== 'random' && o !== 'not_north' && remaining.has(o)) {
-        result.push({ id, seat: o });
-        remaining.delete(o);
-      } else if (o && o !== 'random' && o !== 'not_north') {
-        unmet++;
-      }
-    }
-
-    for (const id of group) {
-      if (result.some((r) => r.id === id)) continue;
-      if (orient.get(id) !== 'not_north') continue;
-      const choice =
-        [...remaining].find((s) => s !== 'N') ?? [...remaining][0];
-      if (choice === undefined) continue;
-      if (choice === 'N') unmet++;
-      result.push({ id, seat: choice });
-      remaining.delete(choice);
-    }
-
-    const rest = this.shuffle(group.filter((id) => !result.some((r) => r.id === id)));
-    const seatsLeft = this.shuffle([...remaining]);
-    rest.forEach((id, i) => result.push({ id, seat: seatsLeft[i] }));
-
-    return { assigned: result, unmet };
-  }
-
   // Reconstruit le tableau player_id/pair attendu par l'API dans l'ordre
   // N,S,E,O — cet ordre détermine le player_number (1..4) donc le siège
   // final (cf modules/teams/teams.am : NS d'abord, EO ensuite).
   // Le siège est aussi envoyé explicitement (team_players.seat, v3.0.22) :
   // la mise en place de la manche 1 le respecte tel quel, y compris la
-  // place vide d'une table de 3.
+  // place vide d'une table de 3. La consigne de position est envoyée aussi
+  // (team_players.orientation, migration 011) : les manches formées par
+  // niveau la respectent à leur tour.
   private toPayload(
-    assigned: { id: number; seat: Seat }[]
-  ): { player_id: number; pair: Pair; seat: Seat }[] {
+    assigned: DrawnSeat[]
+  ): { player_id: number; pair: Pair; seat: Seat; orientation?: Exclude<Orientation, 'random'> }[] {
     const bySeat = new Map(assigned.map((a) => [a.seat, a.id]));
-    const payload: { player_id: number; pair: Pair; seat: Seat }[] = [];
+    const payload: { player_id: number; pair: Pair; seat: Seat; orientation?: Exclude<Orientation, 'random'> }[] = [];
     for (const seat of ['N', 'S', 'E', 'O'] as Seat[]) {
       const id = bySeat.get(seat);
       if (id === undefined) continue;
-      payload.push({ player_id: id, pair: seat === 'N' || seat === 'S' ? 'NS' : 'EO', seat });
+      const o = this.orientationFor(id);
+      payload.push({
+        player_id: id,
+        pair: seat === 'N' || seat === 'S' ? 'NS' : 'EO',
+        seat,
+        ...(o !== 'random' ? { orientation: o } : {}),
+      });
     }
     return payload;
   }
@@ -993,36 +950,27 @@ export class TeamsPage implements OnInit {
       plan.threes > 0
         ? `${plan.fours} de 4 + ${plan.threes} de 3`
         : `${plan.fours} de 4`;
+    // Tables ET places tirées ensemble, consignes de position comprises
+    // (voir seat-draw.ts). Table de 3 : Nord est tenu par le joueur virtuel
+    // « Relais », fixe toute la soirée ; le back le pose.
+    const draw = drawSeats(Array.from(this.drawSelection()), plan, (id) => this.orientationFor(id));
+    const unmetOrientations = draw.unmet;
+    const warning =
+      draw.unmet > 0
+        ? `\n\nAttention : ${draw.unmet} consigne(s) de position ne peuvent pas être respectées :\n- ` +
+          draw.reasons.join('\n- ')
+        : '';
     if (
       !confirmed &&
       !confirm(
-        `Tirer au sort ${this.drawCount()} joueurs en ${nbTeams} équipe(s) (${detail}) et générer la mise en place de la manche 1 ?`
+        `Tirer au sort ${this.drawCount()} joueurs en ${nbTeams} équipe(s) (${detail}) et générer la mise en place de la manche 1 ?` +
+          warning
       )
     ) {
       return;
     }
 
-    const ids = this.shuffle(Array.from(this.drawSelection()));
-    const payloads: { player_id: number; pair: Pair; seat: Seat }[][] = [];
-    let cursor = 0;
-    let unmetOrientations = 0;
-    for (let i = 0; i < plan.fours; i++) {
-      const group = ids.slice(cursor, cursor + 4);
-      cursor += 4;
-      const { assigned, unmet } = this.assignSeats(group, ['N', 'S', 'E', 'O']);
-      unmetOrientations += unmet;
-      payloads.push(this.toPayload(assigned));
-    }
-    for (let i = 0; i < plan.threes; i++) {
-      const group = ids.slice(cursor, cursor + 3);
-      cursor += 3;
-      // Table de 3 : Nord est occupé par le joueur virtuel « Relais », fixe
-      // à sa table toute la soirée (règle du club, retour terrain n°4). Les
-      // 3 vrais joueurs se répartissent S, E, O ; le back pose le relais.
-      const { assigned, unmet } = this.assignSeats(group, ['S', 'E', 'O']);
-      unmetOrientations += unmet;
-      payloads.push(this.toPayload(assigned));
-    }
+    const payloads = draw.tables.map((t) => this.toPayload(t));
 
     this.drawing.set(true);
     from(payloads)
@@ -1039,7 +987,7 @@ export class TeamsPage implements OnInit {
           const msg =
             `${nbTeams} équipe(s) tirée(s) au sort` +
             (unmetOrientations > 0
-              ? ` — ${unmetOrientations} orientation(s) demandée(s) non respectée(s) (conflit à la même table)`
+              ? ` — ${unmetOrientations} consigne(s) de position impossible(s) : ${draw.reasons.join(' ; ')}`
               : '');
           this.snack.open(msg, 'Fermer', { duration: unmetOrientations > 0 ? 5000 : 2000 });
           this.generateFirstRound();

@@ -215,46 +215,222 @@ public class Placement {
         return out
     }
 
+    // Consigne de position d'un joueur (team_players.orientation) : "N",
+    // "S", "E", "O", "not_north", ou "" (aléatoire / inconnue).
+    static string PrefOf(int playerId, List<int> prefIds, List<string> prefVals) {
+        for k in 0..prefIds.Count() {
+            if (prefIds.Get(k) == playerId) { return prefVals.Get(k) }
+        }
+        return ""
+    }
+
+    static bool InList(List<int> xs, int v) {
+        for x in xs { if (x == v) { return true } }
+        return false
+    }
+
+    // Sièges d'une table formée par niveau, dans l'ordre de `ids`, en
+    // respectant au mieux les consignes de position (même règle que le
+    // tirage au sort de l'écran « Joueurs présents ») : sièges fixes
+    // d'abord, puis « Non Nord » hors Nord, puis les autres au hasard sur
+    // les places restantes. Une consigne n'est manquée que si deux joueurs
+    // de la même table veulent le même siège (le niveau décide de la table).
+    public static List<string> SeatsByPref(List<int> ids, List<string> pool, List<int> prefIds, List<string> prefVals) {
+        let idx: List<int> = new List<int>()
+        for k in 0..pool.Count() { idx.Add(k) }
+        let order: List<int> = Placement.Shuffled(idx)
+        let free: List<string> = new List<string>()
+        for k in 0..order.Count() { free.Add(pool.Get(order.Get(k))) }
+
+        let pidx: List<int> = new List<int>()
+        for k in 0..ids.Count() { pidx.Add(k) }
+        let players: List<int> = Placement.Shuffled(pidx)
+
+        let placedIdx: List<int> = new List<int>()
+        let placedSeat: List<string> = new List<string>()
+
+        // 1. Sièges fixes.
+        for i in players {
+            let pref: string = Placement.PrefOf(ids.Get(i), prefIds, prefVals)
+            if (pref == "N" || pref == "S" || pref == "E" || pref == "O") {
+                var j: int = -1
+                for k in 0..free.Count() { if (j < 0 && free.Get(k) == pref) { j = k } }
+                if (j >= 0) {
+                    placedIdx.Add(i)
+                    placedSeat.Add(pref)
+                    free.RemoveAt(j)
+                }
+            }
+        }
+        // 2. Non Nord.
+        for i in players {
+            if (!Placement.InList(placedIdx, i)) {
+                if (Placement.PrefOf(ids.Get(i), prefIds, prefVals) == "not_north") {
+                    var j: int = -1
+                    for k in 0..free.Count() { if (j < 0 && free.Get(k) != "N") { j = k } }
+                    if (j >= 0) {
+                        placedIdx.Add(i)
+                        placedSeat.Add(free.Get(j))
+                        free.RemoveAt(j)
+                    }
+                }
+            }
+        }
+        // 3. Les autres (et les consignes impossibles) sur ce qui reste.
+        for i in players {
+            if (!Placement.InList(placedIdx, i)) {
+                if (free.Count() > 0) {
+                    placedIdx.Add(i)
+                    placedSeat.Add(free.Get(0))
+                    free.RemoveAt(0)
+                }
+            }
+        }
+
+        let out: List<string> = new List<string>()
+        for i in 0..ids.Count() {
+            var seat: string = ""
+            for k in 0..placedIdx.Count() { if (placedIdx.Get(k) == i) { seat = placedSeat.Get(k) } }
+            out.Add(seat)
+        }
+        return out
+    }
+
+    // Table (0..) de la position `i` dans l'ordre de niveau : les 4·fours
+    // premières positions forment les tables de 4, les suivantes les tables
+    // de 3 (Nord = Relais).
+    static int LevelTableOf(int i, int fours) {
+        if (i < 4 * fours) { return i / 4 }
+        return fours + (i - 4 * fours) / 3
+    }
+
+    static bool LevelSeatExists(int table, int fours, string seat) {
+        if (seat == "N") { return table < fours }
+        return true
+    }
+
+    // Vrai si un AUTRE joueur de la table `table` (position != skip) a déjà
+    // la consigne fixe `seat`.
+    static bool LevelSeatClaimed(List<int> order, int table, int fours, string seat, int skip, List<int> prefIds, List<string> prefVals) {
+        for k in 0..order.Count() {
+            if (k != skip && Placement.LevelTableOf(k, fours) == table) {
+                if (Placement.PrefOf(order.Get(k), prefIds, prefVals) == seat) { return true }
+            }
+        }
+        return false
+    }
+
+    static List<int> SwapAt(List<int> xs, int a, int b) {
+        let out: List<int> = new List<int>()
+        for k in 0..xs.Count() {
+            if (k == a) { out.Add(xs.Get(b)) } else { if (k == b) { out.Add(xs.Get(a)) } else { out.Add(xs.Get(k)) } }
+        }
+        return out
+    }
+
+    // Avant de former les tables par niveau : un joueur à siège fixe dont la
+    // place n'existe pas à sa table (« Nord fixe » à une table de 3, où le
+    // Nord est le Relais) ou y est déjà demandée par un joueur mieux classé
+    // est échangé avec le joueur SANS consigne le plus proche au classement,
+    // assis à une table où ce siège est libre (choix du club, 2026-11-25).
+    // Le niveau des tables n'est retouché que de cet échange minimal : un
+    // joueur déjà échangé ne l'est pas une seconde fois (il ne descend ou ne
+    // monte jamais de plus d'un échange). Sans candidat, le joueur reste à
+    // sa place et sa consigne est manquée.
+    public static List<int> BalanceLevelPrefs(List<int> ordered, int fours, List<int> prefIds, List<string> prefVals) {
+        var cur: List<int> = new List<int>()
+        for x in ordered { cur.Add(x) }
+        let n: int = cur.Count()
+        let swapped: List<int> = new List<int>()
+        for i in 0..n {
+            let pref: string = Placement.PrefOf(cur.Get(i), prefIds, prefVals)
+            if (pref == "N" || pref == "S" || pref == "E" || pref == "O") {
+                let ti: int = Placement.LevelTableOf(i, fours)
+                var blocked: bool = !Placement.LevelSeatExists(ti, fours, pref)
+                if (!blocked) {
+                    // Déjà pris par un mieux classé de la même table ?
+                    for k in 0..i {
+                        if (Placement.LevelTableOf(k, fours) == ti && Placement.PrefOf(cur.Get(k), prefIds, prefVals) == pref) { blocked = true }
+                    }
+                }
+                if (blocked) {
+                    var best: int = -1
+                    for d in 1..n {
+                        if (best < 0) {
+                            // Le voisin le plus proche, au-dessus puis en dessous.
+                            let up: int = i - d
+                            let down: int = i + d
+                            if (up >= 0 && best < 0) {
+                                let tu: int = Placement.LevelTableOf(up, fours)
+                                if (tu != ti && Placement.PrefOf(cur.Get(up), prefIds, prefVals) == "" && !Placement.InList(swapped, cur.Get(up)) && Placement.LevelSeatExists(tu, fours, pref) && !Placement.LevelSeatClaimed(cur, tu, fours, pref, up, prefIds, prefVals)) { best = up }
+                            }
+                            if (down < n && best < 0) {
+                                let td: int = Placement.LevelTableOf(down, fours)
+                                if (td != ti && Placement.PrefOf(cur.Get(down), prefIds, prefVals) == "" && !Placement.InList(swapped, cur.Get(down)) && Placement.LevelSeatExists(td, fours, pref) && !Placement.LevelSeatClaimed(cur, td, fours, pref, down, prefIds, prefVals)) { best = down }
+                            }
+                        }
+                    }
+                    if (best >= 0) {
+                        swapped.Add(cur.Get(i))
+                        swapped.Add(cur.Get(best))
+                        cur = Placement.SwapAt(cur, i, best)
+                    }
+                }
+            }
+        }
+        return cur
+    }
+
     // Placement « par niveau » : les joueurs arrivent triés du meilleur au
     // moins bon, les 4 premiers forment la table 1, les 4 suivants la table
     // 2, etc. Les tables de 3 sont les dernières (bas de classement) et
-    // reçoivent un Relais en Nord, comme partout ailleurs. Les orientations
-    // sont tirées au sort dans chaque table : le niveau décide de la table,
-    // pas de la place.
-    public static List<SeatRow> GenerateLevelSeats(List<int> orderedPlayerIds, List<int> relaisIds) {
+    // reçoivent un Relais en Nord, comme partout ailleurs. Le niveau décide
+    // de la table ; la place respecte la consigne de position de chaque
+    // joueur (migration 011), sinon elle est tirée au sort (SeatsByPref).
+    public static List<SeatRow> GenerateLevelSeats(List<int> orderedPlayerIds, List<int> relaisIds, List<int> prefIds, List<string> prefVals) {
         let seats: List<SeatRow> = new List<SeatRow>()
         let n: int = orderedPlayerIds.Count()
         let plan: List<int> = Placement.Decompose(n)
         if (plan.Count() == 0) { return seats }
         let fours: int = plan.Get(0)
         let threes: int = plan.Get(1)
+        let order: List<int> = Placement.BalanceLevelPrefs(orderedPlayerIds, fours, prefIds, prefVals)
 
         var cursor: int = 0
+        let pool4: List<string> = new List<string>()
+        pool4.Add("N")
+        pool4.Add("S")
+        pool4.Add("E")
+        pool4.Add("O")
+        let pool3: List<string> = new List<string>()
+        pool3.Add("S")
+        pool3.Add("E")
+        pool3.Add("O")
         for t in 0..fours {
-            let idx: List<int> = new List<int>()
-            for k in 0..4 { idx.Add(cursor + k) }
+            let group: List<int> = new List<int>()
+            for k in 0..4 { group.Add(order.Get(cursor + k)) }
             cursor = cursor + 4
-            let order: List<int> = Placement.Shuffled(idx)
+            let gs: List<string> = Placement.SeatsByPref(group, pool4, prefIds, prefVals)
             for k in 0..4 {
                 let row: SeatRow = new SeatRow()
                 row.TableNumber = t + 1
-                row.Seat = Placement.SeatAt(k)
-                row.PlayerId = orderedPlayerIds.Get(order.Get(k))
+                row.Seat = gs.Get(k)
+                row.PlayerId = group.Get(k)
                 row.TeamId = 0
                 seats.Add(row)
             }
         }
         for k in 0..threes {
             let tableNumber: int = fours + k + 1
-            let idx: List<int> = new List<int>()
-            for j in 0..3 { idx.Add(cursor + j) }
+            let group: List<int> = new List<int>()
+            for j in 0..3 { group.Add(order.Get(cursor + j)) }
             cursor = cursor + 3
-            let order: List<int> = Placement.Shuffled(idx)
+            let gs: List<string> = Placement.SeatsByPref(group, pool3, prefIds, prefVals)   // S, E, O
             for j in 0..3 {
                 let row: SeatRow = new SeatRow()
                 row.TableNumber = tableNumber
-                row.Seat = Placement.SeatAt(j + 1)   // S, E, O
-                row.PlayerId = orderedPlayerIds.Get(order.Get(j))
+                row.Seat = gs.Get(j)
+                row.PlayerId = group.Get(j)
                 row.TeamId = 0
                 seats.Add(row)
             }

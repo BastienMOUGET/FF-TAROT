@@ -147,7 +147,14 @@ export class ApiService {
     );
   createTeam = (
     subTournamentId: number,
-    players: { player_id: number; pair: Pair; seat?: Seat }[]
+    players: {
+      player_id: number;
+      pair: Pair;
+      seat?: Seat;
+      // Consigne de position du tirage (team_players.orientation) : les
+      // manches formées par niveau la respectent. Absente = aléatoire.
+      orientation?: Seat | 'not_north';
+    }[]
   ): Observable<Team> =>
     this.http.post<Team>(
       `${this.base}/sub-tournaments/${subTournamentId}/teams`,

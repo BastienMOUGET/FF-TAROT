@@ -93,6 +93,8 @@ check "8 tables, position 5 : Sud +2" "$(R mt_fresh -e 'SELECT offset_s FROM mov
 check "clé unique (tables, position)" "$(R mt_fresh -e "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='mt_fresh' AND table_name='movement_patterns' AND index_name='uniq_movement'")" 2
 # 010 : libellé du mouvement de base sans référence à une fédération.
 check "libellé du mouvement de base" "$(R mt_fresh -e 'SELECT label FROM movement_patterns WHERE table_count = 0 AND position = 0')" "Mouvement de base (N fixe, S+1, E+2, O-2)"
+# 011 : consigne de position du tirage (team_players.orientation).
+check "colonne team_players.orientation" "$(R mt_fresh -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='mt_fresh' AND table_name='team_players' AND column_name='orientation'")" 1
 
 # ---------------------------------------------------------------- 2. rejeu
 step "2. Rejeu : rien ne doit être réappliqué"

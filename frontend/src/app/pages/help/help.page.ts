@@ -79,6 +79,16 @@ import { environment } from '../../../environments/environment';
             de la liste. Le pointage est conservé si vous quittez la page.
             Pour chaque joueur, on peut imposer une orientation (Nord, Sud,
             Est, Ouest ou « non Nord ») ; par défaut elle est tirée au sort.
+            Le tirage respecte toutes les consignes possibles et elles valent
+            pour toute la soirée, y compris pour les manches formées par
+            niveau : si le classement envoie un « Nord fixe » à une table de 3
+            (où le Nord est le Relais), ou réunit deux mêmes consignes à une
+            table, le joueur est échangé avec le joueur sans consigne le plus
+            proche au classement. Une consigne n'est manquée que si elle est
+            impossible (par exemple plus de « Nord » que de tables de 4) :
+            l'appli le signale avant le tirage. La page de chaque manche
+            affiche la consigne à côté du nom, en rouge si elle n'a pas pu
+            être tenue.
           </li>
           <li>
             <strong>Tirer au sort</strong> — le bouton forme les tables de 4 et,

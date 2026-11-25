@@ -67,6 +67,7 @@ par tous les installeurs du projet.
 | `008_placement_mode.sql` | `sub_tournaments.placement_mode` : mouvement standard, tables par niveau, ou dernière manche par niveau |
 | `009_fft_movements.sql` | mouvements par nombre de tables **et par position** : `movement_patterns.position`, mouvement de base corrigé en Ouest −2, tableaux 6/8/9/10/12/14/15/16/18/20 tables |
 | `010_neutral_movement_label.sql` | libellé du mouvement de base renommé « Mouvement de base (N fixe, S+1, E+2, O-2) », sans référence à une fédération ; décalages inchangés |
+| `011_team_player_orientation.sql` | `team_players.orientation` : consigne de position du tirage (N/S/E/O fixe, « Non Nord », NULL = aléatoire), respectée aussi par les manches formées par niveau |
 
 ### Interdit dans une migration
 
