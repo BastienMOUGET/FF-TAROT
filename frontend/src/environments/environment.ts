@@ -5,7 +5,7 @@
 // frontend/package.json et le tag git). Affiché dans la toolbar.
 export const environment = {
   production: false,
-  appVersion: '3.0.39',
+  appVersion: '3.0.40',
   apiUrl: '/api',
   socketUrl: '', // vide = déduit de l'adresse de la page (voir socket.service)
   // Le classement live tourne sur un port séparé du back (SOCKET_PORT côté

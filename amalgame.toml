@@ -1,7 +1,7 @@
 
 [package]
 name = "pabb90-api"
-version = "3.0.39"
+version = "3.0.40"
 entry = "server.am"
 description = "PABB90 (Petit Au Bout Belfortain 90) — Backend Amalgame/Mosaic pour gestion de tournois de tarot (Libre par 4)"
 

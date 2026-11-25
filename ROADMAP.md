@@ -7,7 +7,7 @@
 
 ---
 
-## 🚧 Prochaine version — Consignes de position, doublons de joueurs *(en test, non livrée)*
+## ✅ v3.0.40 — Consignes de position, doublons, placement corrigeable, Challenge lisible *(livré, 2026-11-25)*
 
 Signalé le 2026-11-25 : à la préparation du placement, les consignes de
 position (Nord, Sud, Est, Ouest fixe, « Non Nord » ; aléatoire par défaut)
