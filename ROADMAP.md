@@ -211,6 +211,34 @@ résultats : une soirée en cours y comptait dès sa première table validée.
 - Écran capturé (bandeau, colonnes) ; non-régression sur la base de démo :
   seule la page du Challenge change (son tournoi n'est pas terminé).
 
+### Classement du Challenge à 15 tournois : lisible à l'écran et sur une page
+
+Demande du 2026-11-25 : avec 15 tournois (pratique du club), le total
+n'était pas visible à l'écran, et l'impression débordait. Mesure sur un
+Challenge de test (15 tournois, 35 joueurs) : tableau de 2325 px pour
+1046 px visibles en 1366 px, total « PC » invisible même en 1920 px,
+impression A4 paysage débordante dans les deux vues. Cause : les titres
+« Tournoi du 02/09/2026 », sur une ligne, imposaient ~130 px par colonne.
+
+- **Titres courts** (`challenge-labels.ts`) : « 02/09 », « 25/11 » pour
+  « Tournoi du 25 novembre » ; nom complet en info-bulle ; un nom sans
+  date est conservé (et passe à la ligne).
+- **Colonnes figées à l'écran** : Place / Licence / Joueur à gauche,
+  Points / Pcn / PC / Particip. à droite ; les tournois défilent entre les
+  deux. Bordures séparées à l'écran : en mode « collapse », le texte qui
+  défile transparaissait à travers les traits des colonnes figées.
+- Impression inchangée dans son principe (A4 paysage, police réduite).
+
+#### Vérifié
+
+- Après : 1003 px en vue « PC par tournoi » (tout tient en 1366 px) ;
+  1309 px en vue détaillée, total toujours visible ; tout tient en
+  1920 px ; impression A4 paysage : 1030 px pour 1062 px dans les deux
+  vues.
+- Tests unitaires des titres courts (dates chiffrées, en lettres, noms
+  sans date, fausses dates) ; Challenge à 6 tournois sans date inchangé ;
+  non-régression des 14 pages de la démo (impression identique).
+
 ---
 
 ## ✅ v3.0.39 — Plus aucune référence à la fédération, habillage moderne *(livré, 2026-11-25)*

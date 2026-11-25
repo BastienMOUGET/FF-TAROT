@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
 
@@ -30,6 +30,7 @@ import {
 import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
 import { ClubLogo } from '../../shared/club-logo';
 import { RankingImportDialog } from './ranking-import-dialog';
+import { shortTournamentLabel } from './challenge-labels';
 
 // Vocabulaire du club (retour terrain) : un "Challenge" (tournament) regroupe
 // des "Tournois" hebdomadaires (sub_tournaments). Le libellé par défaut d'un
@@ -299,24 +300,24 @@ export class SubTournamentDialog implements OnInit {
             >
               <thead>
                 <tr>
-                  <th rowspan="2" class="num">Place</th>
+                  <th rowspan="2" class="num sl">Place</th>
                   @if (!printing()) {
-                    <th rowspan="2">Licence</th>
+                    <th rowspan="2" class="sl">Licence</th>
                   }
-                  <th rowspan="2">Joueur</th>
+                  <th rowspan="2" class="sl sl-edge">Joueur</th>
                   @for (st of challengeRanking()!.sub_tournaments; track st.id) {
-                    <th class="tour" [attr.colspan]="dateSpan()" [title]="st.players + ' joueurs'">
-                      {{ st.label }}
+                    <th class="tour" [attr.colspan]="dateSpan()" [title]="st.label + ' — ' + st.players + ' joueurs'">
+                      {{ shortLabel(st.label) }}
                     </th>
                   }
                   @if (detailMode() === 'full' || !printing()) {
-                    <th rowspan="2" class="num total">Points</th>
+                    <th rowspan="2" class="num total sr sr-edge">Points</th>
                   }
                   @if (!printing()) {
-                    <th rowspan="2" class="num total">Pcn</th>
+                    <th rowspan="2" class="num total sr">Pcn</th>
                   }
-                  <th rowspan="2" class="num total pc">PC</th>
-                  <th rowspan="2" class="num total" title="Nombre de participations">
+                  <th rowspan="2" class="num total pc sr">PC</th>
+                  <th rowspan="2" class="num total sr" title="Nombre de participations">
                     {{ density() === 'normal' ? 'Particip.' : 'Part.' }}
                   </th>
                 </tr>
@@ -337,11 +338,11 @@ export class SubTournamentDialog implements OnInit {
               <tbody>
                 @for (e of challengeRanking()!.ranking; track e.player_id) {
                   <tr [class.first]="e.place === 1">
-                    <td class="num">{{ e.place }}</td>
+                    <td class="num sl">{{ e.place }}</td>
                     @if (!printing()) {
-                      <td class="lic">{{ e.licence || '' }}</td>
+                      <td class="lic sl">{{ e.licence || '' }}</td>
                     }
-                    <td class="name">{{ e.name }} {{ e.firstname }}</td>
+                    <td class="name sl sl-edge">{{ e.name }} {{ e.firstname }}</td>
                     @for (d of e.details; track $index) {
                       @if (detailMode() === 'full') {
                         <td class="num">{{ d ? d.points : '' }}</td>
@@ -354,13 +355,13 @@ export class SubTournamentDialog implements OnInit {
                       }
                     }
                     @if (detailMode() === 'full' || !printing()) {
-                      <td class="num total">{{ e.total_points }}</td>
+                      <td class="num total sr sr-edge">{{ e.total_points }}</td>
                     }
                     @if (!printing()) {
-                      <td class="num total">{{ e.total_pcn }}</td>
+                      <td class="num total sr">{{ e.total_pcn }}</td>
                     }
-                    <td class="num total pc strong">{{ e.points }}</td>
-                    <td class="num total">{{ e.sub_tournaments_played }}</td>
+                    <td class="num total pc strong sr">{{ e.points }}</td>
+                    <td class="num total sr">{{ e.sub_tournaments_played }}</td>
                   </tr>
                 }
               </tbody>
@@ -455,6 +456,24 @@ export class SubTournamentDialog implements OnInit {
     .challenge-table .strong { font-weight: 700; }
     .print-hint { color: #757575; font-size: 0.85em; margin: 8px 0 0; }
     .challenge-table tr.first td { background: rgba(255, 215, 0, 0.25); font-weight: 600; }
+    /* Titre de tournoi court (« 02/09 ») ; un nom sans date passe à la ligne
+       plutôt que d'élargir la colonne. */
+    .challenge-table th.tour { white-space: normal; max-width: 7em; line-height: 1.15; }
+    /* Écran : Place / Licence / Joueur figés à gauche, totaux figés à droite,
+       les tournois défilent entre les deux. Positions posées par
+       stickColumns() d'après la largeur réelle des colonnes. */
+    @media screen {
+      /* Bordures séparées : en mode « collapse », le trait entre deux
+         colonnes n'appartient à aucune cellule et le texte des tournois qui
+         défilent transparaissait à travers les colonnes figées. */
+      .challenge-table { border-collapse: separate; border-spacing: 0; }
+      .challenge-table .sl, .challenge-table .sr { position: sticky; z-index: 2; background: #fff; }
+      .challenge-table .sr { background: #fafafa; }
+      .challenge-table th.sl, .challenge-table th.sr { background: #f5f5f5; z-index: 3; }
+      .challenge-table tr.first td.sl, .challenge-table tr.first td.sr { background: #fff3c4; }
+      .challenge-table .sl-edge { box-shadow: inset -1px 0 0 #d6dbe3, 4px 0 6px -4px rgba(16, 24, 40, 0.18); }
+      .challenge-table .sr-edge { box-shadow: -4px 0 6px -4px rgba(16, 24, 40, 0.18); }
+    }
   `,
 })
 export class TournamentDetailPage implements OnInit {
@@ -477,6 +496,32 @@ export class TournamentDetailPage implements OnInit {
   printing = signal(false);
   // Largeur d'un groupe de dates : Pts + Pcn + PC à l'écran, Pts + PC au
   // papier, ou la seule colonne PC en vue « PC par tournoi ».
+  shortLabel = shortTournamentLabel;
+
+  // Positions des colonnes figées : chaque cellule .sl reçoit la somme des
+  // largeurs des colonnes figées à sa gauche, chaque .sr celle des colonnes
+  // à sa droite. Recalculé à chaque changement du tableau.
+  private stickEffect = effect(() => {
+    this.challengeRanking();
+    this.detailMode();
+    this.density();
+    this.printing();
+    setTimeout(() => this.stickColumns(), 0);
+  });
+
+  private stickColumns(): void {
+    const table = document.querySelector<HTMLTableElement>('.challenge-table');
+    if (!table) return;
+    for (const row of Array.from(table.rows)) {
+      const left = Array.from(row.querySelectorAll<HTMLElement>('.sl'));
+      let x = 0;
+      for (const c of left) { c.style.left = x + 'px'; x += c.getBoundingClientRect().width; }
+      const right = Array.from(row.querySelectorAll<HTMLElement>('.sr')).reverse();
+      x = 0;
+      for (const c of right) { c.style.right = x + 'px'; x += c.getBoundingClientRect().width; }
+    }
+  }
+
   dateSpan = computed(() =>
     this.detailMode() === 'full' ? (this.printing() ? 2 : 3) : 1
   );
