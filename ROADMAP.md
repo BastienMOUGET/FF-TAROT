@@ -239,6 +239,27 @@ impression A4 paysage débordante dans les deux vues. Cause : les titres
   sans date, fausses dates) ; Challenge à 6 tournois sans date inchangé ;
   non-régression des 14 pages de la démo (impression identique).
 
+### Accès direct aux tables depuis la page d'une manche
+
+Demande du 2026-11-25 : les résultats arrivent dans le désordre ; avec
+10 tables, saisir la table 10 en premier obligeait à faire défiler la page
+de la manche. La page de saisie avait déjà des cartouches « Table 1 … »,
+pas la page de la manche.
+
+- Sous le titre « Manche N », une rangée de cartouches « Table 1 … Table
+  N » mène directement à la saisie de la table : vert avec ✓ si validée,
+  orange avec ✎ si la saisie est commencée, neutre sinon, et un compteur
+  « 2/10 validées ». Toutes les manches, écran seulement.
+- La page de saisie montre le même état « commencée » sur ses cartouches.
+
+#### Vérifié
+
+Soirée de 40 joueurs (10 tables), tables 3 et 10 validées, table 7
+commencée : 10 cartouches visibles sans défiler, états et compteur exacts,
+clic sur « Table 10 » → saisie de la table 10, état repris sur la page de
+saisie, rien à l'impression. Non-régression : impressions identiques ;
+à l'écran, seules la page de manche et la page de saisie changent.
+
 ---
 
 ## ✅ v3.0.39 — Plus aucune référence à la fédération, habillage moderne *(livré, 2026-11-25)*

@@ -66,9 +66,12 @@ interface Row {
             class="tab"
             [class.current]="t.table_number === tableNumber()"
             [class.done]="validatedTables().has(t.table_number)"
+            [class.started]="startedTables().has(t.table_number)"
           >
             @if (validatedTables().has(t.table_number)) {
               <mat-icon>check</mat-icon>
+            } @else if (startedTables().has(t.table_number)) {
+              <mat-icon>edit</mat-icon>
             }
             Table {{ t.table_number }}
           </a>
@@ -306,6 +309,7 @@ interface Row {
     }
     .tab mat-icon { font-size: 16px; width: 16px; height: 16px; }
     .tab.done { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; font-weight: 700; }
+    .tab.started { background: #fff3e0; border-color: #ef6c00; color: #8a4b00; font-weight: 600; }
     .tab.current { background: #1976d2; border-color: #1976d2; color: #fff; font-weight: 600; }
     h1 { margin: 8px 0 16px; }
     .players { margin-bottom: 12px; }
@@ -384,6 +388,8 @@ export class ScoringPage implements OnInit {
   seats = signal<RoundSeat[]>([]);
   table = signal<TableResult | null>(null);
   validatedTables = signal<Set<number>>(new Set());
+  // Saisie commencée mais table pas encore validée (cartouche orange).
+  startedTables = signal<Set<number>>(new Set());
   nextRoundId = signal<number | null>(null);
   entryMode = signal<'global' | 'detail'>('global');
 
@@ -423,6 +429,9 @@ export class ScoringPage implements OnInit {
         this.api.tableResults(this.roundId()).subscribe((all) => {
           this.validatedTables.set(
             new Set(all.filter((t) => !!t.validated).map((t) => t.table_number))
+          );
+          this.startedTables.set(
+            new Set(all.filter((t) => !t.validated && (t.hands?.length ?? 0) > 0).map((t) => t.table_number))
           );
         });
         this.api.tableResult(this.roundId(), this.tableNumber()).subscribe({

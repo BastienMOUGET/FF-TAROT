@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Location } from '@angular/common';
 
@@ -40,6 +40,29 @@ import { PlacementFix } from './placement-fix';
       <mat-progress-spinner mode="indeterminate" diameter="40" />
     } @else if (round(); as r) {
       <h1>Manche {{ r.round_number }}</h1>
+      <!-- Accès direct à chaque table : les résultats arrivent dans le
+           désordre, inutile de faire défiler jusqu'à la table 10. -->
+      @if (r.tables && r.tables.length > 0) {
+        <nav class="tables-nav no-print" aria-label="Saisir une table">
+          @for (t of r.tables; track t.table_number) {
+            <a
+              class="tab"
+              [routerLink]="['/rounds', r.id, 'tables', t.table_number]"
+              [class.done]="tableState().get(t.table_number) === 'done'"
+              [class.started]="tableState().get(t.table_number) === 'started'"
+              [title]="tableState().get(t.table_number) === 'done' ? 'Table validée' : tableState().get(t.table_number) === 'started' ? 'Saisie commencée' : 'À saisir'"
+            >
+              @if (tableState().get(t.table_number) === 'done') {
+                <mat-icon>check</mat-icon>
+              } @else if (tableState().get(t.table_number) === 'started') {
+                <mat-icon>edit</mat-icon>
+              }
+              Table {{ t.table_number }}
+            </a>
+          }
+          <span class="tables-count">{{ doneCount() }}/{{ r.tables.length }} validée{{ doneCount() > 1 ? 's' : '' }}</span>
+        </nav>
+      }
       <div class="actions">
         <a mat-flat-button color="primary" [routerLink]="['/rounds', r.id, 'ranking']">
           <mat-icon>format_list_numbered</mat-icon> Classement de la manche
@@ -177,6 +200,17 @@ import { PlacementFix } from './placement-fix';
     .seat[data-seat="E"] { background: #ff8a65; color: #4e342e; }
     .seat[data-seat="O"] { background: #aed581; color: #33691e; }
     .pname { flex: 1 1 auto; }
+    .tables-nav { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: -4px 0 16px; }
+    .tab {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 4px 10px; border-radius: 16px; border: 1px solid #bdbdbd;
+      text-decoration: none; color: #424242; font-size: 0.9em; background: #fff;
+    }
+    .tab:hover { border-color: #1976d2; color: #1565c0; }
+    .tab mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    .tab.done { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; font-weight: 700; }
+    .tab.started { background: #fff3e0; border-color: #ef6c00; color: #8a4b00; font-weight: 600; }
+    .tables-count { margin-left: 6px; color: #5b6478; font-size: 0.85em; }
     .consigne {
       display: inline-flex; align-items: center; gap: 2px;
       font-size: 0.72em; font-weight: 600; white-space: nowrap;
@@ -208,6 +242,9 @@ export class RoundDetailPage implements OnInit {
   // Vrai une fois les scores relus : évite d'afficher un instant le bloc
   // de correction sur une manche déjà jouée.
   scoresChecked = signal(false);
+  // État de saisie de chaque table : validée, commencée, ou rien.
+  tableState = signal<Map<number, 'done' | 'started'>>(new Map());
+  doneCount = computed(() => [...this.tableState().values()].filter((v) => v === 'done').length);
 
   ngOnInit(): void {
     // Angular réutilise ce composant quand on passe de /rounds/5 à /rounds/6 :
@@ -232,6 +269,12 @@ export class RoundDetailPage implements OnInit {
           this.nextRoundId.set(next ? next.id : null);
         });
         this.api.tableResults(id).subscribe((results) => {
+          const st = new Map<number, 'done' | 'started'>();
+          for (const t of results) {
+            if (t.validated) st.set(t.table_number, 'done');
+            else if ((t.hands?.length ?? 0) > 0) st.set(t.table_number, 'started');
+          }
+          this.tableState.set(st);
           this.hasScores.set(
             results.some(
               (t) => !!t.validated || (t.hands?.length ?? 0) > 0
